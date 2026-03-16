@@ -35,7 +35,7 @@ jobs:
 
       - name: Build
         env:
-          VITE_BASE_PATH: /menuvista-v4/
+          VITE_BASE_PATH: /ubhona/
         run: npm run build
 
       - name: SPA Fallback
