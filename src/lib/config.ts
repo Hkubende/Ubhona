@@ -13,3 +13,6 @@ export const appConfig = {
   enableAnalytics: parseBoolean(import.meta.env.VITE_ENABLE_ANALYTICS, false),
   enableOrders: parseBoolean(import.meta.env.VITE_ENABLE_ORDERS, false),
 } as const;
+
+export const isApiConfigured = Boolean(appConfig.apiUrl.trim());
+export const isDemoMode = !isApiConfigured;

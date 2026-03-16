@@ -1,4 +1,5 @@
 import { api } from "./api";
+import { isApiConfigured } from "./config";
 
 export type RestaurantProfile = {
   id: string;
@@ -43,6 +44,8 @@ export type RestaurantBrandingTheme = {
 const PROFILE_KEY = "mv_restaurant_profile_v1";
 const DEFAULT_PRIMARY = "#f97316";
 const DEFAULT_SECONDARY = "#34d399";
+
+type LooseRecord = Record<string, unknown>;
 
 export const PLAN_CONFIG: Record<SubscriptionPlan, PlanConfig> = {
   starter: {
@@ -102,24 +105,44 @@ function normalizeColor(value: unknown, fallback: string) {
   return fallback;
 }
 
-function mapApiProfile(value: any): RestaurantProfile {
+function toRecord(value: unknown): LooseRecord {
+  if (!value || typeof value !== "object") return {};
+  return value as LooseRecord;
+}
+
+function toStringValue(value: unknown, fallback = "") {
+  if (value == null) return fallback;
+  return String(value);
+}
+
+function firstDefined(...values: unknown[]) {
+  for (const value of values) {
+    if (value !== undefined && value !== null && value !== "") return value;
+  }
+  return undefined;
+}
+
+function mapApiProfile(value: unknown): RestaurantProfile {
+  const row = toRecord(value);
+  const subscription = toRecord(row.subscription);
+
   return {
-    id: String(value.id),
-    restaurantName: String(value.name || value.restaurantName || ""),
-    slug: String(value.slug || "").toLowerCase(),
-    phone: String(value.phone || ""),
-    email: String(value.email || "").toLowerCase(),
-    location: String(value.location || ""),
-    logo: String(value.logoUrl || value.logo || "") || undefined,
-    coverImage: String(value.coverImage || "") || undefined,
-    themePrimary: normalizeColor(value.themePrimary, DEFAULT_PRIMARY),
-    themeSecondary: normalizeColor(value.themeSecondary, DEFAULT_SECONDARY),
-    shortDescription: String(value.shortDescription || "") || undefined,
-    subscriptionPlan: normalizePlan(value.subscription?.plan || value.subscriptionPlan),
-    subscriptionStatus: normalizeStatus(value.subscription?.status || value.subscriptionStatus),
-    trialEndsAt: value.subscription?.trialEndsAt || value.trialEndsAt || null,
-    renewalDate: value.subscription?.renewalDate || value.renewalDate || null,
-    createdAt: String(value.createdAt || new Date().toISOString()),
+    id: toStringValue(row.id),
+    restaurantName: toStringValue(firstDefined(row.name, row.restaurantName)),
+    slug: toStringValue(row.slug).toLowerCase(),
+    phone: toStringValue(row.phone),
+    email: toStringValue(row.email).toLowerCase(),
+    location: toStringValue(row.location),
+    logo: toStringValue(firstDefined(row.logoUrl, row.logo)) || undefined,
+    coverImage: toStringValue(row.coverImage) || undefined,
+    themePrimary: normalizeColor(row.themePrimary, DEFAULT_PRIMARY),
+    themeSecondary: normalizeColor(row.themeSecondary, DEFAULT_SECONDARY),
+    shortDescription: toStringValue(row.shortDescription) || undefined,
+    subscriptionPlan: normalizePlan(firstDefined(subscription.plan, row.subscriptionPlan)),
+    subscriptionStatus: normalizeStatus(firstDefined(subscription.status, row.subscriptionStatus)),
+    trialEndsAt: firstDefined(subscription.trialEndsAt, row.trialEndsAt) as string | null | undefined,
+    renewalDate: firstDefined(subscription.renewalDate, row.renewalDate) as string | null | undefined,
+    createdAt: toStringValue(firstDefined(row.createdAt, new Date().toISOString())),
   };
 }
 
@@ -146,8 +169,10 @@ export function getRestaurantProfile() {
 }
 
 export async function syncRestaurantProfile() {
+  if (!isApiConfigured) return readCache();
+
   try {
-    const response = await api.get<any>("/restaurants/me");
+    const response = await api.get<unknown>("/restaurants/me");
     const mapped = mapApiProfile(response);
     writeCache(mapped);
     return mapped;
@@ -191,8 +216,8 @@ export async function saveRestaurantProfile(
 
   const hasExisting = !!getRestaurantProfile();
   const response = hasExisting
-    ? await api.patch<any>("/restaurants/me", payload)
-    : await api.post<any>("/restaurants", payload);
+    ? await api.patch<unknown>("/restaurants/me", payload)
+    : await api.post<unknown>("/restaurants", payload);
   const mapped = mapApiProfile(response);
   writeCache(mapped);
   return mapped;
@@ -228,7 +253,7 @@ export function getDishLimit(profile: RestaurantProfile | null = getRestaurantPr
 }
 
 export async function updateSubscriptionPlan(subscriptionPlan: SubscriptionPlan) {
-  const response = await api.patch<any>("/restaurants/me/plan", { subscriptionPlan });
+  const response = await api.patch<unknown>("/restaurants/me/plan", { subscriptionPlan });
   const mapped = mapApiProfile(response);
   writeCache(mapped);
   return mapped;

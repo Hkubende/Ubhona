@@ -135,6 +135,12 @@ Environment files:
 - `.env.production`: production defaults for local/CI production builds.
 - `.env.example`: non-secret template for new environments.
 
+API configuration:
+- Local backend example: `VITE_API_BASE=http://localhost:4000`
+- Production backend example: `VITE_API_BASE=https://api.your-domain.com`
+- If `VITE_API_BASE` is empty, API calls are disabled and the app uses static/demo fallback paths where available.
+- GitHub Pages static/demo deploy should keep `VITE_API_BASE` unset unless a real backend exists.
+
 Workflows:
 - CI validation: `.github/workflows/ci.yml` (checks and build validation only).
 - Deployment-mode preview check: `.github/workflows/deploy-preview-check.yml` (Render-like build verification, no production deploy).

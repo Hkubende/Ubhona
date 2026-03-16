@@ -1,5 +1,6 @@
 import { resolveLocalAssetPath } from "./localAssets";
 import { api } from "./api";
+import { isApiConfigured } from "./config";
 
 export type Dish = {
   id: string;
@@ -36,6 +37,11 @@ function isDish(value: unknown): value is Dish {
     typeof dish.model === "string" &&
     typeof dish.thumb === "string"
   );
+}
+
+function toRecord(value: unknown): Record<string, unknown> | null {
+  if (!value || typeof value !== "object") return null;
+  return value as Record<string, unknown>;
 }
 
 export function loadCustomProducts(): Dish[] {
@@ -108,14 +114,21 @@ export async function loadFallbackDishes(): Promise<Dish[]> {
 }
 
 export async function loadRestaurantDishes(): Promise<Dish[]> {
+  if (!isApiConfigured) return [];
+
   const [categories, rawDishes] = await Promise.all([
-    api.get<any[]>("/categories"),
-    api.get<any[]>("/dishes"),
+    api.get<unknown[]>("/categories"),
+    api.get<unknown[]>("/dishes"),
   ]);
-  const categoryNameById = new Map(
-    categories.map((category) => [String(category.id), String(category.name || "Menu")])
+  const categoryNameById = new Map<string, string>(
+    categories.map((category) => {
+      const row = toRecord(category);
+      return [String(row?.id || ""), String(row?.name || "Menu")];
+    })
   );
-  const raw = rawDishes.filter((dish) => dish && dish.isAvailable !== false);
+  const raw = rawDishes
+    .map((dish) => toRecord(dish))
+    .filter((dish): dish is Record<string, unknown> => !!dish && dish.isAvailable !== false);
   return Promise.all(
     raw.map(async (dish) => ({
       id: String(dish.id),

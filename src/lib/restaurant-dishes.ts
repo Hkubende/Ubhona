@@ -1,4 +1,5 @@
 import { api } from "./api";
+import { isApiConfigured } from "./config";
 
 export type RestaurantDish = {
   id: string;
@@ -14,7 +15,27 @@ export type RestaurantDish = {
 
 const DISHES_KEY = "mv_restaurant_dishes_v1";
 
-function mapDish(row: any): RestaurantDish {
+type ApiDishRow = {
+  id?: unknown;
+  categoryId?: unknown;
+  name?: unknown;
+  description?: unknown;
+  desc?: unknown;
+  price?: unknown;
+  thumbUrl?: unknown;
+  thumb?: unknown;
+  modelUrl?: unknown;
+  model?: unknown;
+  isAvailable?: unknown;
+  createdAt?: unknown;
+};
+
+function toDishRow(value: unknown): ApiDishRow {
+  if (!value || typeof value !== "object") return {};
+  return value as ApiDishRow;
+}
+
+function mapDish(row: ApiDishRow): RestaurantDish {
   return {
     id: String(row.id),
     categoryId: String(row.categoryId || ""),
@@ -43,9 +64,11 @@ function writeCache(dishes: RestaurantDish[]) {
 }
 
 export async function getRestaurantDishes(): Promise<RestaurantDish[]> {
+  if (!isApiConfigured) return readCache();
+
   try {
-    const rows = await api.get<any[]>("/dishes");
-    const mapped = rows.map(mapDish);
+    const rows = await api.get<unknown[]>("/dishes");
+    const mapped = rows.map((row) => mapDish(toDishRow(row)));
     writeCache(mapped);
     return mapped;
   } catch {
@@ -58,7 +81,7 @@ export function saveRestaurantDishes(dishes: RestaurantDish[]) {
 }
 
 export async function addRestaurantDish(input: Omit<RestaurantDish, "id" | "createdAt">) {
-  const row = await api.post<any>("/dishes", {
+  const row = await api.post<unknown>("/dishes", {
     categoryId: input.categoryId,
     name: input.name.trim(),
     description: input.desc.trim(),
@@ -67,7 +90,7 @@ export async function addRestaurantDish(input: Omit<RestaurantDish, "id" | "crea
     modelUrl: input.model.trim(),
     isAvailable: input.isAvailable,
   });
-  const created = mapDish(row);
+  const created = mapDish(toDishRow(row));
   const next = [created, ...readCache()];
   writeCache(next);
   return created;
@@ -77,7 +100,7 @@ export async function updateRestaurantDish(
   id: string,
   updates: Partial<Omit<RestaurantDish, "id" | "createdAt">>
 ) {
-  const row = await api.patch<any>(`/dishes/${id}`, {
+  const row = await api.patch<unknown>(`/dishes/${id}`, {
     categoryId: updates.categoryId,
     name: updates.name?.trim(),
     description: updates.desc?.trim(),
@@ -86,7 +109,7 @@ export async function updateRestaurantDish(
     modelUrl: updates.model?.trim(),
     isAvailable: updates.isAvailable,
   });
-  const updated = mapDish(row);
+  const updated = mapDish(toDishRow(row));
   const next = readCache().map((dish) => (dish.id === id ? updated : dish));
   writeCache(next);
   return updated;
