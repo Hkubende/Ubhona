@@ -36,6 +36,8 @@ jobs:
       - name: Build
         env:
           VITE_BASE_PATH: /ubhona/
+          VITE_DEPLOY_RUN: ${{ github.run_number }}
+          VITE_DEPLOY_SHA: ${{ github.sha }}
         run: npm run build
 
       - name: SPA Fallback

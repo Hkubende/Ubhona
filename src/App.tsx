@@ -322,6 +322,14 @@ export default function App() {
   const brandLogo = restaurantProfile?.logo || LOGO_SRC;
   const brandDescription =
     restaurantProfile?.shortDescription || "See your food before you order.";
+  const deployRun = import.meta.env.VITE_DEPLOY_RUN as string | undefined;
+  const deploySha = import.meta.env.VITE_DEPLOY_SHA as string | undefined;
+  const deployStamp =
+    deployRun && deploySha
+      ? `Deploy #${deployRun} · ${deploySha.slice(0, 7)}`
+      : import.meta.env.DEV
+        ? "Local build"
+        : "Deployed";
   const storefrontSlug = restaurantProfile?.slug?.trim() || "";
   const checkoutCart = () => {
     if (!cartItems.length) {
@@ -763,6 +771,10 @@ export default function App() {
           </>
         )}
       </AnimatePresence>
+
+      <div className="pointer-events-none fixed bottom-3 left-3 z-[70] rounded-full border border-white/10 bg-black/60 px-3 py-1 text-[10px] font-semibold tracking-wide text-white/75 backdrop-blur-md sm:text-xs">
+        {deployStamp}
+      </div>
     </div>
   );
 }
