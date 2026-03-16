@@ -1,0 +1,209 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  platform_admin
+  restaurant_owner
+  restaurant_manager
+  staff
+}
+
+model User {
+  id           String      @id @default(uuid())
+  name         String
+  email        String      @unique
+  role         UserRole    @default(restaurant_owner)
+  passwordHash String      @map("password_hash")
+  createdAt    DateTime    @default(now()) @map("created_at")
+  restaurants  Restaurant[]
+  auditLogs    AuditLog[]  @relation("AuditActor")
+
+  @@map("users")
+}
+
+model Restaurant {
+  id               String      @id @default(uuid())
+  ownerUserId      String      @map("owner_user_id")
+  owner            User        @relation(fields: [ownerUserId], references: [id])
+  name             String
+  slug             String      @unique
+  phone            String
+  email            String
+  location         String
+  logoUrl          String?     @map("logo_url")
+  coverImage       String?     @map("cover_image")
+  themePrimary     String?     @map("theme_primary")
+  themeSecondary   String?     @map("theme_secondary")
+  shortDescription String?     @map("short_description")
+  subscriptionPlan String      @default("starter") @map("subscription_plan")
+  subscriptionStatus String    @default("trialing") @map("subscription_status")
+  trialEndsAt      DateTime?   @map("trial_ends_at")
+  renewalDate      DateTime?   @map("renewal_date")
+  createdAt        DateTime    @default(now()) @map("created_at")
+  categories       Category[]
+  dishes           Dish[]
+  orders           Order[]
+  assets           UploadAsset[]
+  analyticsEvents  AnalyticsEvent[]
+
+  @@map("restaurants")
+}
+
+model Category {
+  id           String     @id @default(uuid())
+  restaurantId String     @map("restaurant_id")
+  restaurant   Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  name         String
+  sortOrder    Int        @default(0) @map("sort_order")
+  createdAt    DateTime   @default(now()) @map("created_at")
+  dishes       Dish[]
+
+  @@map("categories")
+}
+
+model Dish {
+  id           String     @id @default(uuid())
+  restaurantId String     @map("restaurant_id")
+  restaurant   Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  categoryId   String     @map("category_id")
+  category     Category   @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  name         String
+  description  String
+  price        Float
+  thumbUrl     String     @map("thumb_url")
+  modelUrl     String     @map("model_url")
+  isAvailable  Boolean    @default(true) @map("is_available")
+  createdAt    DateTime   @default(now()) @map("created_at")
+  orderItems   OrderItem[]
+  analyticsEvents AnalyticsEvent[]
+
+  @@map("dishes")
+}
+
+model Order {
+  id               String      @id @default(uuid())
+  restaurantId     String      @map("restaurant_id")
+  restaurant       Restaurant  @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  customerName     String?     @map("customer_name")
+  customerPhone    String?     @map("customer_phone")
+  tableNumber      String?     @map("table_number")
+  totalAmount      Float       @map("total_amount")
+  paymentStatus    String      @default("unpaid") @map("payment_status")
+  paymentMethod    String      @default("manual_mpesa") @map("payment_method")
+  paymentReference String      @default("") @map("payment_reference")
+  status           String      @default("pending")
+  createdAt        DateTime    @default(now()) @map("created_at")
+  items            OrderItem[]
+  payments         Payment[]
+  analyticsEvents  AnalyticsEvent[]
+
+  @@map("orders")
+}
+
+model OrderItem {
+  id            String   @id @default(uuid())
+  orderId       String   @map("order_id")
+  order         Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  dishId        String   @map("dish_id")
+  dish          Dish     @relation(fields: [dishId], references: [id], onDelete: Restrict)
+  nameSnapshot  String   @map("name_snapshot")
+  priceSnapshot Float    @map("price_snapshot")
+  quantity      Int
+  subtotal      Float
+
+  @@map("order_items")
+}
+
+model Payment {
+  id                String   @id @default(uuid())
+  orderId           String   @map("order_id")
+  order             Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  provider          String   @default("mpesa")
+  phone             String
+  amount            Float
+  status            String   @default("initiated")
+  checkoutRequestId String?  @map("checkout_request_id")
+  merchantRequestId String?  @map("merchant_request_id")
+  receiptNumber     String?  @map("receipt_number")
+  resultCode        Int?     @map("result_code")
+  resultDesc        String?  @map("result_desc")
+  requestPayload    Json?    @map("request_payload")
+  responsePayload   Json?    @map("response_payload")
+  callbackPayload   Json?    @map("callback_payload")
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+
+  @@index([orderId])
+  @@unique([checkoutRequestId])
+  @@map("payments")
+}
+
+model UploadAsset {
+  id           String     @id @default(uuid())
+  restaurantId String     @map("restaurant_id")
+  restaurant   Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  assetType    String     @map("asset_type")
+  fileName     String     @map("file_name")
+  fileType     String     @map("file_type")
+  bucket       String
+  objectKey    String     @map("object_key")
+  publicUrl    String     @map("public_url")
+  status       String     @default("signed")
+  createdAt    DateTime   @default(now()) @map("created_at")
+  updatedAt    DateTime   @updatedAt @map("updated_at")
+
+  @@index([restaurantId, assetType])
+  @@map("upload_assets")
+}
+
+model AnalyticsEvent {
+  id           String     @id @default(uuid())
+  restaurantId String     @map("restaurant_id")
+  restaurant   Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  dishId       String?    @map("dish_id")
+  dish         Dish?      @relation(fields: [dishId], references: [id], onDelete: SetNull)
+  orderId      String?    @map("order_id")
+  order        Order?     @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  eventType    String     @map("event_type")
+  source       String?
+  sessionId    String?    @map("session_id")
+  metadata     Json?
+  createdAt    DateTime   @default(now()) @map("created_at")
+
+  @@index([restaurantId, eventType, createdAt])
+  @@index([restaurantId, dishId, eventType])
+  @@map("analytics_events")
+}
+
+model PlatformTrackerDocument {
+  id        String   @id @default(uuid())
+  key       String   @unique
+  payload   Json
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("platform_tracker_documents")
+}
+
+model AuditLog {
+  id         String   @id @default(uuid())
+  actorUserId String  @map("actor_user_id")
+  actor      User     @relation("AuditActor", fields: [actorUserId], references: [id], onDelete: Restrict)
+  actorRole  UserRole @map("actor_role")
+  action     String
+  targetType String   @map("target_type")
+  targetId   String   @map("target_id")
+  metadata   Json?    @map("metadata_json")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  @@index([action, createdAt])
+  @@index([targetType, targetId, createdAt])
+  @@index([actorUserId, createdAt])
+  @@map("audit_logs")
+}
