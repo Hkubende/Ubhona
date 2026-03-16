@@ -1,9 +1,12 @@
 services:
   - type: web
-    name: menuvista-v4
+    name: ubhona
     runtime: static
-    buildCommand: npm ci --include=dev && npm run build
+    buildCommand: npm install && npm run build
     staticPublishPath: dist
+    envVars:
+      - key: VITE_BASE_PATH
+        value: /
     routes:
       - type: rewrite
         source: /*
