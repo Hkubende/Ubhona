@@ -11,8 +11,11 @@ function normalizeBasePath(value: string | undefined) {
 }
 
 export default defineConfig({
-  base: normalizeBasePath(process.env.VITE_BASE_PATH),
+  base: normalizeBasePath(process.env.VITE_BASE_PATH || "/"),
   plugins: [react(), tailwindcss()],
+  build: {
+    outDir: "dist",
+  },
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),

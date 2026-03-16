@@ -101,7 +101,45 @@ Validate menu data/assets:
 npm run validate:data
 ```
 
+## Project Validation
+
+Run the full project validation before deployment:
+
+```bash
+npm run check:all
+```
+
+This command checks:
+
+- menu data structure
+- asset paths (3D models + thumbnails)
+- dish definitions
+- production build
+
+## CI
+
+Workflow: `.github/workflows/ci.yml`
+
+It runs on:
+- push to `main`
+- pull requests targeting `main`
+
+Checks performed:
+- `npm install`
+- `npm run check:all`
+
 ## Deployment
+
+Environment files:
+- `.env`: local defaults for development.
+- `.env.production`: production defaults for local/CI production builds.
+- `.env.example`: non-secret template for new environments.
+
+Workflows:
+- CI validation: `.github/workflows/ci.yml` (checks and build validation only).
+- Deployment-mode preview check: `.github/workflows/deploy-preview-check.yml` (Render-like build verification, no production deploy).
+- GitHub Pages deploy: `.github/workflows/deploy-pages.yml` (publishes `dist` on push to `main`).
+- Render production deploy is handled by Render.
 
 Render (static site):
 - Build command: `npm install && npm run build`
@@ -109,5 +147,6 @@ Render (static site):
 - Environment variable: `VITE_BASE_PATH=/`
 
 GitHub Pages (`https://hkubende.github.io/Ubhona/`):
-- Environment variable: `VITE_BASE_PATH=/Ubhona/`
-- The GitHub Actions workflow already injects this during build.
+- Build uses `VITE_BASE_PATH=/Ubhona/`.
+
+More deployment details: `docs/deployment.md`.

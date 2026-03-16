@@ -3,6 +3,9 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
+  "engines": {
+    "node": ">=18"
+  },
   "scripts": {
     "dev": "vite",
     "backend:start": "node backend/server.mjs",
@@ -14,9 +17,11 @@
     "validate:assets": "node scripts/validate-dishes-assets.mjs",
     "validate:data": "npm run validate:dishes && npm run validate:assets",
     "prebuild": "npm run validate:data",
-    "build": "tsc -b && vite build",
+    "build": "tsc && vite build",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "check:all": "npm run validate:data && npm run validate:assets && npm run validate:dishes && npm run build",
+    "precommit": "npm run check:all"
   },
   "dependencies": {
     "@tailwindcss/vite": "^4.2.1",
@@ -33,7 +38,6 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.39.1",
-    "@tailwindcss/oxide-win32-x64-msvc": "^4.2.1",
     "@types/node": "^24.10.1",
     "@types/react": "^19.2.7",
     "@types/react-dom": "^19.2.3",
