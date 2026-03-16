@@ -100,3 +100,14 @@ Validate menu data/assets:
 ```bash
 npm run validate:data
 ```
+
+## Deployment
+
+Render (static site):
+- Build command: `npm install && npm run build`
+- Publish directory: `dist`
+- Environment variable: `VITE_BASE_PATH=/`
+
+GitHub Pages (`https://hkubende.github.io/Ubhona/`):
+- Environment variable: `VITE_BASE_PATH=/Ubhona/`
+- The GitHub Actions workflow already injects this during build.
