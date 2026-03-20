@@ -1,6 +1,7 @@
 import * as React from "react";
 import { ArrowLeft, Search } from "lucide-react";
 import { useNavigate } from "react-router-dom";
+import { UbhonaSelect, UbhonaSelectItem } from "../../components/ui/ubhona-select";
 import {
   getAdminRestaurants,
   updateAdminRestaurantStatus,
@@ -84,28 +85,30 @@ export default function RestaurantsAdmin() {
               className="w-full rounded-2xl border border-white/10 bg-white/[0.05] py-2 pl-10 pr-3 text-sm outline-none"
             />
           </div>
-          <select
-            value={plan}
-            onChange={(event) => setPlan(event.target.value)}
-            className="rounded-2xl border border-white/10 bg-white/[0.05] px-3 py-2 text-sm outline-none"
+          <UbhonaSelect
+            name="restaurantPlanFilter"
+            value={plan || ALL_PLANS}
+            onValueChange={(value) => setPlan(value === ALL_PLANS ? "" : value)}
+            placeholder="All plans"
           >
-            <option value="">All plans</option>
-            <option value="starter">Starter</option>
-            <option value="pro">Pro</option>
-            <option value="enterprise">Enterprise</option>
-          </select>
-          <select
-            value={status}
-            onChange={(event) => setStatus(event.target.value)}
-            className="rounded-2xl border border-white/10 bg-white/[0.05] px-3 py-2 text-sm outline-none"
+            <UbhonaSelectItem value={ALL_PLANS}>All plans</UbhonaSelectItem>
+            <UbhonaSelectItem value="starter">Starter</UbhonaSelectItem>
+            <UbhonaSelectItem value="pro">Pro</UbhonaSelectItem>
+            <UbhonaSelectItem value="enterprise">Enterprise</UbhonaSelectItem>
+          </UbhonaSelect>
+          <UbhonaSelect
+            name="restaurantStatusFilter"
+            value={status || ALL_STATUS}
+            onValueChange={(value) => setStatus(value === ALL_STATUS ? "" : value)}
+            placeholder="All statuses"
           >
-            <option value="">All statuses</option>
-            <option value="active">Active</option>
-            <option value="trialing">Trialing</option>
-            <option value="past_due">Past Due</option>
-            <option value="suspended">Suspended</option>
-            <option value="canceled">Canceled</option>
-          </select>
+            <UbhonaSelectItem value={ALL_STATUS}>All statuses</UbhonaSelectItem>
+            <UbhonaSelectItem value="active">Active</UbhonaSelectItem>
+            <UbhonaSelectItem value="trialing">Trialing</UbhonaSelectItem>
+            <UbhonaSelectItem value="past_due">Past Due</UbhonaSelectItem>
+            <UbhonaSelectItem value="suspended">Suspended</UbhonaSelectItem>
+            <UbhonaSelectItem value="canceled">Canceled</UbhonaSelectItem>
+          </UbhonaSelect>
           <button
             onClick={() => void refresh()}
             className="rounded-2xl bg-orange-500 px-4 py-2 text-sm font-bold text-black hover:bg-orange-400"
@@ -177,3 +180,5 @@ export default function RestaurantsAdmin() {
     </div>
   );
 }
+  const ALL_PLANS = "__all_plans__";
+  const ALL_STATUS = "__all_status__";

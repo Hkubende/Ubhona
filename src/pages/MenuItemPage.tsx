@@ -1,9 +1,9 @@
 import * as React from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft } from "lucide-react";
 import { addToCart as addDishToCart, loadCart, saveCart } from "../lib/cart";
 import { fetchDishes, type Dish } from "../lib/dishes";
 import { getEffectivePrice, loadOverrides, type PriceOverrides } from "../lib/price-overrides";
+import { BackButton } from "../components/ui/back-button";
 
 function formatKsh(value: number) {
   return `KSh ${value.toLocaleString("en-KE")}`;
@@ -97,13 +97,13 @@ export default function MenuItemPage() {
       <div className="min-h-screen bg-[#0b0b10] p-8 text-white">
         <div className="mx-auto max-w-5xl rounded-3xl border border-white/10 bg-white/[0.04] p-8 text-center">
           <div className="text-2xl font-black text-orange-400">Menu item not found</div>
-          <button
-            onClick={() => navigate("/")}
-            className="mt-6 inline-flex items-center gap-2 rounded-2xl bg-emerald-400 px-4 py-3 text-sm font-bold text-black transition hover:bg-emerald-300"
-          >
-            <ArrowLeft className="h-4 w-4" />
-            Back to Menu
-          </button>
+          <div className="mt-6 flex justify-center">
+            <BackButton
+              label="Back to Menu"
+              fallbackHref="/"
+              className="border-emerald-400/40 bg-emerald-500/20 hover:bg-emerald-500/30"
+            />
+          </div>
         </div>
       </div>
     );
@@ -113,13 +113,7 @@ export default function MenuItemPage() {
     <div className="min-h-screen bg-[#0b0b10] text-white">
       <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6 lg:px-8">
         <div className="mb-6 flex items-center justify-between gap-3">
-          <button
-            onClick={() => navigate("/")}
-            className="inline-flex items-center gap-2 rounded-2xl border border-white/10 bg-white/[0.05] px-4 py-3 text-sm font-bold text-white hover:bg-white/[0.08]"
-          >
-            <ArrowLeft className="h-4 w-4" />
-            Back to Menu
-          </button>
+          <BackButton label="Back to Menu" fallbackHref="/" />
 
           <button
             onClick={() => navigate(`/ar?dish=${encodeURIComponent(dish.id)}`)}

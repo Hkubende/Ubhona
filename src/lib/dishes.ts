@@ -1,5 +1,5 @@
 import { resolveLocalAssetPath } from "./localAssets";
-import { api } from "./api";
+import { api, isApiReachable } from "./api";
 import { isApiConfigured } from "./config";
 
 export type Dish = {
@@ -115,6 +115,7 @@ export async function loadFallbackDishes(): Promise<Dish[]> {
 
 export async function loadRestaurantDishes(): Promise<Dish[]> {
   if (!isApiConfigured) return [];
+  if (!(await isApiReachable())) return [];
 
   const [categories, rawDishes] = await Promise.all([
     api.get<unknown[]>("/categories"),

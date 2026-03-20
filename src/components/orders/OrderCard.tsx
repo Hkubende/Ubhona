@@ -25,6 +25,7 @@ export default function OrderCard({ order, expanded, onToggleExpanded, onSetStat
     <div className="rounded-3xl border border-white/10 bg-white/[0.04] p-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
+          <div className="text-[11px] font-semibold uppercase tracking-wide text-white/55">Order Reference</div>
           <div className="font-mono text-xs text-white/70">{order.id}</div>
           <div className="text-xs text-white/50">{new Date(order.createdAt).toLocaleString("en-KE")}</div>
           {(order.customerName || order.customerPhone || order.tableNumber) ? (
@@ -38,7 +39,6 @@ export default function OrderCard({ order, expanded, onToggleExpanded, onSetStat
         <div className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold ${statusChipClass(order.status)}`}>
           {order.status}
         </div>
-        <div className="text-sm text-white/65">Payment: {order.paymentStatus}</div>
         <div className="font-bold text-orange-300">{formatKsh(order.total)}</div>
         <button
           onClick={onToggleExpanded}
@@ -51,6 +51,7 @@ export default function OrderCard({ order, expanded, onToggleExpanded, onSetStat
       {expanded ? (
         <div className="mt-3 space-y-2">
           <div className="rounded-2xl border border-white/10 bg-black/25 p-3">
+            <div className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-white/55">Items</div>
             {order.items.map((item) => (
               <div key={`${order.id}-${item.dishId}`} className="mb-2 flex items-center justify-between text-sm last:mb-0">
                 <div>{item.quantity} x {item.name}</div>

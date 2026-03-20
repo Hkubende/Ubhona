@@ -89,6 +89,27 @@ Start frontend:
 npm run dev
 ```
 
+## Development Workflow
+
+1. Start the frontend:
+
+```bash
+npm run dev
+```
+
+2. Open Codex (Git Bash recommended):
+
+```bash
+codex
+```
+
+3. Ask Codex to inspect the running app via DevTools MCP.
+
+Example prompts:
+- "Inspect the dashboard page and list React components rendered."
+- "Check network requests when opening the AR menu."
+- "Identify performance bottlenecks in the AR viewer."
+
 Build:
 
 ```bash
@@ -154,5 +175,6 @@ Render (static site):
 
 GitHub Pages (`https://hkubende.github.io/Ubhona/`):
 - Build uses `VITE_BASE_PATH=/Ubhona/`.
+- Keep `VITE_API_BASE` empty for static/demo mode unless a real backend is available.
 
 More deployment details: `docs/deployment.md`.

@@ -1,10 +1,15 @@
 import * as React from "react";
 import { useNavigate } from "react-router-dom";
 import { getCurrentUser } from "../lib/auth";
-import { getRestaurantProfile, saveRestaurantProfile, syncRestaurantProfile } from "../lib/restaurant";
-import UploadField from "../components/uploads/UploadField";
+import {
+  getRestaurantProfile,
+  saveRestaurantProfile,
+  syncRestaurantProfile,
+  validateRestaurantSlug,
+} from "../lib/restaurant";
 
-const LOGO_SRC = `${import.meta.env.BASE_URL}ubhona-logo.png`;
+const LOGO_SRC = `${import.meta.env.BASE_URL}ubhona-logo.jpeg`;
+const ONBOARDING_DRAFT_KEY = "mv_onboarding_draft_v1";
 
 function slugify(value: string) {
   return value
@@ -23,11 +28,26 @@ export default function Onboarding() {
   const [email, setEmail] = React.useState(user?.email || "");
   const [location, setLocation] = React.useState("");
   const [logo, setLogo] = React.useState("");
-  const [coverImage, setCoverImage] = React.useState("");
-  const [themePrimary, setThemePrimary] = React.useState("#f97316");
-  const [themeSecondary, setThemeSecondary] = React.useState("#34d399");
-  const [shortDescription, setShortDescription] = React.useState("");
+  const [description, setDescription] = React.useState("");
   const [error, setError] = React.useState("");
+  const [isHydrating, setIsHydrating] = React.useState(true);
+
+  const loadDraft = React.useCallback(() => {
+    try {
+      const raw = localStorage.getItem(ONBOARDING_DRAFT_KEY);
+      if (!raw) return;
+      const draft = JSON.parse(raw) as Record<string, unknown>;
+      setName(String(draft.name || ""));
+      setSlug(String(draft.slug || ""));
+      setPhone(String(draft.phone || ""));
+      setEmail(String(draft.email || user?.email || ""));
+      setLocation(String(draft.location || ""));
+      setLogo(String(draft.logo || ""));
+      setDescription(String(draft.description || ""));
+    } catch {
+      // ignore malformed local draft
+    }
+  }, [user?.email]);
 
   React.useEffect(() => {
     if (!user) {
@@ -37,20 +57,41 @@ export default function Onboarding() {
     const hydrate = async () => {
       const remote = await syncRestaurantProfile();
       const existing = remote || getRestaurantProfile();
-      if (!existing) return;
-      setName(existing.restaurantName);
-      setSlug(existing.slug);
-      setPhone(existing.phone);
-      setEmail(existing.email);
-      setLocation(existing.location);
-      setLogo(existing.logo || "");
-      setCoverImage(existing.coverImage || "");
-      setThemePrimary(existing.themePrimary || "#f97316");
-      setThemeSecondary(existing.themeSecondary || "#34d399");
-      setShortDescription(existing.shortDescription || "");
+      if (!existing) {
+        loadDraft();
+        setIsHydrating(false);
+        return;
+      }
+      navigate("/dashboard", { replace: true });
+      setIsHydrating(false);
+      return;
     };
     void hydrate();
-  }, [navigate, user]);
+  }, [loadDraft, navigate, user]);
+
+  React.useEffect(() => {
+    if (!user || isHydrating) return;
+    const payload = {
+      name,
+      slug,
+      phone,
+      email,
+      location,
+      logo,
+      description,
+    };
+    localStorage.setItem(ONBOARDING_DRAFT_KEY, JSON.stringify(payload));
+  }, [
+    email,
+    isHydrating,
+    location,
+    logo,
+    description,
+    name,
+    phone,
+    slug,
+    user,
+  ]);
 
   const onSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -61,6 +102,11 @@ export default function Onboarding() {
       setError("Please fill all fields.");
       return;
     }
+    const slugError = validateRestaurantSlug(normalizedSlug);
+    if (slugError) {
+      setError(slugError);
+      return;
+    }
     try {
       await saveRestaurantProfile({
         restaurantName: name,
@@ -69,11 +115,9 @@ export default function Onboarding() {
         email,
         location,
         logo,
-        coverImage,
-        themePrimary,
-        themeSecondary,
-        shortDescription,
+        shortDescription: description,
       });
+      localStorage.removeItem(ONBOARDING_DRAFT_KEY);
       navigate("/dashboard");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to save restaurant profile.");
@@ -97,6 +141,9 @@ export default function Onboarding() {
           <div className="md:col-span-2">
             <div className="mb-1 text-xs text-white/60">Restaurant Name</div>
             <input
+              id="onboarding-restaurant-name"
+              name="restaurantName"
+              autoComplete="organization"
               value={name}
               onChange={(event) => {
                 setName(event.target.value);
@@ -109,6 +156,9 @@ export default function Onboarding() {
           <div>
             <div className="mb-1 text-xs text-white/60">Slug</div>
             <input
+              id="onboarding-slug"
+              name="slug"
+              autoComplete="off"
               value={slug}
               onChange={(event) => setSlug(slugify(event.target.value))}
               className="w-full rounded-2xl border border-white/10 bg-black/25 px-3 py-2 text-sm outline-none"
@@ -118,6 +168,9 @@ export default function Onboarding() {
           <div>
             <div className="mb-1 text-xs text-white/60">Phone</div>
             <input
+              id="onboarding-phone"
+              name="phone"
+              autoComplete="tel"
               value={phone}
               onChange={(event) => setPhone(event.target.value)}
               className="w-full rounded-2xl border border-white/10 bg-black/25 px-3 py-2 text-sm outline-none"
@@ -127,6 +180,9 @@ export default function Onboarding() {
           <div>
             <div className="mb-1 text-xs text-white/60">Email</div>
             <input
+              id="onboarding-email"
+              name="email"
+              autoComplete="email"
               value={email}
               onChange={(event) => setEmail(event.target.value)}
               type="email"
@@ -137,6 +193,9 @@ export default function Onboarding() {
           <div>
             <div className="mb-1 text-xs text-white/60">Location</div>
             <input
+              id="onboarding-location"
+              name="location"
+              autoComplete="street-address"
               value={location}
               onChange={(event) => setLocation(event.target.value)}
               className="w-full rounded-2xl border border-white/10 bg-black/25 px-3 py-2 text-sm outline-none"
@@ -146,66 +205,28 @@ export default function Onboarding() {
           <div className="md:col-span-2 border-t border-white/10 pt-3 text-xs font-bold uppercase tracking-wide text-white/50">
             Optional Branding
           </div>
-          <div>
+          <div className="md:col-span-2">
             <div className="mb-1 text-xs text-white/60">Logo URL</div>
             <input
+              id="onboarding-logo"
+              name="logo"
+              autoComplete="off"
               value={logo}
               onChange={(event) => setLogo(event.target.value)}
               className="w-full rounded-2xl border border-white/10 bg-black/25 px-3 py-2 text-sm outline-none"
-              placeholder="https://.../ubhona-logo.png"
-            />
-            <UploadField
-              label="Upload Logo"
-              assetType="logo"
-              accept="image/png,image/jpeg,image/webp"
-              value={logo}
-              onUploaded={setLogo}
-              className="mt-2"
-            />
-          </div>
-          <div>
-            <div className="mb-1 text-xs text-white/60">Cover Image URL</div>
-            <input
-              value={coverImage}
-              onChange={(event) => setCoverImage(event.target.value)}
-              className="w-full rounded-2xl border border-white/10 bg-black/25 px-3 py-2 text-sm outline-none"
-              placeholder="https://.../cover.jpg"
-            />
-            <UploadField
-              label="Upload Cover Image"
-              assetType="cover"
-              accept="image/png,image/jpeg,image/webp"
-              value={coverImage}
-              onUploaded={setCoverImage}
-              className="mt-2"
-            />
-          </div>
-          <div>
-            <div className="mb-1 text-xs text-white/60">Primary Theme Color</div>
-            <input
-              value={themePrimary}
-              onChange={(event) => setThemePrimary(event.target.value)}
-              className="w-full rounded-2xl border border-white/10 bg-black/25 px-3 py-2 text-sm outline-none"
-              placeholder="#f97316"
-            />
-          </div>
-          <div>
-            <div className="mb-1 text-xs text-white/60">Secondary Theme Color</div>
-            <input
-              value={themeSecondary}
-              onChange={(event) => setThemeSecondary(event.target.value)}
-              className="w-full rounded-2xl border border-white/10 bg-black/25 px-3 py-2 text-sm outline-none"
-              placeholder="#34d399"
+              placeholder="https://.../ubhona-logo.jpeg"
             />
           </div>
           <div className="md:col-span-2">
-            <div className="mb-1 text-xs text-white/60">Short Description</div>
+            <div className="mb-1 text-xs text-white/60">Description</div>
             <textarea
-              value={shortDescription}
-              onChange={(event) => setShortDescription(event.target.value)}
-              rows={2}
+              id="onboarding-description"
+              name="description"
+              value={description}
+              onChange={(event) => setDescription(event.target.value)}
+              rows={3}
               className="w-full rounded-2xl border border-white/10 bg-black/25 px-3 py-2 text-sm outline-none"
-              placeholder="Tell customers what makes your restaurant special..."
+              placeholder="Tell guests what makes your restaurant unique..."
             />
           </div>
           {error ? (

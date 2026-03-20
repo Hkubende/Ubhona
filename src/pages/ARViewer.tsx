@@ -21,14 +21,14 @@ import {
 } from "../lib/restaurant";
 import { incrementViews } from "../lib/views";
 import { trackAnalyticsEvent } from "../lib/analytics";
+import { BackButton } from "../components/ui/back-button";
+import { appConfig, isStkApiConfigured } from "../lib/config";
 
 const MPESA_METHOD = "TILL";
 const MPESA_BIZ_NO = "8711138";
-const STK_API_BASE = (
-  import.meta.env.VITE_STK_API_BASE || "https://menuvista-mpesa-backend.onrender.com"
-).replace(/\/+$/, "");
+const STK_API_BASE = appConfig.stkApiUrl;
 const BACKEND_TIMEOUT_MS = 15000;
-const LOGO_SRC = `${import.meta.env.BASE_URL}ubhona-logo.png`;
+const LOGO_SRC = `${import.meta.env.BASE_URL}ubhona-logo.jpeg`;
 
 function formatKsh(n: number) {
   return `KSh ${Number(n).toLocaleString("en-KE")}`;
@@ -48,16 +48,24 @@ async function fetchWithTimeout(input: RequestInfo | URL, init: RequestInit = {}
   }
 }
 
+type ModelViewerElement = HTMLElement & {
+  canActivateAR?: boolean;
+  activateAR?: () => Promise<void>;
+  cameraOrbit?: string;
+  fieldOfView?: string;
+};
+
 export default function ARViewer() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
-  const modelViewerRef = React.useRef<any>(null);
+  const modelViewerRef = React.useRef<ModelViewerElement | null>(null);
 
   const [dishes, setDishes] = React.useState<Dish[]>([]);
   const [currentIndex, setCurrentIndex] = React.useState(0);
   const [initializedFromUrl, setInitializedFromUrl] = React.useState(false);
   const [currentModelSrc, setCurrentModelSrc] = React.useState("");
   const [modelLoading, setModelLoading] = React.useState(true);
+  const [hasModelError, setHasModelError] = React.useState(false);
   const [toast, setToast] = React.useState("Loading 3D model...");
   const [panelNotice, setPanelNotice] = React.useState("");
   const [supportChip, setSupportChip] = React.useState("Checking AR support...");
@@ -156,7 +164,7 @@ export default function ARViewer() {
 
   const selectedDish = dishes[currentIndex];
   const selectedPrice = selectedDish ? getDishPrice(selectedDish) : 0;
-  const brandTheme = React.useMemo(() => getBrandingTheme(), [restaurantProfile]);
+  const brandTheme = getBrandingTheme();
   const brandName = restaurantProfile?.restaurantName || "Ubhona";
   const brandLogo = restaurantProfile?.logo || LOGO_SRC;
 
@@ -179,6 +187,7 @@ export default function ARViewer() {
     if (!modelSrc) {
       setCurrentModelSrc("");
       setModelLoading(false);
+      setHasModelError(true);
       setToast(`No 3D model found for "${selectedDish.name}".`);
       setPanelNotice(`"${selectedDish.name}" has no model file yet. Choose another dish or upload a model.`);
       setSupportChip("No model file");
@@ -187,6 +196,7 @@ export default function ARViewer() {
     }
 
     setModelLoading(true);
+    setHasModelError(false);
     setCurrentModelSrc(modelSrc);
     if (searchParams.get("dish") !== selectedDish.id) {
       const next = new URLSearchParams(window.location.search);
@@ -219,6 +229,7 @@ export default function ARViewer() {
     const onLoaded = () => {
       setToast("");
       setModelLoading(false);
+      setHasModelError(false);
     };
     const onError = () => {
       setToast("Model failed to load. Check filename/path (case-sensitive).");
@@ -226,6 +237,7 @@ export default function ARViewer() {
       setArDisabled(true);
       setSupportChip("Model load error");
       setModelLoading(false);
+      setHasModelError(true);
     };
 
     mv.addEventListener("load", onLoaded);
@@ -234,7 +246,7 @@ export default function ARViewer() {
       mv.removeEventListener("load", onLoaded);
       mv.removeEventListener("error", onError);
     };
-  }, [selectedDish]);
+  }, [currentModelSrc]);
 
   React.useEffect(() => {
     const timer = window.setTimeout(async () => {
@@ -363,6 +375,11 @@ export default function ARViewer() {
   };
 
   const checkBackend = async () => {
+    if (!isStkApiConfigured || !STK_API_BASE) {
+      setStkStatus("Status: backend not configured.");
+      setPanelNotice("STK backend is not configured. Use manual M-Pesa.");
+      return;
+    }
     setStkStatus("Status: checking backend...");
     try {
       const res = await fetchWithTimeout(`${STK_API_BASE}/health`, { cache: "no-store" });
@@ -385,6 +402,11 @@ export default function ARViewer() {
   };
 
   const triggerStk = async () => {
+    if (!isStkApiConfigured || !STK_API_BASE) {
+      setStkStatus("Status: backend not configured.");
+      setPanelNotice("STK backend is not configured. Use manual M-Pesa.");
+      return;
+    }
     if (cartCount(checkoutCart) === 0) {
       setStkStatus("Status: cart is empty.");
       return;
@@ -441,16 +463,19 @@ export default function ARViewer() {
   return (
     <div className="relative isolate h-screen w-screen overflow-hidden bg-[#0b0b10] text-white">
       <div className="pointer-events-none absolute inset-x-2 top-2 z-30 flex items-center justify-between gap-2 md:inset-x-5 md:top-5">
-        <button
-          className="pointer-events-auto inline-flex h-9 items-center gap-2 rounded-2xl border border-white/10 bg-black/45 px-3 text-xs font-bold text-white backdrop-blur-xl transition hover:bg-black/60 sm:h-10 sm:text-sm"
-          onClick={() => navigate("/")}
-        >
-          <img src={brandLogo} alt={`${brandName} logo`} className="h-5 w-5 rounded-md object-cover sm:h-6 sm:w-6" />
-          <span className="leading-tight">
-            <span className="block" style={{ color: brandTheme.primary }}>{brandName}</span>
-            <span className="block text-[10px] font-medium text-white/70">Visualize</span>
-          </span>
-        </button>
+        <div className="pointer-events-auto flex items-center gap-2">
+          <BackButton label="Back" fallbackHref="/" className="h-9 px-2.5 text-xs sm:h-10 sm:px-3 sm:text-sm" />
+          <button
+            className="inline-flex h-9 items-center gap-2 rounded-2xl border border-white/10 bg-black/45 px-3 text-xs font-bold text-white backdrop-blur-xl transition hover:bg-black/60 sm:h-10 sm:text-sm"
+            onClick={() => navigate("/")}
+          >
+            <img src={brandLogo} alt={`${brandName} logo`} className="h-5 w-5 rounded-md object-cover sm:h-6 sm:w-6" />
+            <span className="leading-tight">
+              <span className="block" style={{ color: brandTheme.primary }}>{brandName}</span>
+              <span className="block text-[10px] font-medium text-white/70">Visualize</span>
+            </span>
+          </button>
+        </div>
         <div
           className="pointer-events-auto rounded-2xl border border-white/10 bg-black/45 px-3 py-1 text-[10px] font-semibold text-white/90 backdrop-blur-xl sm:text-xs"
           style={{ boxShadow: `0 0 0 1px ${brandTheme.secondary}33 inset` }}
@@ -476,9 +501,22 @@ export default function ARViewer() {
         ar=""
         ar-modes="webxr scene-viewer quick-look"
         ar-placement="floor"
+        onLoad={() => {
+          setToast("");
+          setModelLoading(false);
+          setHasModelError(false);
+        }}
+        onError={() => {
+          setToast("Model failed to load. Check filename/path (case-sensitive).");
+          setPanelNotice("Model file is missing or invalid. Try another dish or re-upload the model.");
+          setArDisabled(true);
+          setSupportChip("Model load error");
+          setModelLoading(false);
+          setHasModelError(true);
+        }}
       />
 
-      {modelLoading && selectedDish ? (
+      {modelLoading && selectedDish && !hasModelError ? (
         <div className="pointer-events-none absolute inset-0 z-10">
           <img
             src={selectedDish.thumb}

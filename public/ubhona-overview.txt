@@ -1,0 +1,14 @@
+Ubhona Overview
+================
+
+Slogan: Visualize
+
+Ubhona helps restaurants visualize food menus in 3D/AR, run digital storefronts,
+and convert menu exploration into orders.
+
+MVP focus:
+- Restaurant onboarding and dashboard shell
+- Category and dish management
+- Public storefront by slug
+- Cart, checkout, and order status flow
+- Demo-friendly static mode when backend is unavailable

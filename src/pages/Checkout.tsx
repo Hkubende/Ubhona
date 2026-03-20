@@ -1,5 +1,5 @@
 import * as React from "react";
-import { ArrowLeft, LoaderCircle, Minus, Plus } from "lucide-react";
+import { LoaderCircle, Minus, Plus } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import {
   addToCart,
@@ -17,12 +17,12 @@ import {
   getOrderTotal,
 } from "../lib/orders";
 import { getEffectivePrice, loadOverrides, type PriceOverrides } from "../lib/price-overrides";
+import { BackButton } from "../components/ui/back-button";
+import { appConfig, isStkApiConfigured } from "../lib/config";
 
-const LOGO_SRC = `${import.meta.env.BASE_URL}ubhona-logo.png`;
+const LOGO_SRC = `${import.meta.env.BASE_URL}ubhona-logo.jpeg`;
 const MPESA_TILL = "8711138";
-const STK_API_BASE = (
-  import.meta.env.VITE_STK_API_BASE || "https://menuvista-mpesa-backend.onrender.com"
-).replace(/\/+$/, "");
+const STK_API_BASE = appConfig.stkApiUrl;
 
 function formatKsh(value: number) {
   return `KSh ${value.toLocaleString("en-KE")}`;
@@ -139,6 +139,11 @@ export default function Checkout() {
   };
 
   const checkBackend = async () => {
+    if (!isStkApiConfigured || !STK_API_BASE) {
+      setStkStatus("Status: backend not configured.");
+      setStkBanner({ kind: "info", message: "Set VITE_STK_API_BASE to enable STK health checks." });
+      return;
+    }
     setStkStatus("Status: checking backend...");
     setStkBanner({ kind: "info", message: "Checking backend health..." });
     try {
@@ -158,6 +163,11 @@ export default function Checkout() {
   };
 
   const payViaStk = async () => {
+    if (!isStkApiConfigured || !STK_API_BASE) {
+      setStkStatus("Status: backend not configured.");
+      setStkBanner({ kind: "info", message: "STK backend is not configured. Use manual M-Pesa." });
+      return;
+    }
     if (!lines.length || total <= 0) {
       setNotice("Cart is empty. Add items before payment.");
       return;
@@ -238,13 +248,7 @@ export default function Checkout() {
               <div className="text-sm text-white/60">{itemCount} item{itemCount === 1 ? "" : "s"}</div>
             </div>
           </div>
-          <button
-            onClick={() => navigate("/")}
-            className="inline-flex items-center gap-2 rounded-2xl border border-white/10 bg-white/[0.05] px-4 py-2 text-sm font-bold text-white hover:bg-white/[0.08]"
-          >
-            <ArrowLeft className="h-4 w-4" />
-            Back
-          </button>
+          <BackButton label="Back" fallbackHref="/" />
         </div>
 
         {loading ? (

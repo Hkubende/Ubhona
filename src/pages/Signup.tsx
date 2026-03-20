@@ -2,8 +2,11 @@ import * as React from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { signupUser } from "../lib/auth";
 import { hasRestaurantProfile, syncRestaurantProfile } from "../lib/restaurant";
+import { Button } from "../components/ui/Button";
+import { Card } from "../components/ui/Card";
+import { Input } from "../components/ui/Input";
 
-const LOGO_SRC = `${import.meta.env.BASE_URL}ubhona-logo.png`;
+const LOGO_SRC = `${import.meta.env.BASE_URL}ubhona-logo.jpeg`;
 
 export default function Signup() {
   const navigate = useNavigate();
@@ -39,7 +42,7 @@ export default function Signup() {
 
   return (
     <div className="min-h-screen bg-[#0b0b10] px-4 py-8 text-white">
-      <div className="mx-auto max-w-md rounded-3xl border border-white/10 bg-white/[0.04] p-6 backdrop-blur-xl">
+      <Card className="mx-auto max-w-md p-6 backdrop-blur-xl">
         <div className="mb-6 flex items-center gap-3">
           <img src={LOGO_SRC} alt="Ubhona" className="h-10 w-10 rounded-2xl object-cover" />
           <div>
@@ -51,42 +54,50 @@ export default function Signup() {
         <form className="space-y-4" onSubmit={onSubmit}>
           <div>
             <div className="mb-1 text-xs text-white/60">Name</div>
-            <input
+            <Input
+              id="signup-name"
+              name="name"
               value={name}
               onChange={(event) => setName(event.target.value)}
-              className="w-full rounded-2xl border border-white/10 bg-black/25 px-3 py-2 text-sm outline-none"
               placeholder="Owner name"
+              autoComplete="name"
               required
             />
           </div>
           <div>
             <div className="mb-1 text-xs text-white/60">Email</div>
-            <input
+            <Input
+              id="signup-email"
+              name="email"
               value={email}
               onChange={(event) => setEmail(event.target.value)}
-              className="w-full rounded-2xl border border-white/10 bg-black/25 px-3 py-2 text-sm outline-none"
               placeholder="owner@restaurant.com"
               type="email"
+              autoComplete="email"
               required
             />
           </div>
           <div>
             <div className="mb-1 text-xs text-white/60">Password</div>
-            <input
+            <Input
+              id="signup-password"
+              name="password"
               value={password}
               onChange={(event) => setPassword(event.target.value)}
-              className="w-full rounded-2xl border border-white/10 bg-black/25 px-3 py-2 text-sm outline-none"
               type="password"
+              autoComplete="new-password"
               required
             />
           </div>
           <div>
             <div className="mb-1 text-xs text-white/60">Confirm Password</div>
-            <input
+            <Input
+              id="signup-confirm-password"
+              name="confirmPassword"
               value={confirm}
               onChange={(event) => setConfirm(event.target.value)}
-              className="w-full rounded-2xl border border-white/10 bg-black/25 px-3 py-2 text-sm outline-none"
               type="password"
+              autoComplete="new-password"
               required
             />
           </div>
@@ -95,12 +106,9 @@ export default function Signup() {
               {error}
             </div>
           ) : null}
-          <button
-            type="submit"
-            className="w-full rounded-2xl bg-orange-500 px-4 py-3 text-sm font-black text-black transition hover:bg-orange-400"
-          >
+          <Button type="submit" variant="primary" size="lg" className="w-full">
             Create Account
-          </button>
+          </Button>
         </form>
 
         <div className="mt-4 text-center text-sm text-white/65">
@@ -109,7 +117,7 @@ export default function Signup() {
             Login
           </Link>
         </div>
-      </div>
+      </Card>
     </div>
   );
 }

@@ -7,7 +7,7 @@ import {
   type Order,
 } from "../lib/orders";
 
-const LOGO_SRC = `${import.meta.env.BASE_URL}ubhona-logo.png`;
+const LOGO_SRC = `${import.meta.env.BASE_URL}ubhona-logo.jpeg`;
 
 function formatKsh(value: number) {
   return `KSh ${value.toLocaleString("en-KE")}`;

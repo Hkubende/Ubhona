@@ -1,779 +1,196 @@
 import * as React from "react";
-import { motion, AnimatePresence } from "framer-motion";
 import { useNavigate } from "react-router-dom";
-import {
-  ShoppingCart,
-  ReceiptText,
-  Search,
-  Clock3,
-  X,
-  Minus,
-  Plus,
-  ScanLine,
-} from "lucide-react";
-import {
-  addToCart as addDishToCart,
-  buildCartLines,
-  cartCount,
-  cartTotal as getCartTotal,
-  loadCart,
-  removeFromCart,
-  saveCart,
-  type Cart,
-} from "./lib/cart";
-import { fetchDishes, getMenuCategories, type Dish } from "./lib/dishes";
-import { getEffectivePrice, loadOverrides, type PriceOverrides } from "./lib/price-overrides";
-import {
-  getBrandingTheme,
-  getRestaurantProfile,
-  syncRestaurantProfile,
-  type RestaurantProfile,
-} from "./lib/restaurant";
-import { trackAnalyticsEvent } from "./lib/analytics";
-const LOGO_SRC = `${import.meta.env.BASE_URL}ubhona-logo.png`;
+import { Card } from "./components/ui/Card";
+import { Hero } from "./components/landing/Hero";
+import { InteractiveImageAccordion, type FeatureItem } from "./components/ui/interactive-image-accordion";
+import { MotionButton } from "./components/ui/motion-button";
+import { SecondaryButton } from "./components/ui/secondary-button";
 
-function formatKsh(value: number) {
-  return `KSh ${value.toLocaleString("en-KE")}`;
-}
+const LOGO_SRC = `${import.meta.env.BASE_URL}ubhona-logo.jpeg`;
 
-function LogoMark() {
-  return (
-    <div className="relative h-11 w-11 shrink-0 overflow-hidden rounded-2xl border border-white/10 bg-gradient-to-br from-orange-500/20 via-emerald-400/10 to-transparent shadow-lg shadow-orange-500/10">
-      <div className="absolute inset-0 flex items-center justify-center">
-        <div className="rounded-full border border-emerald-400/50 px-2 py-0.5 text-[10px] font-bold text-emerald-300">
-          AR
-        </div>
-      </div>
-    </div>
-  );
-}
+const PREVIEW_ITEMS = [
+  {
+    title: "Storefront Preview",
+    description: "Explore a live branded restaurant page powered by Ubhona.",
+    route: "/r/demo",
+  },
+  {
+    title: "AR Viewer",
+    description: "See how dishes are visualized in 3D and AR before ordering.",
+    route: "/r/demo/ar",
+  },
+  {
+    title: "Checkout Preview",
+    description: "Walk through a streamlined cart and checkout customer flow.",
+    route: "/r/demo/checkout",
+  },
+] as const;
 
-function MenuItemCard({
-  dish,
-  onAdd,
-  onOpen,
-  onArPreview,
-}: {
-  dish: Dish;
-  onAdd: (dish: Dish) => void;
-  onOpen: (dishId: string) => void;
-  onArPreview: (dishId: string) => void;
-}) {
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: 18 }}
-      animate={{ opacity: 1, y: 0 }}
-      whileHover={{ y: -4 }}
-      transition={{ duration: 0.25 }}
-      onClick={() => onOpen(dish.id)}
-      className="group cursor-pointer overflow-hidden rounded-3xl border border-white/10 bg-white/[0.04] shadow-2xl shadow-black/20"
-    >
-      <div className="relative h-52 overflow-hidden">
-        <img
-          src={dish.thumb}
-          alt={dish.name}
-          className="h-full w-full object-cover transition duration-500 group-hover:scale-105"
-        />
-        <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/10 to-transparent" />
-
-        <div className="absolute inset-x-4 bottom-4 flex items-end justify-between gap-3">
-          <div>
-            <div className="mb-2 inline-flex rounded-full border border-white/10 bg-black/45 px-2.5 py-1 text-[11px] font-semibold text-white/80 backdrop-blur-sm">
-              {dish.cat}
-            </div>
-            <h3 className="text-xl font-bold text-white">{dish.name}</h3>
-          </div>
-
-          <button
-            onClick={(event) => {
-              event.stopPropagation();
-              onAdd(dish);
-            }}
-            className="rounded-2xl bg-white/90 px-4 py-2 text-sm font-bold text-black transition hover:bg-orange-500 hover:text-white"
-          >
-            Add
-          </button>
-        </div>
-      </div>
-
-      <div className="space-y-4 p-5">
-        <p className="text-sm leading-6 text-white/65">{dish.desc}</p>
-
-        <div className="flex items-center justify-between text-sm">
-          <div className="font-bold text-orange-400">{formatKsh(dish.price)}</div>
-          <div className="inline-flex items-center gap-1.5 text-white/60">
-            <Clock3 className="h-4 w-4" />
-            5 mins
-          </div>
-        </div>
-
-        <div className="flex items-center justify-between gap-3">
-          <button
-            onClick={(event) => {
-              event.stopPropagation();
-              onArPreview(dish.id);
-            }}
-            className="rounded-2xl border border-white/10 bg-white/[0.05] px-4 py-2 text-sm font-bold text-white transition hover:bg-white/[0.08]"
-          >
-            AR Preview
-          </button>
-
-          <button
-            onClick={(event) => {
-              event.stopPropagation();
-              onAdd(dish);
-            }}
-            className="rounded-2xl bg-orange-500 px-4 py-2 text-sm font-bold text-black transition hover:bg-orange-400"
-          >
-            Add to Cart
-          </button>
-        </div>
-      </div>
-    </motion.div>
-  );
-}
+const FEATURE_HIGHLIGHTS: FeatureItem[] = [
+  {
+    id: "storefronts",
+    title: "Restaurant Storefronts",
+    imageUrl:
+      "https://images.unsplash.com/photo-1414235077428-338989a2e8c0?auto=format&fit=crop&w=1400&q=80",
+    description:
+      "Launch branded restaurant pages where guests can browse your menu, discover signature dishes, and experience your brand in a modern digital storefront.",
+  },
+  {
+    id: "ar-menu-preview",
+    title: "AR Menu Preview",
+    imageUrl:
+      "https://images.unsplash.com/photo-1512941937669-90a1b58e7e9c?auto=format&fit=crop&w=1400&q=80",
+    description:
+      "Let customers preview meals in augmented reality before ordering, helping them understand portion, presentation, and appeal more clearly.",
+  },
+  {
+    id: "smart-ordering",
+    title: "Smart Ordering",
+    imageUrl:
+      "https://images.unsplash.com/photo-1556740738-b6a63e27c4df?auto=format&fit=crop&w=1400&q=80",
+    description:
+      "Turn static menus into a smoother ordering flow with interactive browsing, faster selection, and a more intuitive checkout experience.",
+  },
+  {
+    id: "menu-builder",
+    title: "Menu Builder",
+    imageUrl:
+      "https://images.unsplash.com/photo-1460925895917-afdab827c52f?auto=format&fit=crop&w=1400&q=80",
+    description:
+      "Easily create, organize, and update categories, dishes, pricing, and visual content from one simple restaurant dashboard.",
+  },
+  {
+    id: "analytics-dashboard",
+    title: "Analytics Dashboard",
+    imageUrl:
+      "https://images.unsplash.com/photo-1551288049-bebda4e38f71?auto=format&fit=crop&w=1400&q=80",
+    description:
+      "Track what customers view, what they open in AR, and what they order so restaurants can make better menu and sales decisions.",
+  },
+] as const;
 
 export default function App() {
   const navigate = useNavigate();
-  const [dishes, setDishes] = React.useState<Dish[]>([]);
-  const [search, setSearch] = React.useState("");
-  const [activeCategory, setActiveCategory] = React.useState("All");
-  const [cart, setCart] = React.useState<Cart>({});
-  const [cartOpen, setCartOpen] = React.useState(false);
-  const [loading, setLoading] = React.useState(true);
-  const [error, setError] = React.useState("");
-  const [cartNotice, setCartNotice] = React.useState("");
-  const [overrides, setOverrides] = React.useState<PriceOverrides>({});
-  const [restaurantProfile, setRestaurantProfile] = React.useState<RestaurantProfile | null>(null);
-
-  const refreshMenu = React.useCallback(() => {
-    setLoading(true);
-    fetchDishes()
-      .then((data) => {
-        setDishes(data);
-        setError("");
-        setLoading(false);
-      })
-      .catch((err: Error) => {
-        console.error(err);
-        setError(err.message || "Failed to load menu data");
-        setLoading(false);
-      });
-  }, []);
-
-  React.useEffect(() => {
-    refreshMenu();
-  }, [refreshMenu]);
-
-  const refreshBranding = React.useCallback(() => {
-    void syncRestaurantProfile().then((profile) => {
-      setRestaurantProfile(profile || getRestaurantProfile());
-    });
-  }, []);
-
-  React.useEffect(() => {
-    refreshBranding();
-  }, [refreshBranding]);
-
-  React.useEffect(() => {
-    if (!restaurantProfile?.id) return;
-    const key = `mv_analytics_seen_${restaurantProfile.id}_page_view_home`;
-    if (sessionStorage.getItem(key)) return;
-    sessionStorage.setItem(key, "1");
-    void trackAnalyticsEvent({
-      restaurantId: restaurantProfile.id,
-      eventType: "page_view",
-      source: "home",
-    });
-  }, [restaurantProfile?.id]);
-
-  React.useEffect(() => {
-    setCart(loadCart());
-  }, []);
-
-  React.useEffect(() => {
-    saveCart(cart);
-  }, [cart]);
-
-  React.useEffect(() => {
-    if (cartCount(cart) > 0 && cartNotice) setCartNotice("");
-  }, [cart, cartNotice]);
-
-  React.useEffect(() => {
-    const refreshOverrides = () => setOverrides(loadOverrides());
-    refreshOverrides();
-
-    const onVisibilityChange = () => {
-      if (document.visibilityState === "visible") {
-        refreshOverrides();
-        refreshBranding();
-      }
-    };
-
-    window.addEventListener("focus", refreshMenu);
-    window.addEventListener("pageshow", refreshMenu);
-    window.addEventListener("storage", refreshMenu);
-    window.addEventListener("focus", refreshBranding);
-    window.addEventListener("pageshow", refreshBranding);
-    window.addEventListener("storage", refreshBranding);
-    window.addEventListener("focus", refreshOverrides);
-    window.addEventListener("pageshow", refreshOverrides);
-    window.addEventListener("storage", refreshOverrides);
-    document.addEventListener("visibilitychange", onVisibilityChange);
-
-    return () => {
-      window.removeEventListener("focus", refreshMenu);
-      window.removeEventListener("pageshow", refreshMenu);
-      window.removeEventListener("storage", refreshMenu);
-      window.removeEventListener("focus", refreshBranding);
-      window.removeEventListener("pageshow", refreshBranding);
-      window.removeEventListener("storage", refreshBranding);
-      window.removeEventListener("focus", refreshOverrides);
-      window.removeEventListener("pageshow", refreshOverrides);
-      window.removeEventListener("storage", refreshOverrides);
-      document.removeEventListener("visibilitychange", onVisibilityChange);
-    };
-  }, [refreshBranding, refreshMenu]);
-
-  const getDishPrice = React.useCallback(
-    (dish: Dish) => getEffectivePrice(dish, overrides),
-    [overrides]
-  );
-
-  const pricedDishes = React.useMemo(
-    () => dishes.map((dish) => ({ ...dish, price: getDishPrice(dish) })),
-    [dishes, getDishPrice]
-  );
-
-  React.useEffect(() => {
-    if (!restaurantProfile?.id || !pricedDishes.length) return;
-    for (const dish of pricedDishes) {
-      const seenKey = `mv_analytics_seen_${restaurantProfile.id}_${dish.id}_dish_view`;
-      if (sessionStorage.getItem(seenKey)) continue;
-      sessionStorage.setItem(seenKey, "1");
-      void trackAnalyticsEvent({
-        restaurantId: restaurantProfile.id,
-        eventType: "dish_view",
-        dishId: dish.id,
-        source: "home_menu",
-      });
-    }
-  }, [pricedDishes, restaurantProfile?.id]);
-
-  const categories = React.useMemo(() => getMenuCategories(pricedDishes), [pricedDishes]);
-
-  const filtered = React.useMemo(() => {
-    return pricedDishes.filter((dish) => {
-      const matchesCategory =
-        activeCategory === "All" || dish.cat === activeCategory;
-
-      const term = search.trim().toLowerCase();
-      const matchesSearch =
-        !term ||
-        dish.name.toLowerCase().includes(term) ||
-        dish.cat.toLowerCase().includes(term) ||
-        dish.desc.toLowerCase().includes(term);
-
-      return matchesCategory && matchesSearch;
-    });
-  }, [activeCategory, pricedDishes, search]);
-
-  const topDish = React.useMemo(() => {
-    if (!pricedDishes.length) return null;
-    return pricedDishes.reduce((a, b) => (a.price > b.price ? a : b));
-  }, [pricedDishes]);
-
-  const addToCart = (dish: Dish) => {
-    setCart((prev) => addDishToCart(prev, dish.id));
-    setCartOpen(true);
-    if (restaurantProfile?.id) {
-      void trackAnalyticsEvent({
-        restaurantId: restaurantProfile.id,
-        eventType: "add_to_cart",
-        dishId: dish.id,
-        source: "home_menu",
-      });
-    }
-  };
-
-  const changeQty = (dishId: string, nextQty: number) => {
-    setCart((prev) => {
-      const currentQty = prev[dishId] || 0;
-      if (nextQty <= 0) return removeFromCart(prev, dishId, currentQty || 1);
-      if (nextQty > currentQty) return addDishToCart(prev, dishId, nextQty - currentQty);
-      if (nextQty < currentQty) return removeFromCart(prev, dishId, currentQty - nextQty);
-      return prev;
-    });
-  };
-
-  const cartItems = React.useMemo(
-    () =>
-      buildCartLines(cart, pricedDishes).map((line) => ({
-        ...line.dish,
-        qty: line.quantity,
-      })),
-    [cart, pricedDishes]
-  ) as Array<Dish & { qty: number }>;
-
-  const cartCountValue = cartCount(cart);
-  const cartTotal = getCartTotal(cart, pricedDishes);
-  const brandTheme = React.useMemo(() => getBrandingTheme(), [restaurantProfile]);
-  const brandName = restaurantProfile?.restaurantName || "Ubhona";
-  const brandLogo = restaurantProfile?.logo || LOGO_SRC;
-  const brandDescription =
-    restaurantProfile?.shortDescription || "See your food before you order.";
-  const deployRun = import.meta.env.VITE_DEPLOY_RUN as string | undefined;
-  const deploySha = import.meta.env.VITE_DEPLOY_SHA as string | undefined;
-  const deployStamp =
-    deployRun && deploySha
-      ? `Deploy #${deployRun} · ${deploySha.slice(0, 7)}`
-      : import.meta.env.DEV
-        ? "Local build"
-        : "Deployed";
-  const storefrontSlug = restaurantProfile?.slug?.trim() || "";
-  const checkoutCart = () => {
-    if (!cartItems.length) {
-      setCartNotice("Your cart is empty. Add items before checkout.");
-      return;
-    }
-    if (restaurantProfile?.id) {
-      void trackAnalyticsEvent({
-        restaurantId: restaurantProfile.id,
-        eventType: "checkout_start",
-        source: "home_cart",
-        metadata: {
-          items: cartItems.length,
-          total: cartTotal,
-        },
-      });
-    }
-    navigate("/checkout");
-  };
 
   return (
-    <div className="min-h-screen bg-[#0b0b10] text-white">
-      <div className="mx-auto max-w-7xl px-4 pb-20 pt-6 sm:px-6 lg:px-8">
-        <header className="sticky top-0 z-30 mb-8 rounded-3xl border border-white/10 bg-black/35 px-5 py-4 backdrop-blur-xl">
-          <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
-            <div className="flex items-center gap-4">
-              <img
-                src={brandLogo}
-                alt={brandName}
-                className="h-12 w-12 rounded-2xl object-cover"
-              />
-              <div>
-                <div className="flex items-center gap-3">
-                  <LogoMark />
-                  <div className="text-2xl font-black tracking-tight">
-                    <span style={{ color: brandTheme.primary }}>{brandName}</span>
-                  </div>
-                </div>
-                <p className="mt-1 text-sm text-white/60">
-                  {brandDescription}
-                </p>
+    <div className="ubhona-landing-shell">
+      <div className="mx-auto max-w-6xl px-4 py-6 sm:px-6 lg:px-8">
+        <header className="ubhona-landing-header mb-8 flex items-center justify-between px-4 py-3">
+          <div className="flex items-center gap-3">
+            <img src={LOGO_SRC} alt="Ubhona" className="h-10 w-10 rounded-2xl object-cover" />
+            <div>
+              <div className="text-lg font-black">
+                <span className="text-primary">Ubhona</span>
               </div>
+              <div className="text-xs text-text-secondary/90">Visualize</div>
             </div>
-
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-              <div className="relative min-w-[260px]">
-                <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-white/40" />
-                <input
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  placeholder="Search dishes..."
-                  className="w-full rounded-2xl border border-white/10 bg-white/[0.05] py-3 pl-11 pr-4 text-sm text-white outline-none placeholder:text-white/35 focus:border-orange-400/50"
-                />
-              </div>
-
-              <button
-                onClick={() => {
-                  navigate("/dashboard");
-                }}
-                className="rounded-2xl border border-white/10 bg-white/[0.05] px-4 py-3 text-sm font-bold text-white transition hover:bg-white/[0.08]"
-              >
-                Dashboard
-              </button>
-
-              <button
-                onClick={() => {
-                  navigate("/orders");
-                }}
-                className="inline-flex items-center justify-center gap-2 rounded-2xl border border-white/10 bg-white/[0.05] px-4 py-3 text-sm font-bold text-white transition hover:bg-white/[0.08]"
-              >
-                <ReceiptText className="h-4 w-4" />
-                Orders
-              </button>
-
-              <button
-                onClick={() => setCartOpen(true)}
-                className="inline-flex items-center justify-center gap-2 rounded-2xl px-4 py-3 text-sm font-bold text-black transition hover:brightness-110"
-                style={{ backgroundColor: brandTheme.primary }}
-              >
-                <ShoppingCart className="h-4 w-4" />
-                Cart ({cartCountValue})
-              </button>
-            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <SecondaryButton
+              onClick={() => navigate("/login")}
+              label="Sign In"
+              className="min-h-10 px-4 text-xs sm:text-sm"
+            />
+            <MotionButton
+              onClick={() => navigate("/signup")}
+              label="Sign Up"
+              className="min-h-10 px-4 text-xs sm:text-sm"
+            />
           </div>
         </header>
 
-        <section className="mb-6 rounded-3xl border border-white/10 bg-white/[0.04] p-4">
-          <div className="mb-3 text-xs font-black uppercase tracking-wide text-white/60">
-            Preview Routes
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <button
-              onClick={() => navigate("/dashboard")}
-              className="rounded-xl border border-white/10 bg-white/[0.05] px-3 py-2 text-xs font-bold text-white hover:bg-white/[0.08]"
-            >
-              /dashboard
-            </button>
-            <button
-              onClick={() => navigate("/app/menu")}
-              className="rounded-xl border border-white/10 bg-white/[0.05] px-3 py-2 text-xs font-bold text-white hover:bg-white/[0.08]"
-            >
-              /app/menu
-            </button>
-            <button
-              onClick={() => navigate("/app/orders")}
-              className="rounded-xl border border-white/10 bg-white/[0.05] px-3 py-2 text-xs font-bold text-white hover:bg-white/[0.08]"
-            >
-              /app/orders
-            </button>
-            <button
-              onClick={() => navigate("/app/analytics")}
-              className="rounded-xl border border-white/10 bg-white/[0.05] px-3 py-2 text-xs font-bold text-white hover:bg-white/[0.08]"
-            >
-              /app/analytics
-            </button>
-            <button
-              onClick={() => navigate("/ar")}
-              className="rounded-xl border border-white/10 bg-white/[0.05] px-3 py-2 text-xs font-bold text-white hover:bg-white/[0.08]"
-            >
-              /ar
-            </button>
-            <button
-              onClick={() => navigate("/checkout")}
-              className="rounded-xl border border-white/10 bg-white/[0.05] px-3 py-2 text-xs font-bold text-white hover:bg-white/[0.08]"
-            >
-              /checkout
-            </button>
-            <button
-              onClick={() => navigate("/orders")}
-              className="rounded-xl border border-white/10 bg-white/[0.05] px-3 py-2 text-xs font-bold text-white hover:bg-white/[0.08]"
-            >
-              /orders
-            </button>
-            {storefrontSlug ? (
-              <>
-                <button
-                  onClick={() => navigate(`/r/${storefrontSlug}`)}
-                  className="rounded-xl border border-emerald-400/30 bg-emerald-500/20 px-3 py-2 text-xs font-bold text-emerald-200 hover:bg-emerald-500/30"
-                >
-                  /r/{storefrontSlug}
-                </button>
-                <button
-                  onClick={() => navigate(`/r/${storefrontSlug}/menu`)}
-                  className="rounded-xl border border-emerald-400/30 bg-emerald-500/20 px-3 py-2 text-xs font-bold text-emerald-200 hover:bg-emerald-500/30"
-                >
-                  /r/{storefrontSlug}/menu
-                </button>
-                <button
-                  onClick={() => navigate(`/r/${storefrontSlug}/ar`)}
-                  className="rounded-xl border border-emerald-400/30 bg-emerald-500/20 px-3 py-2 text-xs font-bold text-emerald-200 hover:bg-emerald-500/30"
-                >
-                  /r/{storefrontSlug}/ar
-                </button>
-                <button
-                  onClick={() => navigate(`/r/${storefrontSlug}/checkout`)}
-                  className="rounded-xl border border-emerald-400/30 bg-emerald-500/20 px-3 py-2 text-xs font-bold text-emerald-200 hover:bg-emerald-500/30"
-                >
-                  /r/{storefrontSlug}/checkout
-                </button>
-              </>
-            ) : null}
-          </div>
-        </section>
-
-        <section className="mb-8 grid gap-4 lg:grid-cols-[1.25fr_0.75fr]">
-          <div
-            className="overflow-hidden rounded-[28px] border border-white/10 p-6 sm:p-8"
-            style={{
-              background: restaurantProfile?.coverImage
-                ? `linear-gradient(135deg, ${brandTheme.primary}77 0%, rgba(8,8,12,0.88) 45%, ${brandTheme.secondary}66 100%), url(${restaurantProfile.coverImage}) center/cover no-repeat`
-                : `linear-gradient(135deg, ${brandTheme.primary}26 0%, rgba(255,255,255,0.03) 45%, ${brandTheme.secondary}24 100%)`,
+        <main>
+          <Hero
+            onGetStarted={() => navigate("/signup")}
+            onViewDemo={(event) => {
+              event.preventDefault();
+              navigate("/r/demo");
             }}
+          />
+
+          <section
+            id="feature-highlights"
+            className="mb-10 rounded-3xl border border-[#E4572E]/20 bg-gradient-to-br from-[#2B1E17]/55 via-black/70 to-[#2B1E17]/35 p-5 sm:p-6"
           >
-            <div className="max-w-2xl">
-              <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.06] px-3 py-1 text-xs font-semibold text-white/75">
-                <ScanLine className="h-4 w-4" style={{ color: brandTheme.secondary }} />
-                {brandName} AR Experience
+            <div className="mt-1 grid gap-5 lg:grid-cols-[minmax(260px,320px)_minmax(0,1fr)] lg:items-stretch">
+              <div className="min-w-0 p-1 lg:flex lg:h-full lg:flex-col lg:justify-center lg:pr-5">
+                <div className="mb-2 text-sm font-black uppercase tracking-wide text-[#E8D8C3]/90">
+                  Feature Highlights
+                </div>
+                <h2 className="text-2xl font-black text-[#FBF6EE] sm:text-[2rem]">Bring restaurant menus to life</h2>
+                <p className="mt-2 max-w-md text-sm leading-7 text-[#E8D8C3]/92">
+                  Ubhona helps restaurants turn static menus into interactive experiences with AR
+                  previews, digital storefronts, smarter ordering, and clear operational insights.
+                </p>
               </div>
+              <div className="min-w-0">
+                <InteractiveImageAccordion
+                  items={FEATURE_HIGHLIGHTS}
+                  className="w-full max-w-[656px]"
+                />
+              </div>
+            </div>
+          </section>
 
-              <h1 className="text-4xl font-black leading-tight tracking-tight sm:text-5xl">
-                Welcome to{" "}
-                <span style={{ color: brandTheme.primary }}>{brandName}</span>
-              </h1>
-
-              <p className="mt-4 max-w-xl text-base leading-7 text-white/65">
-                {restaurantProfile?.shortDescription ||
-                  "Browse premium dishes, preview menu items in AR, and enjoy a seamless ordering experience."}
+          <section className="mb-10 grid gap-4 lg:grid-cols-2">
+            <Card className="p-5">
+              <div className="text-xs font-black uppercase tracking-wide text-text-secondary/85">Problem</div>
+              <h2 className="mt-2 text-2xl font-black text-text-primary">Static menus are limiting</h2>
+              <p className="mt-3 text-sm leading-7 text-text-secondary/90">
+                Customers decide quickly, and flat menu images do not capture texture, size, or
+                presentation. Restaurants lose attention before intent turns into orders.
+              </p>
+            </Card>
+            <div className="ubhona-landing-section p-5">
+              <div className="text-xs font-black uppercase tracking-wide text-[#F2BA8E]">Solution</div>
+              <h2 className="mt-2 text-2xl font-black text-[#FBF6EE]">Ubhona makes menus visual</h2>
+              <p className="mt-3 text-sm leading-7 text-[#E8D8C3]/92">
+                Give diners a richer way to explore meals with 3D/AR experiences, branded storefronts,
+                and a path into smarter ordering and operational insights.
               </p>
             </div>
-          </div>
+          </section>
 
-          <div className="rounded-[28px] border border-white/10 bg-white/[0.04] p-6">
-            <div className="text-sm font-semibold text-white/55">Quick Access</div>
-
-            <div className="mt-3 text-2xl font-black" style={{ color: brandTheme.primary }}>
-              {brandName}
+          <section className="ubhona-landing-section mb-10 p-5">
+            <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <div className="text-sm font-black uppercase tracking-wide text-text-secondary/86">Product Preview</div>
+                <p className="mt-1 text-sm text-text-secondary/88">Explore the MVP journey from storefront to checkout.</p>
+              </div>
             </div>
+            <div className="grid gap-4 md:grid-cols-3">
+              {PREVIEW_ITEMS.map((item) => (
+                <button
+                  key={item.title}
+                  onClick={() => navigate(item.route)}
+                  className="rounded-2xl border border-border bg-[linear-gradient(180deg,rgba(16,13,13,0.84),rgba(11,10,10,0.84))] p-4 text-left transition duration-300 ease-out hover:-translate-y-0.5 hover:border-primary/35 hover:bg-[linear-gradient(180deg,rgba(18,14,14,0.9),rgba(13,11,11,0.9))]"
+                >
+                  <div className="text-sm font-bold text-[#F2BA8E]">{item.title}</div>
+                  <div className="mt-2 text-xs text-text-secondary/85">{item.description}</div>
+                </button>
+              ))}
+            </div>
+          </section>
 
-            <p className="mt-2 text-sm leading-6 text-white/60">
-              This React frontend connects smoothly to your existing AR viewer and
-              dashboard.
+          <section className="ubhona-landing-section bg-[linear-gradient(112deg,rgba(228,87,46,0.2),rgba(13,11,11,0.95)_46%,rgba(8,7,7,0.96)_100%)] p-6 text-center">
+            <h2 className="text-2xl font-black text-[#FBF6EE]">Build your next menu experience with Ubhona</h2>
+            <p className="mx-auto mt-3 max-w-2xl text-sm text-[#E8D8C3]/88">
+              Show food better, increase confidence before checkout, and move faster from menu to order.
             </p>
-
-            <div className="mt-4 flex flex-col gap-3">
-              <button
-                onClick={() => {
-                  navigate("/dashboard");
-                }}
-                className="rounded-2xl px-4 py-3 text-sm font-bold text-black transition hover:brightness-110"
-                style={{ backgroundColor: brandTheme.secondary }}
-              >
-                Open Dashboard
-              </button>
-
-              <button
-                onClick={() => {
-                  navigate("/ar");
-                }}
-                className="rounded-2xl border border-white/10 bg-white/[0.05] px-4 py-3 text-sm font-bold text-white transition hover:bg-white/[0.08]"
-              >
-                Open AR Viewer
-              </button>
-
-              {topDish && (
-                <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
-                  <div className="text-xs text-white/50">Featured dish</div>
-                  <div className="mt-1 text-lg font-bold" style={{ color: brandTheme.primary }}>
-                    {topDish.name}
-                  </div>
-                  <div className="mt-1 text-sm text-white/60">
-                    Starting from {formatKsh(topDish.price)}
-                  </div>
-                </div>
-              )}
+            <div className="mt-5 flex justify-center gap-3">
+              <MotionButton
+                onClick={() => navigate("/signup")}
+                label="Get Started"
+                className="min-h-11 px-6"
+              />
+              <SecondaryButton
+                onClick={() => navigate("/r/demo")}
+                label="View Demo"
+                className="min-h-11 px-6"
+              />
             </div>
-          </div>
-        </section>
-
-        <section className="mb-6 flex flex-wrap gap-3">
-          {categories.map((category) => {
-            const active = category === activeCategory;
-
-            return (
-              <button
-                key={category}
-                onClick={() => setActiveCategory(category)}
-                className={`rounded-full px-4 py-2 text-sm font-bold transition ${
-                  active
-                    ? "text-black"
-                    : "border border-white/10 bg-white/[0.05] text-white/80 hover:bg-white/[0.08]"
-                }`}
-                style={active ? { backgroundColor: brandTheme.primary } : undefined}
-              >
-                {category}
-              </button>
-            );
-          })}
-        </section>
-
-        {loading && (
-          <div className="rounded-3xl border border-white/10 bg-white/[0.03] p-8 text-center text-white/60">
-            Loading Ubhona dishes...
-          </div>
-        )}
-
-        {!loading && error && (
-          <div className="rounded-3xl border border-red-400/20 bg-red-500/10 p-6 text-sm text-red-200">
-            Failed to load menu data: {error}
-          </div>
-        )}
-
-        {!loading && !error && (
-          <>
-            {pricedDishes.length === 0 ? (
-              <div className="rounded-3xl border border-white/10 bg-white/[0.03] p-8 text-center">
-                <div className="text-xl font-black text-orange-300">No Menu Items Available</div>
-                <p className="mt-2 text-sm text-white/60">
-                  This restaurant has not published any available dishes yet.
-                </p>
-              </div>
-            ) : filtered.length === 0 ? (
-              <div className="rounded-3xl border border-white/10 bg-white/[0.03] p-8 text-center">
-                <div className="text-lg font-bold text-white">No dishes match your search.</div>
-                <p className="mt-2 text-sm text-white/60">Try another keyword or category.</p>
-              </div>
-            ) : (
-              <section className="grid grid-cols-1 gap-6 sm:grid-cols-2 xl:grid-cols-4">
-                {filtered.map((dish) => (
-                  <MenuItemCard
-                    key={dish.id}
-                    dish={dish}
-                    onAdd={addToCart}
-                    onOpen={(dishId) => {
-                      if (restaurantProfile?.id) {
-                        void trackAnalyticsEvent({
-                          restaurantId: restaurantProfile.id,
-                          eventType: "dish_view",
-                          dishId,
-                          source: "home_detail",
-                        });
-                      }
-                      navigate(`/menu/${encodeURIComponent(dishId)}`);
-                    }}
-                    onArPreview={(dishId) => {
-                      if (restaurantProfile?.id) {
-                        void trackAnalyticsEvent({
-                          restaurantId: restaurantProfile.id,
-                          eventType: "ar_open",
-                          dishId,
-                          source: "home_menu",
-                        });
-                      }
-                      navigate(`/ar?dish=${encodeURIComponent(dishId)}`);
-                    }}
-                  />
-                ))}
-              </section>
-            )}
-          </>
-        )}
-      </div>
-
-      <AnimatePresence>
-        {cartOpen && (
-          <>
-            <motion.div
-              className="fixed inset-0 z-40 bg-black/60"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              onClick={() => setCartOpen(false)}
-            />
-
-            <motion.aside
-              className="fixed right-0 top-0 z-50 flex h-full w-full max-w-md flex-col border-l border-white/10 bg-[#101017] p-5 shadow-2xl shadow-black/40"
-              initial={{ x: 420 }}
-              animate={{ x: 0 }}
-              exit={{ x: 420 }}
-              transition={{ type: "spring", damping: 28, stiffness: 240 }}
-            >
-              <div className="mb-5 flex items-center justify-between">
-                <div>
-                  <div className="text-lg font-black">Your Cart</div>
-                  <div className="text-sm text-white/55">
-                    {cartCountValue} item{cartCountValue === 1 ? "" : "s"}
-                  </div>
-                </div>
-
-                <button
-                  onClick={() => setCartOpen(false)}
-                  className="rounded-2xl border border-white/10 bg-white/[0.05] p-2 text-white/80 hover:bg-white/[0.08]"
-                >
-                  <X className="h-5 w-5" />
-                </button>
-              </div>
-
-              <div className="flex-1 space-y-3 overflow-y-auto pr-1">
-                {cartItems.length === 0 ? (
-                  <div className="rounded-3xl border border-dashed border-white/10 bg-white/[0.03] p-8 text-center text-sm text-white/50">
-                    Your cart is empty.
-                  </div>
-                ) : (
-                  cartItems.map((item) => (
-                    <div
-                      key={item.id}
-                      className="rounded-3xl border border-white/10 bg-white/[0.04] p-4"
-                    >
-                      <div className="flex items-start gap-3">
-                        <img
-                          src={item.thumb}
-                          alt={item.name}
-                          className="h-16 w-16 rounded-2xl object-cover"
-                        />
-
-                        <div className="min-w-0 flex-1">
-                          <div className="truncate font-bold">{item.name}</div>
-                          <div className="mt-1 text-sm text-white/50">
-                            {formatKsh(item.price)} each
-                          </div>
-
-                          <div className="mt-3 flex items-center justify-between gap-3">
-                            <div className="flex items-center gap-2 rounded-full border border-white/10 bg-black/20 px-2 py-1">
-                              <button
-                                onClick={() => changeQty(item.id, item.qty - 1)}
-                                className="rounded-full p-1 text-white/75 hover:bg-white/10"
-                              >
-                                <Minus className="h-4 w-4" />
-                              </button>
-
-                              <span className="min-w-6 text-center text-sm font-bold">
-                                {item.qty}
-                              </span>
-
-                              <button
-                                onClick={() => changeQty(item.id, item.qty + 1)}
-                                className="rounded-full p-1 text-white/75 hover:bg-white/10"
-                              >
-                                <Plus className="h-4 w-4" />
-                              </button>
-                            </div>
-
-                            <div className="font-bold text-orange-400">
-                              {formatKsh(item.price * item.qty)}
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  ))
-                )}
-              </div>
-
-              <div className="mt-5 rounded-3xl border border-white/10 bg-white/[0.04] p-5">
-                <div className="mb-4 flex items-center justify-between">
-                  <span className="text-white/60">Total</span>
-                  <span className="text-2xl font-black text-orange-400">
-                    {formatKsh(cartTotal)}
-                  </span>
-                </div>
-
-                {cartNotice && (
-                  <div className="mb-3 rounded-xl border border-orange-400/25 bg-orange-500/10 px-3 py-2 text-xs text-orange-200">
-                    {cartNotice}
-                  </div>
-                )}
-
-                <button
-                  onClick={checkoutCart}
-                  className="w-full rounded-2xl bg-orange-500 px-4 py-3 font-bold text-black transition hover:bg-orange-400"
-                >
-                  Proceed to Checkout
-                </button>
-
-                <p className="mt-3 text-xs leading-5 text-white/45">
-                  This uses the same cart structure as your existing Ubhona flow.
-                </p>
-              </div>
-            </motion.aside>
-          </>
-        )}
-      </AnimatePresence>
-
-      <div className="pointer-events-none fixed bottom-3 left-3 z-[70] rounded-full border border-white/10 bg-black/60 px-3 py-1 text-[10px] font-semibold tracking-wide text-white/75 backdrop-blur-md sm:text-xs">
-        {deployStamp}
+          </section>
+        </main>
       </div>
     </div>
   );

@@ -1,36 +1,36 @@
 import * as React from "react";
-import { ArrowLeft, PencilLine, PlusCircle, Trash2 } from "lucide-react";
-import { useNavigate } from "react-router-dom";
+import { Check, Copy, ImageOff, Pencil, PlusCircle, Search, Trash2 } from "lucide-react";
+import { DashboardLayout } from "../components/dashboard/dashboard-layout";
 import {
-  addCategory,
-  deleteCategory,
-  getCategories,
-  updateCategory,
-  type RestaurantCategory,
-} from "../lib/categories";
-import {
-  addRestaurantDish,
-  deleteRestaurantDish,
-  getRestaurantDishes,
-  updateRestaurantDish,
-  type RestaurantDish,
-} from "../lib/restaurant-dishes";
-import {
-  getCurrentPlan,
-  getDishLimit,
-  syncRestaurantProfile,
-  type RestaurantProfile,
-} from "../lib/restaurant";
-import UploadField from "../components/uploads/UploadField";
+  DataTable,
+  DashboardPanel,
+  EmptyStateCard,
+  PageContainer,
+  SectionHeader,
+  StatusBadge,
+} from "../components/dashboard/dashboard-primitives";
+import { DishWorkspacePanel, type DishFormState } from "../components/menu/DishWorkspacePanel";
+import { Button } from "../components/ui/Button";
+import { ImageThumbnail } from "../components/ui/ImageThumbnail";
+import { Input } from "../components/ui/Input";
+import { UbhonaActionMenu } from "../components/ui/ubhona-action-menu";
+import { UbhonaSelect, UbhonaSelectItem } from "../components/ui/ubhona-select";
+import { useRestaurantDashboard } from "../hooks/use-restaurant-dashboard";
+import { useRestaurantMenuBuilder } from "../hooks/use-restaurant-menu-builder";
+import { getFilteredDishes, normalizeDishInput, sortCategories } from "../lib/menu-builder";
+import { cn } from "../lib/utils";
+import { radius, spacing, tokens, typography } from "../design-system";
+import type { RestaurantProfile } from "../lib/restaurant";
+import type { Dish } from "../types/dashboard";
 
-const EMPTY_DISH_FORM = {
-  categoryId: "",
+const EMPTY_DISH_FORM: DishFormState = {
   name: "",
-  desc: "",
+  description: "",
   price: "",
-  thumb: "",
-  model: "",
-  isAvailable: true,
+  categoryId: "",
+  available: true,
+  imageUrl: "",
+  modelUrl: "",
 };
 
 function formatKsh(value: number) {
@@ -38,461 +38,586 @@ function formatKsh(value: number) {
 }
 
 export default function MenuManager() {
-  const navigate = useNavigate();
-  const [categories, setCategories] = React.useState<RestaurantCategory[]>([]);
-  const [dishes, setDishes] = React.useState<RestaurantDish[]>([]);
-  const [newCategory, setNewCategory] = React.useState("");
+  const { data } = useRestaurantDashboard();
+  const {
+    categories,
+    dishes,
+    loading,
+    saving,
+    error,
+    createCategory,
+    editCategory,
+    removeCategory,
+    createDish,
+    editDish,
+    removeDish,
+  } = useRestaurantMenuBuilder();
+
+  const [search, setSearch] = React.useState("");
+  const [categoryFilter, setCategoryFilter] = React.useState("all");
+  const [newCategoryName, setNewCategoryName] = React.useState("");
   const [editingCategoryId, setEditingCategoryId] = React.useState<string | null>(null);
   const [editingCategoryName, setEditingCategoryName] = React.useState("");
-  const [dishForm, setDishForm] = React.useState(EMPTY_DISH_FORM);
+  const [isCategoryManagerOpen, setIsCategoryManagerOpen] = React.useState(false);
+  const [dishForm, setDishForm] = React.useState<DishFormState>(EMPTY_DISH_FORM);
   const [editingDishId, setEditingDishId] = React.useState<string | null>(null);
-  const [notice, setNotice] = React.useState("");
-  const [error, setError] = React.useState("");
-  const [restaurantProfile, setRestaurantProfile] = React.useState<RestaurantProfile | null>(null);
+  const [priceDrafts, setPriceDrafts] = React.useState<Record<string, string>>({});
+  const workspaceRef = React.useRef<HTMLDivElement | null>(null);
 
-  const refresh = React.useCallback(async () => {
-    const [nextCategories, nextDishes] = await Promise.all([
-      getCategories(),
-      getRestaurantDishes(),
-    ]);
-    setCategories(nextCategories);
-    setDishes(nextDishes);
+  const profile = React.useMemo<RestaurantProfile | null>(() => {
+    if (!data) return null;
+    return {
+      id: data.restaurant.id,
+      restaurantName: data.restaurant.name,
+      slug: data.restaurant.slug,
+      phone: data.restaurant.phone,
+      email: data.restaurant.email,
+      location: data.restaurant.location,
+      logo: data.brandingSettings.logoUrl || data.restaurant.logoUrl,
+      coverImage: data.brandingSettings.coverImageUrl || data.restaurant.coverImageUrl,
+      themePrimary: data.brandingSettings.primaryColor || data.restaurant.primaryColor,
+      themeSecondary: "#34d399",
+      shortDescription: data.brandingSettings.description || data.restaurant.description,
+      subscriptionPlan: "starter",
+      subscriptionStatus: "active",
+      trialEndsAt: null,
+      renewalDate: null,
+      createdAt: new Date().toISOString(),
+    };
+  }, [data]);
+
+  const sortedCategories = React.useMemo(() => sortCategories(categories), [categories]);
+  const categoryNameById = React.useMemo(
+    () => new Map(sortedCategories.map((category) => [category.id, category.name])),
+    [sortedCategories]
+  );
+  const filteredDishes = React.useMemo(
+    () => getFilteredDishes(dishes, search, categoryFilter),
+    [categoryFilter, dishes, search]
+  );
+  const activeDish = React.useMemo(
+    () => dishes.find((dish) => dish.id === editingDishId) || null,
+    [dishes, editingDishId]
+  );
+  const categoryCounts = React.useMemo(
+    () =>
+      sortedCategories.map((category) => ({
+        ...category,
+        count: dishes.filter((dish) => dish.categoryId === category.id).length,
+      })),
+    [dishes, sortedCategories]
+  );
+
+  React.useEffect(() => {
+    setPriceDrafts(
+      Object.fromEntries(dishes.map((dish) => [dish.id, String(Number.isFinite(dish.price) ? dish.price : 0)]))
+    );
+  }, [dishes]);
+
+  React.useEffect(() => {
+    if (!dishForm.categoryId && sortedCategories.length) {
+      setDishForm((current) => ({ ...current, categoryId: sortedCategories[0].id }));
+    }
+  }, [dishForm.categoryId, sortedCategories]);
+
+  React.useEffect(() => {
+    if (!loading && !sortedCategories.length) {
+      setIsCategoryManagerOpen(true);
+    }
+  }, [loading, sortedCategories.length]);
+
+  const scrollToWorkspace = React.useCallback(() => {
+    workspaceRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
   }, []);
 
-  React.useEffect(() => {
-    void refresh();
-    void syncRestaurantProfile().then((profile) => setRestaurantProfile(profile || null));
-  }, [refresh]);
+  const getSuggestedCategoryId = React.useCallback(() => {
+    if (categoryFilter !== "all") return categoryFilter;
+    if (dishForm.categoryId) return dishForm.categoryId;
+    return sortedCategories[0]?.id || "";
+  }, [categoryFilter, dishForm.categoryId, sortedCategories]);
 
-  const currentPlan = React.useMemo(() => getCurrentPlan(restaurantProfile), [restaurantProfile]);
-  const dishLimit = React.useMemo(() => getDishLimit(restaurantProfile), [restaurantProfile]);
-  const dishLimitReached = dishLimit != null && dishes.length >= dishLimit && !editingDishId;
+  const resetDishForm = React.useCallback(
+    (categoryId = getSuggestedCategoryId()) => {
+      setEditingDishId(null);
+      setDishForm({
+        ...EMPTY_DISH_FORM,
+        categoryId,
+      });
+    },
+    [getSuggestedCategoryId]
+  );
 
-  const categoryNameById = React.useMemo(() => {
-    const map = new Map<string, string>();
-    for (const category of categories) map.set(category.id, category.name);
-    return map;
-  }, [categories]);
+  const populateDishForm = React.useCallback(
+    (dish: Dish) => {
+      setEditingDishId(dish.id);
+      setDishForm({
+        name: dish.name,
+        description: dish.description,
+        price: String(dish.price),
+        categoryId: dish.categoryId,
+        available: dish.available,
+        imageUrl: dish.imageUrl || "",
+        modelUrl: dish.modelUrl || "",
+      });
+      setIsCategoryManagerOpen(false);
+      scrollToWorkspace();
+    },
+    [scrollToWorkspace]
+  );
 
-  const onAddCategory = async () => {
-    const name = newCategory.trim();
-    if (!name) return;
-    try {
-      await addCategory({ name, sortOrder: categories.length });
-      setNewCategory("");
-      setNotice(`Category "${name}" added.`);
-      setError("");
-      await refresh();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to add category.");
-    }
-  };
+  const buildDishPayload = React.useCallback(
+    (dish: Dish, overrides?: Partial<Dish>) =>
+      normalizeDishInput({
+        name: overrides?.name ?? dish.name,
+        description: overrides?.description ?? dish.description,
+        price: overrides?.price ?? dish.price,
+        categoryId: overrides?.categoryId ?? dish.categoryId,
+        available: overrides?.available ?? dish.available,
+        imageUrl: overrides?.imageUrl ?? dish.imageUrl ?? "",
+        modelUrl: overrides?.modelUrl ?? dish.modelUrl ?? "",
+      }),
+    []
+  );
 
-  const onDeleteCategory = async (id: string) => {
-    const hasLinkedDishes = dishes.some((dish) => dish.categoryId === id);
-    if (hasLinkedDishes) {
-      setError("Cannot delete category with linked dishes. Move or delete dishes first.");
-      return;
-    }
-    try {
-      await deleteCategory(id);
-      setNotice("Category deleted.");
-      setError("");
-      await refresh();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to delete category.");
-    }
-  };
+  const onAddCategory = React.useCallback(
+    async (event: React.FormEvent<HTMLFormElement>) => {
+      event.preventDefault();
+      await createCategory({ name: newCategoryName, sortOrder: sortedCategories.length });
+      setNewCategoryName("");
+    },
+    [createCategory, newCategoryName, sortedCategories.length]
+  );
 
-  const onSaveCategory = async (id: string) => {
-    const name = editingCategoryName.trim();
-    if (!name) return;
-    try {
-      await updateCategory(id, { name });
-      setEditingCategoryId(null);
-      setEditingCategoryName("");
-      setNotice("Category updated.");
-      setError("");
-      await refresh();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to update category.");
-    }
-  };
-
-  const resetDishForm = () => {
-    setEditingDishId(null);
-    setDishForm({
-      ...EMPTY_DISH_FORM,
-      categoryId: categories[0]?.id || "",
+  const onSaveCategoryEdit = React.useCallback(async () => {
+    if (!editingCategoryId) return;
+    const target = sortedCategories.find((category) => category.id === editingCategoryId);
+    await editCategory(editingCategoryId, {
+      name: editingCategoryName,
+      sortOrder: target?.sortOrder,
     });
-  };
+    setEditingCategoryId(null);
+    setEditingCategoryName("");
+  }, [editCategory, editingCategoryId, editingCategoryName, sortedCategories]);
 
-  const onSaveDish = async () => {
-    setError("");
-    if (dishLimitReached) {
-      setError(`Your ${currentPlan.label} plan allows up to ${dishLimit} dishes. Upgrade to add more.`);
-      return;
-    }
-    const parsedPrice = Number(dishForm.price);
-    if (
-      !dishForm.categoryId ||
-      !dishForm.name.trim() ||
-      !dishForm.desc.trim() ||
-      !dishForm.thumb.trim() ||
-      !dishForm.model.trim() ||
-      !Number.isFinite(parsedPrice) ||
-      parsedPrice <= 0
-    ) {
-      setError("Fill all dish fields with valid values.");
-      return;
-    }
-    const payload = {
-      categoryId: dishForm.categoryId,
-      name: dishForm.name.trim(),
-      desc: dishForm.desc.trim(),
-      price: parsedPrice,
-      thumb: dishForm.thumb.trim(),
-      model: dishForm.model.trim(),
-      isAvailable: dishForm.isAvailable,
-    };
-    if (editingDishId) {
-      try {
-        await updateRestaurantDish(editingDishId, payload);
-        setNotice("Dish updated.");
-      } catch (err) {
-        setError(err instanceof Error ? err.message : "Failed to update dish.");
-        return;
+  const onSubmitDish = React.useCallback(
+    async (event: React.FormEvent<HTMLFormElement>) => {
+      event.preventDefault();
+      const payload = normalizeDishInput(dishForm);
+      if (editingDishId) {
+        await editDish(editingDishId, payload);
+      } else {
+        await createDish(payload);
       }
-    } else {
-      try {
-        await addRestaurantDish(payload);
-        setNotice("Dish added.");
-      } catch (err) {
-        setError(err instanceof Error ? err.message : "Failed to add dish.");
-        return;
-      }
-    }
+      resetDishForm(payload.categoryId || sortedCategories[0]?.id || "");
+    },
+    [createDish, dishForm, editDish, editingDishId, resetDishForm, sortedCategories]
+  );
+
+  const onDuplicateDish = React.useCallback(
+    async (dishId: string) => {
+      const dish = dishes.find((row) => row.id === dishId);
+      if (!dish) return;
+      await createDish({
+        name: `${dish.name} Copy`,
+        description: dish.description,
+        price: dish.price,
+        categoryId: dish.categoryId,
+        available: dish.available,
+        imageUrl: dish.imageUrl || "",
+        modelUrl: dish.modelUrl,
+      });
+    },
+    [createDish, dishes]
+  );
+
+  const onToggleAvailability = React.useCallback(
+    async (dish: Dish) => {
+      await editDish(dish.id, buildDishPayload(dish, { available: !dish.available }));
+    },
+    [buildDishPayload, editDish]
+  );
+
+  const onSavePrice = React.useCallback(
+    async (dish: Dish) => {
+      const nextPrice = Number(priceDrafts[dish.id]);
+      if (!Number.isFinite(nextPrice) || nextPrice <= 0) return;
+      await editDish(dish.id, buildDishPayload(dish, { price: nextPrice }));
+    },
+    [buildDishPayload, editDish, priceDrafts]
+  );
+
+  const onCreateDishFromHeader = React.useCallback(() => {
     resetDishForm();
-    await refresh();
-  };
+    setIsCategoryManagerOpen((current) => current || !sortedCategories.length);
+    scrollToWorkspace();
+  }, [resetDishForm, scrollToWorkspace, sortedCategories.length]);
 
-  const onEditDish = (dish: RestaurantDish) => {
-    setEditingDishId(dish.id);
-    setDishForm({
-      categoryId: dish.categoryId,
-      name: dish.name,
-      desc: dish.desc,
-      price: String(dish.price),
-      thumb: dish.thumb,
-      model: dish.model,
-      isAvailable: dish.isAvailable,
-    });
-  };
-
-  const onDeleteDish = async (id: string) => {
-    try {
-      await deleteRestaurantDish(id);
-      setNotice("Dish deleted.");
-      setError("");
-      if (editingDishId === id) resetDishForm();
-      await refresh();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to delete dish.");
-    }
-  };
-
-  const onToggleDish = async (dish: RestaurantDish) => {
-    try {
-      await updateRestaurantDish(dish.id, { isAvailable: !dish.isAvailable });
-      setNotice(`"${dish.name}" marked ${dish.isAvailable ? "unavailable" : "available"}.`);
-      setError("");
-      await refresh();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to update dish availability.");
-    }
-  };
-
-  React.useEffect(() => {
-    if (!dishForm.categoryId && categories.length) {
-      setDishForm((prev) => ({ ...prev, categoryId: categories[0].id }));
-    }
-  }, [categories, dishForm.categoryId]);
+  const resultsSummary =
+    categoryFilter === "all"
+      ? `${filteredDishes.length} dishes`
+      : `${filteredDishes.length} in ${categoryNameById.get(categoryFilter) || "selected category"}`;
 
   return (
-    <div className="min-h-screen bg-[#0b0b10] text-white">
-      <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
-        <div className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-3xl border border-white/10 bg-black/35 p-5 backdrop-blur-xl">
-          <div>
-            <div className="text-2xl font-black">
-              <span className="text-orange-400">Ubhona</span>
-              <span className="text-emerald-400"> Menu Manager</span>
+    <DashboardLayout
+      profile={profile}
+      title="Menu"
+      subtitle="Operate dishes, categories, pricing, and imagery from one tighter workspace."
+      showTopbarSearch={false}
+      actions={
+        <Button variant="primary" size="sm" className="gap-2" onClick={onCreateDishFromHeader}>
+          <PlusCircle className="h-4 w-4" />
+          Add Dish
+        </Button>
+      }
+    >
+      <PageContainer className={spacing.stackLg}>
+        <DashboardPanel className={spacing.stackLg}>
+          <SectionHeader
+            title="Menu Controls"
+            subtitle="One search and one category filter for the full menu workspace."
+            action={
+              <div className={cn(tokens.classes.metricChip, "py-1")}>
+                {resultsSummary}
+              </div>
+            }
+          />
+          <div className={cn("grid xl:grid-cols-[minmax(0,1fr)_240px_auto]", spacing.gapMd)}>
+            <div>
+              <label htmlFor="menu-search" className={cn("mb-1.5 block", typography.label)}>
+                Dish Search
+              </label>
+              <div className="relative">
+                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-white/55" />
+                <Input
+                  id="menu-search"
+                  name="menuSearch"
+                  value={search}
+                  onChange={(event) => setSearch(event.target.value)}
+                  placeholder="Search dishes by name or description"
+                  className="pl-9"
+                />
+              </div>
             </div>
-            <div className="mt-1 text-sm text-white/60">Manage restaurant categories and dishes.</div>
-          </div>
-          <button
-            onClick={() => navigate("/dashboard")}
-            className="inline-flex items-center gap-2 rounded-2xl border border-white/10 bg-white/[0.05] px-4 py-3 text-sm font-bold text-white hover:bg-white/[0.08]"
-          >
-            <ArrowLeft className="h-4 w-4" />
-            Back to Dashboard
-          </button>
-        </div>
-
-        {notice ? (
-          <div className="mb-4 rounded-2xl border border-emerald-400/25 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-200">
-            {notice}
-          </div>
-        ) : null}
-        {error ? (
-          <div className="mb-4 rounded-2xl border border-red-400/25 bg-red-500/10 px-4 py-3 text-sm text-red-200">
-            {error}
-          </div>
-        ) : null}
-
-        <div className="mb-4 rounded-2xl border border-orange-400/25 bg-orange-500/10 px-4 py-3 text-sm text-orange-100">
-          <div className="font-bold">
-            Plan: {currentPlan.label}
-            {dishLimit == null ? " (Unlimited dishes)" : ` (${dishes.length}/${dishLimit} dishes)`}
-          </div>
-          {dishLimitReached ? (
-            <div className="mt-1 text-xs text-orange-200">
-              Dish limit reached. Upgrade plan to continue adding new dishes.
-            </div>
-          ) : null}
-        </div>
-
-        <div className="mb-6 grid gap-4 lg:grid-cols-2">
-          <div className="rounded-3xl border border-white/10 bg-white/[0.04] p-5">
-            <div className="mb-3 text-sm font-black uppercase tracking-wide text-white/70">Categories</div>
-            <div className="mb-3 flex gap-2">
-              <input
-                value={newCategory}
-                onChange={(event) => setNewCategory(event.target.value)}
-                placeholder="Add category..."
-                className="flex-1 rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-sm outline-none"
-              />
-              <button
-                onClick={onAddCategory}
-                className="inline-flex items-center gap-1 rounded-xl bg-emerald-400 px-3 py-2 text-sm font-bold text-black hover:bg-emerald-300"
+            <div>
+              <label htmlFor="menu-category-filter" className={cn("mb-1.5 block", typography.label)}>
+                Category Filter
+              </label>
+              <UbhonaSelect
+                id="menu-category-filter"
+                name="menuCategoryFilter"
+                value={categoryFilter}
+                onValueChange={setCategoryFilter}
+                placeholder="All categories"
               >
-                <PlusCircle className="h-4 w-4" />
-                Add
-              </button>
+                <UbhonaSelectItem value="all">All categories</UbhonaSelectItem>
+                {sortedCategories.map((category) => (
+                  <UbhonaSelectItem key={category.id} value={category.id}>
+                    {category.name}
+                  </UbhonaSelectItem>
+                ))}
+              </UbhonaSelect>
             </div>
-
-            <div className="space-y-2">
-              {categories.length ? (
-                categories.map((category) => (
-                  <div
-                    key={category.id}
-                    className="flex items-center justify-between gap-2 rounded-2xl border border-white/10 bg-black/25 px-3 py-2"
-                  >
-                    {editingCategoryId === category.id ? (
-                      <input
-                        value={editingCategoryName}
-                        onChange={(event) => setEditingCategoryName(event.target.value)}
-                        className="flex-1 rounded-xl border border-white/10 bg-black/20 px-2 py-1 text-sm outline-none"
-                      />
-                    ) : (
-                      <div className="font-semibold text-white/90">{category.name}</div>
-                    )}
-                    <div className="flex items-center gap-2">
-                      {editingCategoryId === category.id ? (
-                        <button
-                          onClick={() => onSaveCategory(category.id)}
-                          className="rounded-xl bg-emerald-400 px-2.5 py-1 text-xs font-bold text-black"
-                        >
-                          Save
-                        </button>
-                      ) : (
-                        <button
-                          onClick={() => {
-                            setEditingCategoryId(category.id);
-                            setEditingCategoryName(category.name);
-                          }}
-                          className="rounded-xl border border-white/10 bg-white/[0.05] px-2.5 py-1 text-xs font-bold text-white"
-                        >
-                          <PencilLine className="h-3.5 w-3.5" />
-                        </button>
-                      )}
-                      <button
-                        onClick={() => onDeleteCategory(category.id)}
-                        className="rounded-xl border border-red-400/30 bg-red-500/10 px-2.5 py-1 text-xs font-bold text-red-200"
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </button>
-                    </div>
-                  </div>
-                ))
-              ) : (
-                <div className="rounded-2xl border border-dashed border-white/10 bg-black/25 p-4 text-sm text-white/55">
-                  No categories yet.
-                </div>
+            <div className={cn("flex flex-wrap items-center xl:justify-end", spacing.gapSm)}>
+              <div className={tokens.classes.metricChip}>
+                {sortedCategories.length} categories
+              </div>
+              <div className={tokens.classes.metricChip}>
+                {dishes.length} total dishes
+              </div>
+              {(search || categoryFilter !== "all") && (
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="text-white/70"
+                  onClick={() => {
+                    setSearch("");
+                    setCategoryFilter("all");
+                  }}
+                >
+                  Clear filters
+                </Button>
               )}
             </div>
           </div>
+        </DashboardPanel>
 
-          <div className="rounded-3xl border border-white/10 bg-white/[0.04] p-5">
-            <div className="mb-3 text-sm font-black uppercase tracking-wide text-white/70">
-              {editingDishId ? "Edit Dish" : "Add Dish"}
-            </div>
-            <div className="grid gap-3 md:grid-cols-2">
-              <select
-                value={dishForm.categoryId}
-                onChange={(event) => setDishForm((prev) => ({ ...prev, categoryId: event.target.value }))}
-                className="rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-sm outline-none"
-              >
-                <option value="">Select category</option>
-                {categories.map((category) => (
-                  <option key={category.id} value={category.id}>
-                    {category.name}
-                  </option>
-                ))}
-              </select>
-              <input
-                value={dishForm.name}
-                onChange={(event) => setDishForm((prev) => ({ ...prev, name: event.target.value }))}
-                placeholder="Dish name"
-                className="rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-sm outline-none"
+        <div className={cn("grid xl:grid-cols-[minmax(0,1.45fr)_minmax(360px,420px)]", spacing.gapLg)}>
+          <div className={cn("order-2 xl:order-1", spacing.stackLg)}>
+            <DashboardPanel className={cn("overflow-hidden", spacing.stackLg)}>
+              <SectionHeader
+                title="Dishes"
+                subtitle="Visual rows, fast price updates, and edit actions that stay in this workspace."
               />
-              <input
-                type="number"
-                min={1}
-                value={dishForm.price}
-                onChange={(event) => setDishForm((prev) => ({ ...prev, price: event.target.value }))}
-                placeholder="Price"
-                className="rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-sm outline-none"
-              />
-              <label className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-sm text-white/80">
-                <input
-                  type="checkbox"
-                  checked={dishForm.isAvailable}
-                  onChange={(event) =>
-                    setDishForm((prev) => ({ ...prev, isAvailable: event.target.checked }))
-                  }
+              {loading ? <p className="text-sm text-white/70">Loading menu data...</p> : null}
+              {error ? <EmptyStateCard message={error} /> : null}
+              {!loading && !error && !sortedCategories.length ? (
+                <EmptyStateCard
+                  message="Add at least one category to start building the menu."
+                  actionLabel="Open category manager"
+                  onAction={() => {
+                    setIsCategoryManagerOpen(true);
+                    scrollToWorkspace();
+                  }}
                 />
-                Available
-              </label>
-              <input
-                value={dishForm.thumb}
-                onChange={(event) => setDishForm((prev) => ({ ...prev, thumb: event.target.value }))}
-                placeholder="Thumbnail path/url"
-                className="rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-sm outline-none md:col-span-2"
-              />
-              <UploadField
-                label="Upload Thumbnail"
-                assetType="thumb"
-                accept="image/png,image/jpeg,image/webp"
-                value={dishForm.thumb}
-                onUploaded={(url) => setDishForm((prev) => ({ ...prev, thumb: url }))}
-                className="md:col-span-2"
-              />
-              <input
-                value={dishForm.model}
-                onChange={(event) => setDishForm((prev) => ({ ...prev, model: event.target.value }))}
-                placeholder="Model path/url"
-                className="rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-sm outline-none md:col-span-2"
-              />
-              <UploadField
-                label="Upload 3D Model (.glb)"
-                assetType="model"
-                accept=".glb,model/gltf-binary"
-                value={dishForm.model}
-                onUploaded={(url) => setDishForm((prev) => ({ ...prev, model: url }))}
-                className="md:col-span-2"
-              />
-              <textarea
-                value={dishForm.desc}
-                onChange={(event) => setDishForm((prev) => ({ ...prev, desc: event.target.value }))}
-                placeholder="Description"
-                rows={3}
-                className="rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-sm outline-none md:col-span-2"
-              />
-            </div>
-            <div className="mt-4 flex gap-2">
-              <button
-                onClick={onSaveDish}
-                disabled={dishLimitReached}
-                className="rounded-2xl bg-emerald-400 px-4 py-2 text-sm font-bold text-black hover:bg-emerald-300"
-              >
-                {editingDishId ? "Save Dish" : "Add Dish"}
-              </button>
-              {editingDishId ? (
-                <button
-                  onClick={resetDishForm}
-                  className="rounded-2xl border border-white/10 bg-white/[0.05] px-4 py-2 text-sm font-bold text-white hover:bg-white/[0.08]"
-                >
-                  Cancel
-                </button>
               ) : null}
-            </div>
-          </div>
-        </div>
+              {!loading && !error && filteredDishes.length ? (
+                <>
+                  <div className="space-y-3 lg:hidden">
+                    {filteredDishes.map((dish) => {
+                      const priceDraft = priceDrafts[dish.id] ?? String(dish.price);
+                      const parsedPrice = Number(priceDraft);
+                      const priceChanged = parsedPrice !== dish.price;
+                      const canSavePrice = Number.isFinite(parsedPrice) && parsedPrice > 0 && priceChanged && !saving;
 
-        <div className="rounded-3xl border border-white/10 bg-white/[0.04] p-5">
-          <div className="mb-3 text-sm font-black uppercase tracking-wide text-white/70">Dishes</div>
-          <div className="overflow-x-auto">
-            <table className="min-w-full">
-              <thead className="bg-white/[0.04] text-left text-sm text-white/60">
-                <tr>
-                  <th className="px-3 py-3">Name</th>
-                  <th className="px-3 py-3">Category</th>
-                  <th className="px-3 py-3">Price</th>
-                  <th className="px-3 py-3">Availability</th>
-                  <th className="px-3 py-3">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {dishes.map((dish) => (
-                  <tr key={dish.id} className="border-t border-white/10 text-sm">
-                    <td className="px-3 py-3">
-                      <div className="font-bold">{dish.name}</div>
-                      <div className="text-xs text-white/55">{dish.desc}</div>
-                    </td>
-                    <td className="px-3 py-3 text-white/75">
-                      {categoryNameById.get(dish.categoryId) || "Unknown"}
-                    </td>
-                    <td className="px-3 py-3 text-orange-300">{formatKsh(dish.price)}</td>
-                    <td className="px-3 py-3">
-                      <button
-                        onClick={() => onToggleDish(dish)}
-                        className={`rounded-full border px-2.5 py-1 text-xs font-semibold ${
-                          dish.isAvailable
-                            ? "border-emerald-400/35 bg-emerald-500/20 text-emerald-200"
-                            : "border-white/15 bg-white/10 text-white/75"
-                        }`}
-                      >
-                        {dish.isAvailable ? "Available" : "Unavailable"}
-                      </button>
-                    </td>
-                    <td className="px-3 py-3">
-                      <div className="flex gap-2">
-                        <button
-                          onClick={() => onEditDish(dish)}
-                          className="rounded-xl border border-white/10 bg-white/[0.05] px-3 py-1.5 text-xs font-bold text-white"
+                      return (
+                        <div
+                          key={dish.id}
+                          onClick={() => populateDishForm(dish)}
+                          className={cn(
+                            tokens.classes.panelInset,
+                            "cursor-pointer space-y-3 p-3.5 transition",
+                            editingDishId === dish.id && "border-primary/45 bg-primary/[0.09]"
+                          )}
                         >
-                          Edit
-                        </button>
-                        <button
-                          onClick={() => onDeleteDish(dish.id)}
-                          className="rounded-xl border border-red-400/30 bg-red-500/10 px-3 py-1.5 text-xs font-bold text-red-200"
-                        >
-                          Delete
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+                          <div className="flex items-start gap-3">
+                            <ImageThumbnail src={dish.imageUrl} name={dish.name} />
+                            <div className="min-w-0 flex-1">
+                              <div className="font-semibold text-text-primary">{dish.name}</div>
+                              <p className={cn("mt-1", typography.mutedBody)}>{dish.description}</p>
+                              <div className="mt-2 flex flex-wrap items-center gap-2">
+                                <span className={cn("inline-flex", tokens.classes.inlineChip)}>
+                                  {categoryNameById.get(dish.categoryId) || "Unknown"}
+                                </span>
+                                <StatusBadge status={dish.available ? "ready" : "offline"} />
+                              </div>
+                            </div>
+                            <div onClick={(event) => event.stopPropagation()}>
+                              <UbhonaActionMenu
+                                items={[
+                                  {
+                                    key: "edit",
+                                    label: "Edit details",
+                                    icon: <Pencil className="h-3.5 w-3.5" />,
+                                    onSelect: () => populateDishForm(dish),
+                                  },
+                                  {
+                                    key: "duplicate",
+                                    label: "Duplicate",
+                                    icon: <Copy className="h-3.5 w-3.5" />,
+                                    onSelect: () => void onDuplicateDish(dish.id),
+                                  },
+                                  {
+                                    key: "toggle",
+                                    label: dish.available ? "Mark unavailable" : "Mark available",
+                                    onSelect: () => void onToggleAvailability(dish),
+                                  },
+                                  {
+                                    key: "delete",
+                                    label: "Delete",
+                                    icon: <Trash2 className="h-3.5 w-3.5" />,
+                                    onSelect: () => void removeDish(dish.id),
+                                    destructive: true,
+                                  },
+                                ]}
+                              />
+                            </div>
+                          </div>
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="text-xs text-white/50">KSh</span>
+                            <Input
+                              id={`dish-price-mobile-${dish.id}`}
+                              name={`dishPriceMobile${dish.id}`}
+                              value={priceDraft}
+                              onClick={(event) => event.stopPropagation()}
+                              onChange={(event) =>
+                                setPriceDrafts((current) => ({ ...current, [dish.id]: event.target.value }))
+                              }
+                              type="number"
+                              min="0"
+                              step="0.01"
+                              aria-label={`Update price for ${dish.name}`}
+                              className={cn("h-10 w-32 text-right", tokens.classes.inputLight)}
+                            />
+                            <Button
+                              size="sm"
+                              variant={canSavePrice ? "secondary" : "ghost"}
+                              className={cn("gap-1", canSavePrice && "border-primary/35 bg-primary/14 text-text-primary")}
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                void onSavePrice(dish);
+                              }}
+                              disabled={!canSavePrice}
+                            >
+                              <Check className="h-3.5 w-3.5" />
+                              Save
+                            </Button>
+                            <div className="ml-auto text-xs text-white/55">{formatKsh(dish.price)} current</div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  <DataTable className={cn(tokens.classes.tableShell, "hidden lg:block")}>
+                  <table className="min-w-full text-sm">
+                    <thead className={tokens.classes.tableHeader}>
+                      <tr>
+                        <th className="px-4 py-3">Dish</th>
+                        <th className="px-4 py-3">Category</th>
+                        <th className="px-4 py-3">Price</th>
+                        <th className="px-4 py-3">Status</th>
+                        <th className="px-4 py-3 text-right">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filteredDishes.map((dish) => {
+                        const priceDraft = priceDrafts[dish.id] ?? String(dish.price);
+                        const parsedPrice = Number(priceDraft);
+                        const priceChanged = parsedPrice !== dish.price;
+                        const canSavePrice = Number.isFinite(parsedPrice) && parsedPrice > 0 && priceChanged && !saving;
+
+                        return (
+                          <tr
+                            key={dish.id}
+                            onClick={() => populateDishForm(dish)}
+                            className={cn(
+                              tokens.classes.tableRow,
+                              editingDishId === dish.id && tokens.classes.activeRow
+                            )}
+                          >
+                            <td className="px-4 py-3.5">
+                              <div className={cn("flex min-w-[280px] items-start", spacing.gapMd)}>
+                                <ImageThumbnail src={dish.imageUrl} name={dish.name} />
+                                <div className="min-w-0">
+                                  <div className="font-semibold text-text-primary">{dish.name}</div>
+                                  <p className={cn("mt-1", typography.mutedBody)}>{dish.description}</p>
+                                </div>
+                              </div>
+                            </td>
+                            <td className="px-4 py-3.5">
+                              <span className={cn("inline-flex", tokens.classes.inlineChip)}>
+                                {categoryNameById.get(dish.categoryId) || "Unknown"}
+                              </span>
+                            </td>
+                            <td className="px-4 py-3.5">
+                              <div className={cn("flex min-w-[190px] items-center", spacing.gapSm)}>
+                                <span className="text-xs text-white/45">KSh</span>
+                                <Input
+                                  id={`dish-price-${dish.id}`}
+                                  name={`dishPrice${dish.id}`}
+                                  value={priceDraft}
+                                  onClick={(event) => event.stopPropagation()}
+                                  onChange={(event) =>
+                                    setPriceDrafts((current) => ({ ...current, [dish.id]: event.target.value }))
+                                  }
+                                  type="number"
+                                  min="0"
+                                  step="0.01"
+                                  aria-label={`Update price for ${dish.name}`}
+                                  className={cn("h-9 w-28 text-right", tokens.classes.inputLight)}
+                                />
+                                <Button
+                                  size="sm"
+                                  variant={canSavePrice ? "secondary" : "ghost"}
+                                  className={cn("gap-1", canSavePrice && "border-primary/35 bg-primary/14 text-text-primary")}
+                                  onClick={(event) => {
+                                    event.stopPropagation();
+                                    void onSavePrice(dish);
+                                  }}
+                                  disabled={!canSavePrice}
+                                >
+                                  <Check className="h-3.5 w-3.5" />
+                                  Save
+                                </Button>
+                              </div>
+                              <div className="mt-1 text-[11px] text-white/45">{formatKsh(dish.price)} current</div>
+                            </td>
+                            <td className="px-4 py-3.5">
+                              <StatusBadge status={dish.available ? "ready" : "offline"} />
+                            </td>
+                            <td className="px-4 py-3.5">
+                              <div className="flex justify-end" onClick={(event) => event.stopPropagation()}>
+                                <UbhonaActionMenu
+                                  items={[
+                                    {
+                                      key: "edit",
+                                      label: "Edit details",
+                                      icon: <Pencil className="h-3.5 w-3.5" />,
+                                      onSelect: () => populateDishForm(dish),
+                                    },
+                                    {
+                                      key: "duplicate",
+                                      label: "Duplicate",
+                                      icon: <Copy className="h-3.5 w-3.5" />,
+                                      onSelect: () => void onDuplicateDish(dish.id),
+                                    },
+                                    {
+                                      key: "toggle",
+                                      label: dish.available ? "Mark unavailable" : "Mark available",
+                                      onSelect: () => void onToggleAvailability(dish),
+                                    },
+                                    {
+                                      key: "delete",
+                                      label: "Delete",
+                                      icon: <Trash2 className="h-3.5 w-3.5" />,
+                                      onSelect: () => void removeDish(dish.id),
+                                      destructive: true,
+                                    },
+                                  ]}
+                                />
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </DataTable>
+                </>
+              ) : null}
+              {!loading && !error && !filteredDishes.length ? (
+                <EmptyStateCard
+                  message="No dishes match the current filters. Adjust the controls or add a new dish."
+                  actionLabel="Add dish"
+                  onAction={onCreateDishFromHeader}
+                />
+              ) : null}
+              {saving ? <p className="text-xs text-white/55">Saving menu changes...</p> : null}
+            </DashboardPanel>
           </div>
-          {!dishes.length ? (
-            <div className="mt-3 rounded-2xl border border-dashed border-white/10 bg-black/25 p-4 text-sm text-white/55">
-              No restaurant dishes yet.
-            </div>
-          ) : null}
+
+          <div ref={workspaceRef} className="order-1 xl:order-2 xl:sticky xl:top-24 xl:h-fit">
+            <DishWorkspacePanel
+              editingDishId={editingDishId}
+              activeDish={activeDish}
+              dishForm={dishForm}
+              categories={categoryCounts}
+              isCategoryManagerOpen={isCategoryManagerOpen}
+              newCategoryName={newCategoryName}
+              editingCategoryId={editingCategoryId}
+              editingCategoryName={editingCategoryName}
+              onDishFormChange={(patch) => setDishForm((current) => ({ ...current, ...patch }))}
+              onSubmitDish={onSubmitDish}
+              onResetDish={() => resetDishForm()}
+              onCreateNewDish={() => resetDishForm()}
+              onToggleCategoryManager={() => setIsCategoryManagerOpen((current) => !current)}
+              onNewCategoryNameChange={setNewCategoryName}
+              onAddCategory={onAddCategory}
+              onStartCategoryEdit={(id, name) => {
+                setEditingCategoryId(id);
+                setEditingCategoryName(name);
+              }}
+              onEditingCategoryNameChange={setEditingCategoryName}
+              onSaveCategoryEdit={() => void onSaveCategoryEdit()}
+              onCancelCategoryEdit={() => {
+                setEditingCategoryId(null);
+                setEditingCategoryName("");
+              }}
+              onRemoveCategory={(id) => void removeCategory(id)}
+            />
+          </div>
         </div>
-      </div>
-    </div>
+      </PageContainer>
+    </DashboardLayout>
   );
 }

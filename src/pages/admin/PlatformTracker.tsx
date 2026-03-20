@@ -21,11 +21,11 @@ const STATUS_OPTIONS: Array<{ value: PlatformTrackerStatus; label: string }> = [
 ];
 
 function statusClasses(status: PlatformTrackerStatus) {
-  if (status === "done") return "border-emerald-400/30 bg-emerald-500/15 text-emerald-200";
-  if (status === "in_progress") return "border-cyan-400/30 bg-cyan-500/15 text-cyan-200";
+  if (status === "done") return "border-primary/30 bg-primary/15 text-[#F2BA8E]";
+  if (status === "in_progress") return "border-primary/25 bg-primary/12 text-[#E8D8C3]";
   if (status === "planned") return "border-amber-400/30 bg-amber-500/15 text-amber-200";
   if (status === "blocked") return "border-rose-400/30 bg-rose-500/15 text-rose-200";
-  return "border-white/10 bg-white/[0.04] text-white/70";
+  return "border-border bg-white/[0.04] text-text-secondary/80";
 }
 
 export default function PlatformTracker() {
@@ -91,22 +91,22 @@ export default function PlatformTracker() {
   };
 
   return (
-    <div className="min-h-screen bg-[radial-gradient(circle_at_top_left,_rgba(34,211,238,0.12),_transparent_28%),radial-gradient(circle_at_top_right,_rgba(251,191,36,0.12),_transparent_28%),#06080d] text-slate-100">
+    <div className="min-h-screen bg-app-bg text-text-primary">
       <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
-        <div className="mb-6 rounded-[28px] border border-white/10 bg-slate-950/60 p-5 backdrop-blur-xl">
+        <div className="mb-6 ui-surface p-5 backdrop-blur-xl">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
             <div className="flex items-center gap-3">
-              <div className="rounded-2xl border border-cyan-400/25 bg-cyan-500/10 p-3 text-cyan-200">
+              <div className="rounded-2xl border border-primary/25 bg-primary/12 p-3 text-[#F2BA8E]">
                 <FolderKanban className="h-6 w-6" />
               </div>
               <div>
-                <div className="text-xs font-black uppercase tracking-[0.24em] text-cyan-300/80">
+                <div className="text-xs font-black uppercase tracking-[0.24em] text-text-secondary/72">
                   Internal Platform Tracker
                 </div>
-                <div className="mt-1 text-3xl font-black text-white">
+                <div className="mt-1 text-3xl font-black text-text-primary">
                   Ubhona Platform Roadmap
                 </div>
-                <div className="mt-1 text-sm text-slate-400">
+                <div className="mt-1 text-sm text-text-secondary/75">
                   Separate from the storefront UI. This is our working browser-based delivery board.
                 </div>
               </div>
@@ -138,45 +138,45 @@ export default function PlatformTracker() {
         ) : null}
 
         {notice ? (
-          <div className="mb-4 rounded-2xl border border-cyan-400/20 bg-cyan-500/10 px-4 py-3 text-sm text-cyan-100">
+          <div className="mb-4 rounded-2xl border border-primary/20 bg-primary/12 px-4 py-3 text-sm text-[#F2BA8E]">
             {notice}
           </div>
         ) : null}
 
         {loading ? (
-          <div className="mb-4 rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3 text-sm text-slate-300">
+          <div className="mb-4 rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3 text-sm text-text-secondary/80">
             Loading shared tracker...
           </div>
         ) : null}
 
         <div className="mb-6 grid gap-4 md:grid-cols-4">
           {board.sections.map((section) => (
-            <div key={section.id} className="rounded-3xl border border-white/10 bg-slate-950/50 p-4">
-              <div className="text-xs uppercase tracking-[0.22em] text-slate-500">Progress</div>
-              <div className="mt-2 text-lg font-black text-white">{section.title}</div>
+            <div key={section.id} className="rounded-3xl border border-white/10 bg-white/[0.03] p-4">
+              <div className="text-xs uppercase tracking-[0.22em] text-text-secondary/65">Progress</div>
+              <div className="mt-2 text-lg font-black text-text-primary">{section.title}</div>
               <div className="mt-3 h-2 overflow-hidden rounded-full bg-white/10">
                 <div
-                  className="h-full rounded-full bg-gradient-to-r from-cyan-400 to-amber-300"
+                  className="h-full rounded-full bg-gradient-to-r from-primary to-[#F2BA8E]"
                   style={{ width: `${getPlatformTrackerProgress(section)}%` }}
                 />
               </div>
-              <div className="mt-2 text-sm text-slate-300">{getPlatformTrackerProgress(section)}% complete</div>
+              <div className="mt-2 text-sm text-text-secondary/80">{getPlatformTrackerProgress(section)}% complete</div>
             </div>
           ))}
         </div>
 
         <div className="space-y-5">
           {board.sections.map((section) => (
-            <section key={section.id} className="rounded-[30px] border border-white/10 bg-slate-950/55 p-5 backdrop-blur-xl">
+            <section key={section.id} className="rounded-[30px] border border-white/10 bg-white/[0.03] p-5 backdrop-blur-xl">
               <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
                 <div>
-                  <div className="text-xs font-black uppercase tracking-[0.24em] text-slate-500">
+                  <div className="text-xs font-black uppercase tracking-[0.24em] text-text-secondary/65">
                     Roadmap Track
                   </div>
-                  <h2 className="mt-1 text-2xl font-black text-white">{section.title}</h2>
-                  <p className="mt-1 text-sm text-slate-400">{section.description}</p>
+                  <h2 className="mt-1 text-2xl font-black text-text-primary">{section.title}</h2>
+                  <p className="mt-1 text-sm text-text-secondary/75">{section.description}</p>
                 </div>
-                <div className="rounded-full border border-white/10 bg-white/[0.03] px-3 py-1 text-xs font-bold text-slate-300">
+                <div className="rounded-full border border-white/10 bg-white/[0.03] px-3 py-1 text-xs font-bold text-text-secondary/80">
                   {section.items.length} items
                 </div>
               </div>
@@ -186,8 +186,8 @@ export default function PlatformTracker() {
                   <div key={item.id} className="rounded-3xl border border-white/10 bg-black/20 p-4">
                     <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                       <div>
-                        <div className="text-lg font-bold text-white">{item.label}</div>
-                        <div className="mt-1 text-xs text-slate-500">
+                        <div className="text-lg font-bold text-text-primary">{item.label}</div>
+                        <div className="mt-1 text-xs text-text-secondary/65">
                           Updated {new Date(item.updatedAt).toLocaleString("en-GB")}
                         </div>
                       </div>
@@ -204,7 +204,7 @@ export default function PlatformTracker() {
                           className={`rounded-xl border px-3 py-1.5 text-xs font-semibold transition ${
                             item.status === statusOption.value
                               ? statusClasses(statusOption.value)
-                              : "border-white/10 bg-white/[0.03] text-slate-300 hover:bg-white/[0.06]"
+                              : "border-white/10 bg-white/[0.03] text-text-secondary/80 hover:bg-white/[0.06]"
                           }`}
                         >
                           {statusOption.label}
@@ -217,7 +217,7 @@ export default function PlatformTracker() {
                       onChange={(event) => setItemNotes(section.id, item.id, event.target.value)}
                       placeholder="Add implementation notes, blockers, decisions, or next steps..."
                       rows={4}
-                      className="mt-3 w-full rounded-2xl border border-white/10 bg-white/[0.03] px-3 py-2 text-sm text-white outline-none placeholder:text-slate-500"
+                      className="mt-3 w-full rounded-2xl border border-white/10 bg-white/[0.03] px-3 py-2 text-sm text-text-primary outline-none placeholder:text-text-secondary/55"
                     />
                   </div>
                 ))}
