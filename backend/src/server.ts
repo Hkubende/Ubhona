@@ -45,6 +45,7 @@ app.use("/dishes", dishesRouter);
 app.use("/orders", ordersRouter);
 app.use("/payments", paymentsRouter);
 app.use("/uploads", uploadsRouter);
+app.use("/api/uploads", uploadsRouter);
 app.use("/analytics", analyticsRouter);
 app.use("/admin", adminRouter);
 app.use("/billing", billingRouter);
@@ -52,6 +53,15 @@ app.use("/inventory", inventoryRouter);
 app.use("/floor", floorRouter);
 
 app.use((err: unknown, _req: express.Request, res: express.Response) => {
+  if (
+    typeof err === "object" &&
+    err !== null &&
+    "code" in err &&
+    (err as { code?: string }).code === "LIMIT_FILE_SIZE"
+  ) {
+    res.status(400).json({ error: "File too large for this upload endpoint." });
+    return;
+  }
   console.error(err);
   res.status(500).json({ error: "Internal server error" });
 });

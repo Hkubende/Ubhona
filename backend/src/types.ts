@@ -6,5 +6,6 @@ export type AuthRequest = Request & {
     id: string;
     email: string;
     role: UserRole;
+    restaurantId?: string;
   };
 };

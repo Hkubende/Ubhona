@@ -1,8 +1,8 @@
-import { api } from "./api";
+import { api, AUTH_TOKEN_KEY } from "./api";
 import { getCurrentUser } from "./auth";
-import { isApiConfigured } from "./config";
+import { appConfig, isApiConfigured } from "./config";
 import { getRestaurantProfile } from "./restaurant";
-import { isSupabaseConfigured, supabase, supabaseConfigStatus } from "./supabase";
+import { supabaseConfigStatus } from "./supabase";
 
 export type UploadAssetType = "logo" | "cover" | "thumb" | "model";
 
@@ -20,12 +20,11 @@ export type PreparedUpload = {
   method: "PUT";
 };
 
-const THUMB_BUCKET = "dish-thumbnails";
-const MODEL_BUCKET = "dish-models";
 const MAX_THUMB_SIZE = 8 * 1024 * 1024;
 const MAX_MODEL_SIZE = 25 * 1024 * 1024;
 
 const IMAGE_MIME_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
+const UPLOAD_PROVIDER = String(import.meta.env.VITE_UPLOAD_PROVIDER || "").trim().toLowerCase();
 
 function extOf(name: string) {
   const match = String(name).toLowerCase().match(/\.([a-z0-9]+)$/);
@@ -77,7 +76,8 @@ function validateThumbnail(file: File) {
 function validateModel(file: File) {
   const ext = extOf(file.name);
   const type = String(file.type || "").toLowerCase();
-  const allowedMime = type === "model/gltf-binary" || type === "model/gltf+json";
+  const allowedMime =
+    type === "model/gltf-binary" || type === "model/gltf+json" || type === "application/octet-stream";
   const allowedExt = ext === "glb" || ext === "gltf";
   if (file.size > MAX_MODEL_SIZE) {
     throw new Error("3D model must be 25MB or smaller.");
@@ -94,26 +94,61 @@ function getUploadContext(restaurantId?: string, dishId?: string) {
   };
 }
 
-async function uploadToSupabaseStorage(file: File, bucket: string, objectPath: string) {
-  if (!isSupabaseConfigured || !supabase) {
-    throw new Error("Supabase upload is not configured.");
+function getSupabaseProjectHost() {
+  const raw = String(import.meta.env.VITE_SUPABASE_URL || "").trim();
+  if (!raw) return "";
+  try {
+    return new URL(raw).host;
+  } catch {
+    return "";
+  }
+}
+
+function getApiBase() {
+  return String(appConfig.apiUrl || "").replace(/\/+$/, "");
+}
+
+async function uploadViaApi(
+  file: File,
+  input: {
+    assetType: "thumb" | "model";
+    restaurantId: string;
+    dishId: string;
+  }
+) {
+  if (!isApiConfigured) {
+    throw new Error("Upload API is not configured.");
+  }
+  const apiBase = getApiBase();
+  if (!apiBase) {
+    throw new Error("Upload API base URL is missing.");
+  }
+  const token = localStorage.getItem(AUTH_TOKEN_KEY);
+  if (!token) {
+    throw new Error("Missing auth token for API upload.");
   }
 
-  const { error: uploadError } = await supabase.storage.from(bucket).upload(objectPath, file, {
-    cacheControl: "3600",
-    upsert: true,
-    contentType: file.type || undefined,
+  const route = input.assetType === "thumb" ? "thumbnail" : "model";
+  const url = `${apiBase}/api/uploads/${route}`;
+  const formData = new FormData();
+  formData.append("restaurantId", input.restaurantId);
+  formData.append("dishId", input.dishId);
+  formData.append("file", file);
+
+  const response = await fetch(url, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+    body: formData,
   });
-
-  if (uploadError) {
-    throw new Error(uploadError.message || "Supabase upload failed.");
+  const body = (await response.json().catch(() => null)) as
+    | { error?: string; url?: string; ok?: boolean; bucket?: string; path?: string }
+    | null;
+  if (!response.ok || !body?.url) {
+    throw new Error(body?.error || `API upload failed (${response.status}).`);
   }
-
-  const { data } = supabase.storage.from(bucket).getPublicUrl(objectPath);
-  if (!data.publicUrl) {
-    throw new Error("Failed to resolve public URL for uploaded file.");
-  }
-  return data.publicUrl;
+  return body.url;
 }
 
 export async function requestUploadUrl(file: File, assetType: UploadAssetType) {
@@ -168,32 +203,27 @@ export async function uploadFileAsset(file: File, assetType: UploadAssetType) {
 export async function uploadThumbnail(file: File, restaurantId?: string, dishId?: string) {
   validateThumbnail(file);
   const { restaurantId: rid, dishId: did } = getUploadContext(restaurantId, dishId);
-  const ext = extOf(file.name) || "jpg";
-  const objectPath = `${rid}/${did}/thumbnail.${ext}`;
-
-  if (isSupabaseConfigured) {
-    return uploadToSupabaseStorage(file, THUMB_BUCKET, objectPath);
-  }
-
-  return uploadFileAsset(file, "thumb");
+  return uploadViaApi(file, {
+    assetType: "thumb",
+    restaurantId: rid,
+    dishId: did,
+  });
 }
 
 export async function uploadDishModel(file: File, restaurantId?: string, dishId?: string) {
   validateModel(file);
   const { restaurantId: rid, dishId: did } = getUploadContext(restaurantId, dishId);
-  const ext = extOf(file.name) || "glb";
-  const objectPath = `${rid}/${did}/model.${ext}`;
-
-  if (isSupabaseConfigured) {
-    return uploadToSupabaseStorage(file, MODEL_BUCKET, objectPath);
-  }
-
-  return uploadFileAsset(file, "model");
+  return uploadViaApi(file, {
+    assetType: "model",
+    restaurantId: rid,
+    dishId: did,
+  });
 }
 
 export type UploadProviderStatus = {
-  mode: "supabase" | "api" | "none";
-  supabaseConfigured: boolean;
+  mode: "api" | "none";
+  configuredMode: "api" | "supabase" | "auto";
+  supabaseConfigured: false;
   supabaseUrlPresent: boolean;
   supabaseUrlValid: boolean;
   supabaseAnonKeyPresent: boolean;
@@ -202,21 +232,25 @@ export type UploadProviderStatus = {
     thumbnail: string;
     model: string;
   };
+  supabaseProjectHost: string;
 };
 
 export function getUploadProviderStatus() {
-  const mode = isSupabaseConfigured ? "supabase" : isApiConfigured ? "api" : "none";
+  const mode = isApiConfigured ? "api" : "none";
+  const configuredMode = UPLOAD_PROVIDER === "supabase" ? "supabase" : UPLOAD_PROVIDER === "api" ? "api" : "auto";
   return {
     mode,
-    supabaseConfigured: isSupabaseConfigured,
+    configuredMode,
+    supabaseConfigured: false,
     supabaseUrlPresent: supabaseConfigStatus.urlPresent,
     supabaseUrlValid: supabaseConfigStatus.urlValid,
     supabaseAnonKeyPresent: supabaseConfigStatus.anonKeyPresent,
     apiConfigured: isApiConfigured,
     expectedBuckets: {
-      thumbnail: THUMB_BUCKET,
-      model: MODEL_BUCKET,
+      thumbnail: "dish-thumbnails",
+      model: "dish-models",
     },
+    supabaseProjectHost: getSupabaseProjectHost(),
   } satisfies UploadProviderStatus;
 }
 
@@ -235,31 +269,29 @@ export function explainUploadFailure(error: unknown, assetType: UploadAssetType)
   if (lower.includes("restaurant context is missing")) {
     return "Upload blocked: restaurant profile is missing. Complete onboarding or select the active restaurant.";
   }
-  if (lower.includes("bucket not found")) {
-    return `Supabase bucket '${targetBucket}' was not found. Create it in Storage and set it to public.`;
-  }
-  if (lower.includes("mime type") && lower.includes("not supported")) {
-    return `Supabase bucket '${targetBucket}' rejected the file MIME type. Verify allowed MIME types and upload a valid ${assetType === "model" ? ".glb/.gltf" : "image"} file.`;
-  }
-  if (lower.includes("row-level security") || lower.includes("permission denied") || lower.includes("unauthorized")) {
-    return `Supabase Storage policy denied upload to '${targetBucket}'. Verify insert/update policies for your restaurant path.`;
-  }
-  if (lower.includes("supabase upload is not configured")) {
-    if (!status.supabaseUrlPresent && !status.supabaseAnonKeyPresent) {
-      return "Supabase uploads are disabled: set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY.";
-    }
-    if (!status.supabaseUrlValid) {
-      return "Supabase uploads are disabled: VITE_SUPABASE_URL is invalid. Use a full https://<project>.supabase.co URL.";
-    }
-    if (!status.supabaseAnonKeyPresent) {
-      return "Supabase uploads are disabled: VITE_SUPABASE_ANON_KEY is missing.";
-    }
-  }
   if (lower.includes("api is not configured")) {
-    if (!status.supabaseConfigured) {
-      return "No upload provider is active. Configure Supabase env vars or VITE_API_BASE backend uploads.";
-    }
-    return `Fallback upload API is disabled. Supabase should be active; verify bucket '${targetBucket}' and Storage policies.`;
+    return "Upload API is not configured. Set VITE_API_BASE and VITE_UPLOAD_PROVIDER=api.";
+  }
+  if (lower.includes("missing auth token for api upload")) {
+    return "Upload API requires an authenticated app session. Sign in again and retry.";
+  }
+  if (lower.includes("upload api base url is missing")) {
+    return "Upload API base URL is missing. Set VITE_API_BASE.";
+  }
+  if (lower.includes("api upload failed")) {
+    return `Upload API rejected the file for '${targetBucket}'. Check backend upload validation and Supabase env vars.`;
+  }
+  if (lower.includes("contains invalid characters")) {
+    return "Upload path validation failed. Restaurant or dish ID contains invalid characters.";
+  }
+  if (lower.includes("missing supabase_url or supabase_service_role_key")) {
+    return "Backend is missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY.";
+  }
+  if (lower.includes("storage upload failed")) {
+    return `Supabase backend upload failed for '${targetBucket}'. Check bucket existence, MIME limits, and service-role permissions.`;
+  }
+  if (lower.includes("restaurantid must match your active restaurant")) {
+    return "Upload blocked: restaurant scope mismatch.";
   }
   if (lower.includes("api is unreachable")) {
     if (status.mode === "api") {

@@ -2,6 +2,7 @@ import type { Response, NextFunction } from "express";
 import jwt from "jsonwebtoken";
 import type { AuthRequest } from "../types.js";
 import { prisma } from "../prisma.js";
+import { getOwnedRestaurant } from "../services/restaurant.service.js";
 
 const JWT_SECRET = String(process.env.JWT_SECRET || "").trim();
 if (!JWT_SECRET || JWT_SECRET === "dev-secret" || JWT_SECRET.length < 32) {
@@ -40,4 +41,29 @@ export function requireAdmin(req: AuthRequest, res: Response, next: NextFunction
     }
     next();
   });
+}
+
+export async function requireAppAuth(req: AuthRequest, res: Response, next: NextFunction) {
+  const resolveRestaurant = async () => {
+    try {
+      const restaurant = await getOwnedRestaurant(req.user!.id);
+      if (!restaurant) {
+        res.status(400).json({ error: "Create restaurant profile first." });
+        return;
+      }
+      req.user = {
+        ...req.user!,
+        restaurantId: restaurant.id,
+      };
+      next();
+    } catch {
+      res.status(500).json({ error: "Failed to resolve active restaurant." });
+    }
+  };
+
+  if (!req.user) {
+    await requireAuth(req, res, resolveRestaurant);
+    return;
+  }
+  await resolveRestaurant();
 }

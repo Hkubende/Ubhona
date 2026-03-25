@@ -1,4 +1,5 @@
 import { prisma } from "../prisma.js";
+import { supabaseAdmin } from "../lib/supabaseAdmin.js";
 
 export type UploadAssetType = "logo" | "cover" | "thumb" | "model";
 
@@ -8,6 +9,14 @@ export type PrepareUploadInput = {
   fileType: string;
   assetType: UploadAssetType;
   fileSize?: number;
+};
+export type ServerManagedUploadInput = {
+  restaurantId: string;
+  dishId: string;
+  fileName: string;
+  fileType: string;
+  bytes: Buffer;
+  assetType: "thumb" | "model";
 };
 
 function safeName(input: string) {
@@ -29,12 +38,31 @@ function guessExtension(fileType: string, fallback: string) {
   if (fileType.startsWith("image/webp")) return "webp";
   if (fileType === "model/gltf-binary") return "glb";
   if (fileType === "model/gltf+json") return "gltf";
+  if (fileType === "application/octet-stream") return fallback;
   return fallback;
+}
+
+function normalizeAssetType(assetType: UploadAssetType) {
+  return assetType === "thumb" ? "thumbnail" : assetType;
+}
+
+const LOG_UPLOAD_DEBUG =
+  String(process.env.LOG_UPLOAD_DEBUG || "").trim().toLowerCase() === "true" || process.env.NODE_ENV !== "production";
+const checkedBuckets = new Set<string>();
+
+function uploadDebug(message: string, details?: Record<string, unknown>) {
+  if (!LOG_UPLOAD_DEBUG) return;
+  if (details) {
+    console.info(`[uploads] ${message}`, details);
+    return;
+  }
+  console.info(`[uploads] ${message}`);
 }
 
 function assertFileType(assetType: UploadAssetType, fileType: string, ext: string) {
   if (assetType === "model") {
-    const okByType = fileType === "model/gltf-binary" || fileType === "model/gltf+json";
+    const okByType =
+      fileType === "model/gltf-binary" || fileType === "model/gltf+json" || fileType === "application/octet-stream";
     const okByExt = ext === "glb" || ext === "gltf";
     if (!okByType && !okByExt) {
       throw new Error("Model upload must be a .glb or .gltf file.");
@@ -101,6 +129,59 @@ async function createSupabaseSignedUploadUrl(bucket: string, objectKey: string) 
   };
 }
 
+function safePathSegment(input: string, field: string) {
+  const value = String(input || "").trim();
+  if (!value) {
+    throw new Error(`${field} is required.`);
+  }
+  if (!/^[a-zA-Z0-9_-]+$/.test(value)) {
+    throw new Error(`${field} contains invalid characters.`);
+  }
+  return value;
+}
+
+async function putObjectViaServiceRole(input: {
+  bucket: string;
+  objectKey: string;
+  fileType: string;
+  bytes: Buffer;
+}) {
+  uploadDebug("putObjectViaServiceRole.begin", {
+    bucket: input.bucket,
+    objectKey: input.objectKey,
+    fileType: input.fileType || "application/octet-stream",
+    byteLength: input.bytes.byteLength,
+  });
+  const { error } = await supabaseAdmin.storage.from(input.bucket).upload(input.objectKey, input.bytes, {
+    contentType: input.fileType || "application/octet-stream",
+    upsert: true,
+  });
+  if (error) {
+    uploadDebug("putObjectViaServiceRole.error", {
+      bucket: input.bucket,
+      objectKey: input.objectKey,
+      fileType: input.fileType || "application/octet-stream",
+      error: error.message,
+    });
+    throw new Error(error.message || "Storage upload failed.");
+  }
+  uploadDebug("putObjectViaServiceRole.success", {
+    bucket: input.bucket,
+    objectKey: input.objectKey,
+  });
+}
+
+async function ensureBucketExists(bucket: string) {
+  if (checkedBuckets.has(bucket)) return;
+  const { data, error } = await supabaseAdmin.storage.getBucket(bucket);
+  if (error || !data) {
+    uploadDebug("ensureBucketExists.error", { bucket, error: error?.message || "Bucket not found." });
+    throw new Error(`Supabase bucket '${bucket}' does not exist or is not accessible: ${error?.message || "not found"}`);
+  }
+  checkedBuckets.add(bucket);
+  uploadDebug("ensureBucketExists.ok", { bucket });
+}
+
 export async function prepareUpload(input: PrepareUploadInput) {
   const rawExt = extensionFromName(input.fileName);
   const defaultExt = input.assetType === "model" ? "glb" : "png";
@@ -154,6 +235,77 @@ export async function prepareUpload(input: PrepareUploadInput) {
     upload_token: token,
     object_key: asset.objectKey,
     method: "PUT" as const,
+  };
+}
+
+export async function uploadAssetServerManaged(input: ServerManagedUploadInput) {
+  const restaurantId = safePathSegment(input.restaurantId, "restaurantId");
+  const dishId = safePathSegment(input.dishId, "dishId");
+  const rawExt = extensionFromName(input.fileName);
+  const defaultExt = input.assetType === "model" ? "glb" : "png";
+  const ext = guessExtension(input.fileType, rawExt || defaultExt);
+  assertFileType(input.assetType, input.fileType, ext);
+  assertFileSize(input.assetType, input.bytes.byteLength);
+
+  const bucket = getStorageBucket(input.assetType);
+  const objectKey =
+    input.assetType === "thumb"
+      ? `${restaurantId}/${dishId}/thumbnail.${ext}`
+      : `${restaurantId}/${dishId}/model.${ext}`;
+  const contentType = input.fileType || "application/octet-stream";
+
+  await ensureBucketExists(bucket);
+
+  await putObjectViaServiceRole({
+    bucket,
+    objectKey,
+    fileType: contentType,
+    bytes: input.bytes,
+  });
+
+  const supabaseUrl = String(process.env.SUPABASE_URL || "").replace(/\/+$/, "");
+  const publicBase =
+    (process.env.SUPABASE_STORAGE_PUBLIC_URL || "").replace(/\/+$/, "") ||
+    `${supabaseUrl}/storage/v1/object/public`;
+  const publicUrl = `${publicBase}/${bucket}/${objectKey}`;
+
+  const asset = await prisma.uploadAsset.create({
+    data: {
+      restaurantId,
+      assetType: input.assetType,
+      fileName: input.fileName,
+      fileType: contentType,
+      bucket,
+      objectKey,
+      publicUrl,
+      status: "uploaded",
+    },
+    select: {
+      id: true,
+      restaurantId: true,
+      assetType: true,
+      fileName: true,
+      fileType: true,
+      bucket: true,
+      objectKey: true,
+      publicUrl: true,
+      status: true,
+      createdAt: true,
+    },
+  });
+
+  return {
+    id: asset.id,
+    restaurant_id: asset.restaurantId,
+    type: normalizeAssetType(asset.assetType as UploadAssetType),
+    file_name: asset.fileName,
+    mime_type: asset.fileType,
+    bucket: asset.bucket,
+    object_key: asset.objectKey,
+    path: asset.objectKey,
+    url: asset.publicUrl,
+    status: asset.status,
+    created_at: asset.createdAt,
   };
 }
 

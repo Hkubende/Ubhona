@@ -62,7 +62,8 @@ export default function UploadField({
       const name = nextFile.name.toLowerCase();
       const mime = String(nextFile.type || "").toLowerCase();
       if (assetType === "model") {
-        const modelMimeAllowed = mime === "model/gltf-binary" || mime === "model/gltf+json";
+        const modelMimeAllowed =
+          mime === "model/gltf-binary" || mime === "model/gltf+json" || mime === "application/octet-stream";
         const modelExtAllowed = name.endsWith(".glb") || name.endsWith(".gltf");
         if (!modelMimeAllowed && !modelExtAllowed) {
           return "Only .glb and .gltf files are supported.";
@@ -104,7 +105,7 @@ export default function UploadField({
       const providerStatus = getUploadProviderStatus();
       const configuredHint =
         providerStatus.mode === "supabase"
-          ? `Provider: Supabase (${providerStatus.expectedBuckets.thumbnail}, ${providerStatus.expectedBuckets.model})`
+          ? `Provider: Supabase (${providerStatus.expectedBuckets.thumbnail}, ${providerStatus.expectedBuckets.model}) @ ${providerStatus.supabaseProjectHost || "unknown-project"}`
           : providerStatus.mode === "api"
             ? "Provider: API upload endpoint"
             : "Provider: none configured";
