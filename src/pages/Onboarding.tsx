@@ -7,9 +7,6 @@ import {
   syncRestaurantProfile,
   validateRestaurantSlug,
 } from "../lib/restaurant";
-import { addCategory, getCategories } from "../lib/categories";
-import { addRestaurantDish } from "../lib/restaurant-dishes";
-import { createStorefrontOrder } from "../lib/orders";
 import { getQrCodeImageUrl, getStorefrontMenuUrl } from "../lib/qr";
 
 const LOGO_SRC = `${import.meta.env.BASE_URL}ubhona-logo.jpeg`;
@@ -46,6 +43,8 @@ function parseManualDishes(raw: string): DraftDish[] {
 export default function Onboarding() {
   const navigate = useNavigate();
   const user = getCurrentUser();
+  const userId = user?.id || "";
+  const userEmail = user?.email || "";
   const allowPreviewMode =
     import.meta.env.DEV &&
     typeof window !== "undefined" &&
@@ -93,13 +92,15 @@ export default function Onboarding() {
       const raw = localStorage.getItem(ONBOARDING_DRAFT_KEY);
       if (!raw) return;
       const draft = JSON.parse(raw) as Record<string, unknown>;
-      setStep(Number(draft.step || 1) as OnboardingStep);
+      const rawStep = Number(draft.step || 1);
+      const safeStep = Number.isFinite(rawStep) ? Math.max(1, Math.min(4, rawStep)) : 1;
+      setStep(safeStep as OnboardingStep);
       setName(String(draft.name || ""));
       setSlug(String(draft.slug || ""));
       setLogo(String(draft.logo || ""));
       setDescription(String(draft.description || ""));
       setPhone(String(draft.phone || ""));
-      setEmail(String(draft.email || user?.email || ""));
+      setEmail(String(draft.email || userEmail || ""));
       setLocation(String(draft.location || ""));
       setMenuMode((String(draft.menuMode || "simple") as MenuInputMode) || "simple");
       setCategoryName(String(draft.categoryName || "Main"));
@@ -123,10 +124,10 @@ export default function Onboarding() {
     } catch {
       // Ignore malformed draft.
     }
-  }, [user?.email]);
+  }, [userEmail]);
 
   React.useEffect(() => {
-    if (!user) {
+    if (!userId) {
       navigate("/login");
       return;
     }
@@ -142,30 +143,33 @@ export default function Onboarding() {
       setIsHydrating(false);
     };
     void hydrate();
-  }, [allowPreviewMode, loadDraft, navigate, user]);
+  }, [allowPreviewMode, loadDraft, navigate, userId]);
 
   React.useEffect(() => {
-    if (!user || isHydrating) return;
-    const payload = {
-      step,
-      name,
-      slug,
-      logo,
-      description,
-      phone,
-      email,
-      location,
-      menuMode,
-      categoryName,
-      simpleDishName,
-      simpleDishPrice,
-      simpleDishes,
-      manualMenuText,
-      simulateFirstOrder,
-    };
-    localStorage.setItem(ONBOARDING_DRAFT_KEY, JSON.stringify(payload));
+    if (!userId || isHydrating) return;
+    const handle = window.setTimeout(() => {
+      const payload = {
+        step,
+        name,
+        slug,
+        logo,
+        description,
+        phone,
+        email,
+        location,
+        menuMode,
+        categoryName,
+        simpleDishName,
+        simpleDishPrice,
+        simpleDishes,
+        manualMenuText,
+        simulateFirstOrder,
+      };
+      localStorage.setItem(ONBOARDING_DRAFT_KEY, JSON.stringify(payload));
+    }, 250);
+    return () => window.clearTimeout(handle);
   }, [
-    user,
+    userId,
     isHydrating,
     step,
     name,
@@ -238,7 +242,7 @@ export default function Onboarding() {
   };
 
   const launchRestaurant = async () => {
-    if (!user) return;
+    if (!userId) return;
     setSaving(true);
     setError("");
     setNotice("");
@@ -247,12 +251,16 @@ export default function Onboarding() {
         restaurantName: name.trim(),
         slug: normalizedSlug,
         phone: phone.trim() || "Not set",
-        email: email.trim() || user.email || "owner@ubhona.com",
+        email: email.trim() || userEmail || "owner@ubhona.com",
         location: location.trim() || "Not set",
         logo: logo.trim(),
         shortDescription: description.trim(),
       });
 
+      const [{ addCategory, getCategories }, { addRestaurantDish }] = await Promise.all([
+        import("../lib/categories"),
+        import("../lib/restaurant-dishes"),
+      ]);
       const existingCategories = await getCategories();
       const selectedCategoryName = categoryName.trim() || "Main";
       let categoryId =
@@ -280,6 +288,7 @@ export default function Onboarding() {
       }
 
       if (simulateFirstOrder && createdDishes.length) {
+        const { createStorefrontOrder } = await import("../lib/orders");
         const first = createdDishes[0];
         await createStorefrontOrder({
           restaurantId: profile.id,
