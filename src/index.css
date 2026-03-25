@@ -3,9 +3,12 @@
 
 :root {
   --font-sans: "Plus Jakarta Sans", Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
-  --color-primary: #e4572e;
-  --color-primary-hover: #c54520;
-  --color-secondary-accent: #f58a1f;
+  --color-primary: #ff6a1a;
+  --color-primary-hover: #ff7f33;
+  --color-primary-active: #e85c14;
+  --color-mint-primary: #2ee6a6;
+  --color-mint-secondary: #1bc47d;
+  --color-secondary-accent: #1bc47d;
   --color-background: #050505;
   --color-surface: #0d0b0b;
   --color-elevated-surface: #141010;
@@ -16,15 +19,19 @@
   --color-text-secondary: #b8aea3;
   --color-border: rgba(255, 255, 255, 0.08);
   --color-border-strong: rgba(255, 255, 255, 0.14);
-  --color-warm-glow: rgba(228, 87, 46, 0.16);
-  --color-success: #f58a1f;
-  --color-warning: #f58a1f;
+  --color-warm-glow: rgba(255, 106, 26, 0.16);
+  --color-success: #2ee6a6;
+  --color-success-strong: #1bc47d;
+  --color-warning: #ff6a1a;
   --color-error: #d36a59;
 }
 
 @theme {
   --color-primary: var(--color-primary);
   --color-primary-hover: var(--color-primary-hover);
+  --color-primary-active: var(--color-primary-active);
+  --color-mint-primary: var(--color-mint-primary);
+  --color-mint-secondary: var(--color-mint-secondary);
   --color-secondary-accent: var(--color-secondary-accent);
   --color-background: var(--color-background);
   --color-surface: var(--color-surface);
@@ -38,6 +45,7 @@
   --color-border-strong: var(--color-border-strong);
   --color-warm-glow: var(--color-warm-glow);
   --color-success: var(--color-success);
+  --color-success-strong: var(--color-success-strong);
   --color-warning: var(--color-warning);
   --color-error: var(--color-error);
 
@@ -49,7 +57,7 @@
   --shadow-subtle: 0 10px 18px rgba(0, 0, 0, 0.18);
   --shadow-soft: 0 20px 40px rgba(0, 0, 0, 0.22), 0 1px 0 rgba(255, 248, 241, 0.04);
   --shadow-medium: 0 18px 34px rgba(0, 0, 0, 0.2), 0 0 0 1px rgba(255, 248, 241, 0.03);
-  --shadow-elevated: 0 22px 44px rgba(0, 0, 0, 0.26), 0 0 24px rgba(228, 87, 46, 0.08);
+  --shadow-elevated: 0 22px 44px rgba(0, 0, 0, 0.26), 0 0 24px rgba(255, 106, 26, 0.08);
 }
 
 html, body, #root {
@@ -60,7 +68,7 @@ body {
   margin: 0;
   font-family: var(--font-sans);
   background:
-    radial-gradient(1200px 640px at 82% -12%, rgba(228, 87, 46, 0.14), transparent 60%),
+    radial-gradient(1200px 640px at 82% -12%, rgba(255, 106, 26, 0.14), transparent 60%),
     radial-gradient(900px 520px at 0% 8%, rgba(245, 138, 31, 0.08), transparent 58%),
     radial-gradient(900px 540px at 50% 120%, rgba(58, 26, 17, 0.18), transparent 62%),
     var(--color-app-bg);
@@ -89,7 +97,7 @@ body {
 }
 
 ::selection {
-  background: rgba(228, 87, 46, 0.35);
+  background: rgba(255, 106, 26, 0.35);
   color: var(--color-text-primary);
 }
 
@@ -119,7 +127,7 @@ body {
   }
 
   .ui-action-surface {
-    @apply border border-primary/25 bg-[linear-gradient(180deg,rgba(228,87,46,0.16),rgba(86,36,19,0.18))];
+    @apply border border-primary/25 bg-[linear-gradient(180deg,rgba(255,106,26,0.16),rgba(93,39,17,0.18))];
     box-shadow:
       inset 0 1px 0 rgba(255, 225, 210, 0.08),
       0 14px 28px rgba(90, 37, 19, 0.2);
@@ -146,13 +154,13 @@ body {
     inset: 10px auto 10px 0;
     width: 2px;
     border-radius: 999px;
-    background: linear-gradient(180deg, rgba(228, 87, 46, 0.1), rgba(228, 87, 46, 0.9), rgba(232, 216, 195, 0.18));
+    background: linear-gradient(180deg, rgba(255, 106, 26, 0.1), rgba(255, 106, 26, 0.9), rgba(232, 216, 195, 0.18));
   }
 
   .ubhona-storefront-shell {
     @apply min-h-screen text-white;
     background:
-      radial-gradient(1100px 600px at 82% -12%, rgba(228, 87, 46, 0.17), transparent 58%),
+      radial-gradient(1100px 600px at 82% -12%, rgba(255, 106, 26, 0.17), transparent 58%),
       radial-gradient(960px 560px at 0% 10%, rgba(245, 138, 31, 0.08), transparent 56%),
       linear-gradient(180deg, #050505 0%, #080707 100%);
   }
@@ -179,37 +187,48 @@ body {
     @apply min-h-screen text-text-primary;
     background:
       radial-gradient(980px 540px at 18% -8%, rgba(245, 138, 31, 0.12), transparent 58%),
-      radial-gradient(1100px 620px at 88% 2%, rgba(228, 87, 46, 0.18), transparent 60%),
+      radial-gradient(1100px 620px at 88% 2%, rgba(255, 106, 26, 0.18), transparent 60%),
       radial-gradient(760px 460px at 50% 105%, rgba(80, 34, 21, 0.24), transparent 65%),
       linear-gradient(180deg, #050505 0%, #080606 100%);
   }
 
   .ubhona-landing-header {
-    @apply rounded-3xl border border-[color:var(--color-border-strong)] bg-[linear-gradient(180deg,rgba(24,18,16,0.82),rgba(12,10,10,0.82))] backdrop-blur-xl;
-    box-shadow:
-      inset 0 1px 0 rgba(255, 248, 241, 0.07),
-      0 18px 36px rgba(0, 0, 0, 0.28);
+    @apply sticky top-0 z-40 w-full bg-[linear-gradient(180deg,rgba(5,5,5,0.9),rgba(5,5,5,0.62))] backdrop-blur-xl;
+    box-shadow: 0 1px 0 rgba(255, 255, 255, 0.04), 0 10px 28px rgba(0, 0, 0, 0.2);
+  }
+
+  .ubhona-landing-nav-link {
+    @apply text-sm font-medium text-white/70 transition-colors duration-200 hover:text-white;
+  }
+
+  .ubhona-landing-cta {
+    @apply border-[#FF7A1A]/75 bg-[#FF7A1A] text-[#FBF6EE] shadow-[0_12px_28px_rgba(98,44,18,0.32)];
+  }
+
+  .ubhona-landing-cta:hover {
+    @apply border-[#FF8B3A] bg-[#FF8B3A] shadow-[0_16px_30px_rgba(98,44,18,0.35)];
   }
 
   .ubhona-landing-hero {
     @apply relative overflow-hidden rounded-3xl border border-[color:var(--color-border-strong)] p-6 sm:p-9;
     background:
-      radial-gradient(860px 360px at -4% -8%, rgba(245, 138, 31, 0.18), transparent 55%),
-      radial-gradient(980px 480px at 112% 6%, rgba(228, 87, 46, 0.2), transparent 58%),
-      linear-gradient(130deg, rgba(43, 30, 23, 0.66) 0%, rgba(12, 10, 10, 0.9) 55%, rgba(6, 5, 5, 0.96) 100%);
+      radial-gradient(980px 400px at -2% -14%, rgba(245, 138, 31, 0.22), transparent 54%),
+      radial-gradient(940px 500px at 98% 8%, rgba(255, 106, 26, 0.22), transparent 58%),
+      linear-gradient(136deg, rgba(43, 30, 23, 0.58) 0%, rgba(13, 10, 10, 0.86) 56%, rgba(6, 5, 5, 0.94) 100%);
     box-shadow:
-      inset 0 1px 0 rgba(255, 248, 241, 0.08),
-      0 26px 52px rgba(0, 0, 0, 0.3);
+      inset 0 1px 0 rgba(255, 248, 241, 0.09),
+      inset 0 -1px 0 rgba(255, 255, 255, 0.02),
+      0 22px 46px rgba(0, 0, 0, 0.26);
   }
 
   .ubhona-landing-hero::after {
     content: "";
     position: absolute;
-    inset: -20% -14% auto auto;
-    width: 360px;
-    height: 360px;
+    inset: -20% -12% auto auto;
+    width: 390px;
+    height: 390px;
     border-radius: 999px;
-    background: radial-gradient(circle, rgba(228, 87, 46, 0.17), transparent 70%);
+    background: radial-gradient(circle, rgba(255, 106, 26, 0.18), transparent 72%);
     pointer-events: none;
   }
 
@@ -222,11 +241,11 @@ body {
 
   .ubhona-landing-highlight {
     @apply bg-gradient-to-r from-primary via-[#f08935] to-[#ffc086] bg-clip-text text-transparent;
-    text-shadow: 0 0 20px rgba(228, 87, 46, 0.22);
+    text-shadow: 0 0 20px rgba(255, 106, 26, 0.22);
   }
 
   .ui-title {
-    @apply text-xl font-semibold tracking-[-0.02em] text-text-primary;
+    @apply text-3xl sm:text-4xl font-extrabold tracking-[-0.03em] text-text-primary;
   }
 
   .ui-subtitle {
@@ -244,16 +263,36 @@ body {
   }
 
   .text-emerald-100, .text-emerald-200, .text-emerald-300, .text-emerald-400 {
-    color: #f2ba8e !important;
+    color: #bff9e2 !important;
   }
 
   .bg-emerald-400, .bg-emerald-500\/10, .bg-emerald-500\/15, .bg-emerald-500\/20 {
-    background-color: rgba(228, 87, 46, 0.2) !important;
-    color: #fbf6ee !important;
+    background-color: rgba(46, 230, 166, 0.2) !important;
+    color: #f7f1e8 !important;
   }
 
   .border-emerald-400\/20, .border-emerald-400\/25, .border-emerald-400\/30, .border-emerald-400\/35, .border-emerald-400\/40 {
-    border-color: rgba(228, 87, 46, 0.35) !important;
+    border-color: rgba(46, 230, 166, 0.35) !important;
+  }
+
+  .text-orange-100, .text-orange-200, .text-orange-300 {
+    color: #ffd8bf !important;
+  }
+
+  .text-orange-400 {
+    color: #ff7f33 !important;
+  }
+
+  .bg-orange-500, .bg-orange-400 {
+    background-color: #ff6a1a !important;
+  }
+
+  .bg-orange-500\/10, .bg-orange-500\/15, .bg-orange-500\/20, .bg-orange-400\/20 {
+    background-color: rgba(255, 106, 26, 0.2) !important;
+  }
+
+  .border-orange-400\/20, .border-orange-400\/25, .border-orange-400\/30, .border-orange-400\/35, .border-orange-400\/40, .border-orange-400\/45 {
+    border-color: rgba(255, 106, 26, 0.35) !important;
   }
 
   .text-cyan-100, .text-cyan-200, .text-cyan-300 {

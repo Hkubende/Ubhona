@@ -9,8 +9,30 @@ import {
   getRestaurantOrders,
   updateRestaurantOrderStatus,
 } from "../services/order.service.js";
+import { getRestaurantActivityHistory, recordActivityEvent } from "../services/activity.service.js";
+import { issueOrderTrackingToken, verifyOrderTrackingToken } from "../services/order-tracking-token.service.js";
+import { authAwareRateLimitKey, createRateLimiter } from "../middleware/rate-limit.js";
 
 export const ordersRouter = Router();
+const publicOrderCreateLimiter = createRateLimiter({
+  keyPrefix: "orders-public-create",
+  windowMs: 60 * 1000,
+  max: 20,
+  message: "Too many order attempts. Please try again in a minute.",
+});
+const publicOrderLookupLimiter = createRateLimiter({
+  keyPrefix: "orders-public-lookup",
+  windowMs: 60 * 1000,
+  max: 60,
+  message: "Too many tracking requests. Please wait briefly.",
+});
+const authedOrderMutationLimiter = createRateLimiter({
+  keyPrefix: "orders-authed-mutate",
+  windowMs: 60 * 1000,
+  max: 80,
+  keyGenerator: authAwareRateLimitKey,
+  message: "Too many order updates. Please slow down.",
+});
 
 ordersRouter.get("/", requireAuth, async (req: AuthRequest, res) => {
   const restaurant = await getOwnedRestaurant(req.user!.id);
@@ -43,11 +65,12 @@ ordersRouter.get("/", requireAuth, async (req: AuthRequest, res) => {
   res.json(orders);
 });
 
-ordersRouter.post("/", async (req, res) => {
+ordersRouter.post("/", publicOrderCreateLimiter, async (req, res) => {
   try {
     const body = z
       .object({
         restaurantId: z.string().min(1),
+        branchId: z.string().trim().optional(),
         items: z
           .array(
             z.object({
@@ -59,20 +82,27 @@ ordersRouter.post("/", async (req, res) => {
         customerName: z.string().trim().optional(),
         customerPhone: z.string().trim().optional(),
         tableNumber: z.string().trim().optional(),
+        whatsappOptIn: z.boolean().optional(),
+        whatsappNumber: z.string().trim().optional(),
       })
       .parse(req.body);
     const { order } = await createStorefrontOrder(body);
+    const trackingToken = issueOrderTrackingToken({
+      orderId: order.id,
+      restaurantId: order.restaurantId,
+    });
 
     res.status(201).json({
       orderId: order.id,
       order,
+      trackingToken,
     });
   } catch (error) {
     res.status(400).json({ error: error instanceof Error ? error.message : "Failed to create order." });
   }
 });
 
-ordersRouter.post("/admin", requireAuth, async (req: AuthRequest, res) => {
+ordersRouter.post("/admin", requireAuth, authedOrderMutationLimiter, async (req: AuthRequest, res) => {
   const restaurant = await getOwnedRestaurant(req.user!.id);
   if (!restaurant) {
     res.status(400).json({ error: "Create restaurant profile first." });
@@ -133,7 +163,27 @@ ordersRouter.post("/admin", requireAuth, async (req: AuthRequest, res) => {
         },
       },
     });
-    res.json(order);
+    await recordActivityEvent({
+      actorUserId: req.user!.id,
+      actorRole: req.user!.role,
+      action: "order_created",
+      entityType: "order",
+      entityId: order.id,
+      organizationId: restaurant.id,
+      restaurantId: restaurant.id,
+      source: "admin_order_entry",
+      after: {
+        status: order.status,
+        paymentStatus: order.paymentStatus,
+        totalAmount: order.totalAmount,
+        itemsCount: body.items.reduce((sum, item) => sum + item.quantity, 0),
+      },
+    });
+    const trackingToken = issueOrderTrackingToken({
+      orderId: order.id,
+      restaurantId: order.restaurantId,
+    });
+    res.json({ ...order, trackingToken });
   } catch (error) {
     res.status(400).json({ error: error instanceof Error ? error.message : "Failed to create order." });
   }
@@ -160,7 +210,101 @@ ordersRouter.get("/:id", async (req, res) => {
   res.json(order);
 });
 
-ordersRouter.patch("/:id/status", requireAuth, async (req: AuthRequest, res) => {
+ordersRouter.get("/:id/public", publicOrderLookupLimiter, async (req, res) => {
+  const query = z
+    .object({
+      token: z.string().min(20),
+    })
+    .safeParse(req.query);
+  if (!query.success) {
+    res.status(401).json({ error: "Valid order tracking token is required." });
+    return;
+  }
+  let claims: { orderId: string; restaurantId: string };
+  try {
+    claims = verifyOrderTrackingToken(query.data.token, req.params.id);
+  } catch (error) {
+    res.status(401).json({ error: error instanceof Error ? error.message : "Invalid order tracking token." });
+    return;
+  }
+  const order = await prisma.order.findUnique({
+    where: { id: claims.orderId },
+    include: {
+      items: true,
+      restaurant: {
+        select: {
+          id: true,
+          name: true,
+          slug: true,
+          phone: true,
+          location: true,
+        },
+      },
+    },
+  });
+  if (!order) {
+    res.status(404).json({ error: "Order not found." });
+    return;
+  }
+  if (order.restaurantId !== claims.restaurantId) {
+    res.status(403).json({ error: "Order token scope mismatch." });
+    return;
+  }
+  const estimatedMinutesByStatus: Record<string, number> = {
+    pending: 25,
+    confirmed: 20,
+    preparing: 12,
+    ready: 0,
+    completed: 0,
+  };
+  const estimatedMinutes = estimatedMinutesByStatus[String(order.status || "").toLowerCase()] ?? 20;
+  res.json({
+    id: order.id,
+    status: order.status,
+    createdAt: order.createdAt,
+    totalAmount: order.totalAmount,
+    paymentStatus: order.paymentStatus,
+    paymentMethod: order.paymentMethod,
+    restaurant: order.restaurant,
+    estimatedMinutes,
+    items: order.items.map((item: {
+      id: string;
+      dishId: string;
+      nameSnapshot: string;
+      quantity: number;
+      priceSnapshot: number;
+      subtotal: number;
+    }) => ({
+      id: item.id,
+      dishId: item.dishId,
+      name: item.nameSnapshot,
+      quantity: item.quantity,
+      unitPrice: item.priceSnapshot,
+      subtotal: item.subtotal,
+    })),
+  });
+});
+
+ordersRouter.get("/:id/history", requireAuth, async (req: AuthRequest, res) => {
+  const restaurant = await getOwnedRestaurant(req.user!.id);
+  if (!restaurant) {
+    res.status(400).json({ error: "Create restaurant profile first." });
+    return;
+  }
+  try {
+    const rows = await getRestaurantActivityHistory({
+      restaurantId: restaurant.id,
+      entityType: "order",
+      entityId: req.params.id,
+      limit: Math.max(1, Math.min(100, Number(req.query.limit || 50))),
+    });
+    res.json(rows);
+  } catch (error) {
+    res.status(400).json({ error: error instanceof Error ? error.message : "Failed to load order history." });
+  }
+});
+
+ordersRouter.patch("/:id/status", requireAuth, authedOrderMutationLimiter, async (req: AuthRequest, res) => {
   const restaurant = await getOwnedRestaurant(req.user!.id);
   if (!restaurant) {
     res.status(400).json({ error: "Create restaurant profile first." });
@@ -176,6 +320,8 @@ ordersRouter.patch("/:id/status", requireAuth, async (req: AuthRequest, res) => 
       restaurantId: restaurant.id,
       orderId: req.params.id,
       status: body.status,
+      actorUserId: req.user!.id,
+      actorRole: req.user!.role,
     });
     res.json(order);
   } catch (error) {
@@ -185,7 +331,7 @@ ordersRouter.patch("/:id/status", requireAuth, async (req: AuthRequest, res) => 
   }
 });
 
-ordersRouter.patch("/:id", requireAuth, async (req: AuthRequest, res) => {
+ordersRouter.patch("/:id", requireAuth, authedOrderMutationLimiter, async (req: AuthRequest, res) => {
   const restaurant = await getOwnedRestaurant(req.user!.id);
   if (!restaurant) {
     res.status(400).json({ error: "Create restaurant profile first." });
@@ -201,6 +347,8 @@ ordersRouter.patch("/:id", requireAuth, async (req: AuthRequest, res) => {
       restaurantId: restaurant.id,
       orderId: req.params.id,
       status: body.status,
+      actorUserId: req.user!.id,
+      actorRole: req.user!.role,
     });
     res.json(order);
   } catch (error) {

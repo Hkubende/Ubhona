@@ -117,7 +117,7 @@ export default function StaffDeskPage() {
       location: restaurant.location,
       logo: restaurant.logoUrl,
       coverImage: restaurant.coverImageUrl,
-      themePrimary: restaurant.primaryColor || "#E4572E",
+      themePrimary: restaurant.primaryColor || "#FF6A1A",
       themeSecondary: "#E8D8C3",
       shortDescription: restaurant.description,
       subscriptionPlan: restaurant.subscriptionPlan || "starter",
@@ -181,7 +181,7 @@ export default function StaffDeskPage() {
     if (!waiterIdentity.id && !waiterIdentity.name) return [];
     return orders
       .filter((order) => order.source === "waiter")
-      .filter((order) => order.status !== "completed")
+      .filter((order) => order.status !== "completed" && order.status !== "cancelled")
       .filter((order) =>
         order.takenByWaiterId
           ? order.takenByWaiterId === waiterIdentity.id

@@ -11,7 +11,7 @@ import { trackAnalyticsEvent } from "../../lib/analytics";
 import { BackButton } from "../../components/ui/back-button";
 import { Button } from "../../components/ui/Button";
 import { cn } from "../../lib/utils";
-import { tokens, typography } from "../../design-system";
+import { tokens } from "../../design-system";
 
 export default function ARPage() {
   const navigate = useNavigate();
@@ -66,7 +66,7 @@ export default function ARPage() {
   }, [dishes, searchParams]);
 
   const selected = dishes[index];
-  const primary = restaurant?.themePrimary || "#E4572E";
+  const primary = restaurant?.themePrimary || "#FF6A1A";
   const logo = restaurant?.logoUrl || `${import.meta.env.BASE_URL}ubhona-logo.jpeg`;
   const tagline = restaurant?.shortDescription || "Visualize your meal before you order.";
 
@@ -276,6 +276,9 @@ export default function ARPage() {
         >
           Checkout
         </Button>
+        <div className="mt-3 text-center text-[10px] font-semibold uppercase tracking-[0.14em] text-[#B8AEA3]/75">
+          Powered by Ubhona
+        </div>
       </div>
     </div>
   );

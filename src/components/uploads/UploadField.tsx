@@ -1,5 +1,15 @@
 import * as React from "react";
-import { uploadFileAsset, type UploadAssetType } from "../../lib/uploads";
+import { AlertCircle, CheckCircle2, FileUp, Image as ImageIcon, Package } from "lucide-react";
+import {
+  explainUploadFailure,
+  getUploadProviderStatus,
+  uploadDishModel,
+  uploadFileAsset,
+  uploadThumbnail,
+  type UploadAssetType,
+} from "../../lib/uploads";
+import { Button } from "../ui/Button";
+import { cn } from "../../lib/utils";
 
 type UploadFieldProps = {
   label: string;
@@ -7,7 +17,12 @@ type UploadFieldProps = {
   accept: string;
   value: string;
   onUploaded: (url: string) => void;
+  linkedFieldLabel?: string;
   className?: string;
+  disabled?: boolean;
+  maxSizeMb?: number;
+  restaurantId?: string;
+  dishId?: string;
 };
 
 export default function UploadField({
@@ -16,65 +31,186 @@ export default function UploadField({
   accept,
   value,
   onUploaded,
+  linkedFieldLabel,
   className,
+  disabled = false,
+  maxSizeMb,
+  restaurantId,
+  dishId,
 }: UploadFieldProps) {
+  const effectiveMaxSizeMb = maxSizeMb ?? (assetType === "model" ? 25 : 8);
+  const assetLabel = assetType === "model" ? "3D model" : "thumbnail";
   const [file, setFile] = React.useState<File | null>(null);
   const [uploading, setUploading] = React.useState(false);
   const [error, setError] = React.useState("");
   const [notice, setNotice] = React.useState("");
+  const [status, setStatus] = React.useState<"idle" | "uploading" | "uploaded" | "failed">("idle");
+  const supportsImagePreview = assetType !== "model";
+
+  const acceptedSummary =
+    assetType === "model"
+      ? `.glb, .gltf up to ${effectiveMaxSizeMb}MB`
+      : `jpg, jpeg, png, webp up to ${effectiveMaxSizeMb}MB`;
+
+  const validateFile = React.useCallback(
+    (nextFile: File | null) => {
+      if (!nextFile) return "";
+      const maxBytes = effectiveMaxSizeMb * 1024 * 1024;
+      if (nextFile.size > maxBytes) {
+        return `File must be ${effectiveMaxSizeMb}MB or smaller.`;
+      }
+      const name = nextFile.name.toLowerCase();
+      const mime = String(nextFile.type || "").toLowerCase();
+      if (assetType === "model") {
+        const modelMimeAllowed = mime === "model/gltf-binary" || mime === "model/gltf+json";
+        const modelExtAllowed = name.endsWith(".glb") || name.endsWith(".gltf");
+        if (!modelMimeAllowed && !modelExtAllowed) {
+          return "Only .glb and .gltf files are supported.";
+        }
+      } else if (!mime.startsWith("image/")) {
+        return "Only image files are supported.";
+      }
+      return "";
+    },
+    [assetType, effectiveMaxSizeMb]
+  );
 
   const upload = async () => {
+    if (disabled) return;
     if (!file) {
       setError("Select a file before uploading.");
+      setStatus("failed");
       return;
     }
     setUploading(true);
     setError("");
     setNotice("");
+    setStatus("uploading");
     try {
-      const url = await uploadFileAsset(file, assetType);
+      const url =
+        assetType === "thumb"
+          ? await uploadThumbnail(file, restaurantId, dishId)
+          : assetType === "model"
+            ? await uploadDishModel(file, restaurantId, dishId)
+            : await uploadFileAsset(file, assetType);
       onUploaded(url);
-      setNotice("Upload complete.");
+      const linkedText = linkedFieldLabel ? ` and linked to ${linkedFieldLabel}` : "";
+      setNotice(
+        `${assetLabel[0].toUpperCase()}${assetLabel.slice(1)} uploaded${linkedText}. Save dish to persist changes.`
+      );
       setFile(null);
+      setStatus("uploaded");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Upload failed.");
+      const providerStatus = getUploadProviderStatus();
+      const configuredHint =
+        providerStatus.mode === "supabase"
+          ? `Provider: Supabase (${providerStatus.expectedBuckets.thumbnail}, ${providerStatus.expectedBuckets.model})`
+          : providerStatus.mode === "api"
+            ? "Provider: API upload endpoint"
+            : "Provider: none configured";
+      const reason = explainUploadFailure(err, assetType);
+      setError(`${reason} ${configuredHint}`.trim());
+      setStatus("failed");
     } finally {
       setUploading(false);
     }
   };
 
   return (
-    <div className={className}>
-      <div className="mb-1 text-xs text-white/60">{label}</div>
-      <div className="grid gap-2 md:grid-cols-[1fr_auto]">
-        <input
-          type="file"
-          accept={accept}
-          onChange={(event) => setFile(event.target.files?.[0] || null)}
-          className="rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-sm outline-none file:mr-3 file:rounded-lg file:border-0 file:bg-emerald-400 file:px-3 file:py-1 file:text-xs file:font-bold file:text-black"
-        />
-        <button
+    <div className={cn("rounded-2xl border border-white/10 bg-black/20 p-3", className)}>
+      <div className="mb-1 text-xs font-semibold uppercase tracking-[0.08em] text-text-secondary/72">{label}</div>
+      <p className="mb-2 text-[11px] text-text-secondary/70">{acceptedSummary}</p>
+      <div className="grid gap-2 md:grid-cols-[1fr_auto] md:items-center">
+        <label className="block">
+          <input
+            type="file"
+            accept={accept}
+            disabled={disabled || uploading}
+            onChange={(event) => {
+              const nextFile = event.target.files?.[0] || null;
+              const validationError = validateFile(nextFile);
+              setError(validationError);
+              setNotice("");
+              setStatus(validationError ? "failed" : "idle");
+              setFile(validationError ? null : nextFile);
+            }}
+            className="sr-only"
+          />
+          <span className="inline-flex min-h-10 w-full cursor-pointer items-center gap-2 rounded-xl border border-border bg-[linear-gradient(180deg,rgba(20,16,16,0.98),rgba(13,11,11,0.97))] px-3 py-2 text-sm text-text-primary transition hover:border-primary/35">
+            <FileUp className="h-4 w-4 text-primary/80" />
+            {file ? `Replace ${assetLabel}` : `Choose ${assetLabel}`}
+          </span>
+        </label>
+        <Button
           type="button"
           onClick={() => void upload()}
-          disabled={!file || uploading}
-          className="rounded-xl bg-emerald-400 px-3 py-2 text-xs font-bold text-black disabled:opacity-50"
+          disabled={disabled || !file || uploading}
+          variant="primary"
+          size="sm"
+          className="md:min-w-[108px]"
         >
-          {uploading ? "Uploading..." : "Upload"}
-        </button>
+          {uploading ? `Uploading ${assetLabel}...` : `Upload ${assetLabel}`}
+        </Button>
+      </div>
+      {file ? (
+        <div className="mt-2 flex flex-wrap items-center gap-2 rounded-xl border border-white/8 bg-black/25 px-2.5 py-2 text-xs text-text-secondary/78">
+          {supportsImagePreview ? <ImageIcon className="h-3.5 w-3.5 text-primary/80" /> : <Package className="h-3.5 w-3.5 text-primary/80" />}
+          <span className="truncate">{file.name}</span>
+          <span className="text-text-secondary/55">({(file.size / (1024 * 1024)).toFixed(2)} MB)</span>
+        </div>
+      ) : null}
+      <div className="mt-2 flex items-center gap-1.5 text-[11px] uppercase tracking-[0.08em] text-text-secondary/62">
+        <span
+          className={cn(
+            "h-1.5 w-1.5 rounded-full",
+            status === "uploaded"
+              ? "bg-emerald-300"
+              : status === "failed"
+                ? "bg-red-300"
+                : status === "uploading"
+                  ? "bg-primary"
+                  : "bg-white/35"
+          )}
+        />
+        Status: {status}
       </div>
       {value ? (
-        assetType === "model" ? (
-          <div className="mt-2 truncate text-xs text-white/70">{value}</div>
+        supportsImagePreview ? (
+          <div className="mt-2 rounded-xl border border-white/8 bg-black/25 p-2">
+            <div className="mb-1 text-[11px] uppercase tracking-[0.08em] text-text-secondary/62">Current asset</div>
+            <img
+              src={value}
+              alt={`${label} preview`}
+              className="h-24 w-full rounded-xl border border-border object-cover"
+            />
+          </div>
         ) : (
-          <img
-            src={value}
-            alt={`${label} preview`}
-            className="mt-2 h-16 w-16 rounded-xl border border-white/10 object-cover"
-          />
+          <div className="mt-2 rounded-xl border border-white/8 bg-black/25 px-2.5 py-2 text-xs text-text-secondary/72">
+            <div className="mb-1 uppercase tracking-[0.08em] text-text-secondary/62">Current model</div>
+            <div className="truncate font-medium text-text-primary">
+              {value.split("/").pop() || "Model linked"}
+            </div>
+            <div className="truncate text-text-secondary/70">{value}</div>
+          </div>
         )
       ) : null}
-      {notice ? <div className="mt-1 text-xs text-emerald-300">{notice}</div> : null}
-      {error ? <div className="mt-1 text-xs text-red-300">{error}</div> : null}
+      {value && file ? (
+        <div className="mt-2 text-xs text-text-secondary/72">
+          Uploading this file will replace the current {assetLabel} once you save the dish.
+        </div>
+      ) : null}
+      {notice ? (
+        <div className="mt-2 inline-flex items-center gap-1.5 rounded-lg border border-emerald-400/30 bg-emerald-500/10 px-2.5 py-1 text-xs text-emerald-200">
+          <CheckCircle2 className="h-3.5 w-3.5" />
+          {notice}
+        </div>
+      ) : null}
+      {error ? (
+        <div className="mt-2 inline-flex items-center gap-1.5 rounded-lg border border-red-400/30 bg-red-500/10 px-2.5 py-1 text-xs text-red-200">
+          <AlertCircle className="h-3.5 w-3.5" />
+          Upload failed: {error}
+        </div>
+      ) : null}
     </div>
   );
 }

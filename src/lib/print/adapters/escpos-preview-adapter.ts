@@ -9,7 +9,7 @@ export function escposPreviewAdapter(payload: EscPosPreviewPayload) {
   const text = payload.commands.join("\n");
   if (SHOULD_LOG_INFO) {
     // Keep visible in devtools for easy QA before real printer transport is added.
-    // eslint-disable-next-line no-console
+     
     console.info(`[ESC/POS PREVIEW] ${payload.title}\n${text}`);
   }
   if (typeof window === "undefined") return false;

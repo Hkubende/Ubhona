@@ -17,22 +17,38 @@ export type RestaurantProfile = {
   subscriptionStatus: SubscriptionStatus;
   trialEndsAt?: string | null;
   renewalDate?: string | null;
+  entitlements?: RestaurantEntitlement[];
+  usage?: {
+    dishes?: number;
+    ordersPerMonth?: number;
+  };
   createdAt: string;
 };
 
-export type SubscriptionPlan = "starter" | "pro" | "enterprise";
-export type SubscriptionStatus = "trialing" | "active" | "past_due" | "canceled" | "suspended";
+export type RestaurantEntitlement = {
+  featureKey: string;
+  enabled: boolean;
+  usageLimit: number | null;
+  currentUsage: number;
+  planId?: string;
+};
+
+export type SubscriptionPlan = "starter" | "growth" | "pro";
+export type SubscriptionStatus = "trialing" | "active" | "past_due" | "cancelled" | "expired";
 export type PlanFeature =
   | "analytics"
   | "ar"
   | "customBranding"
   | "advancedAnalytics"
+  | "printing"
+  | "waiterAccounts"
   | "staffAccounts"
   | "multiBranch";
 
 type PlanConfig = {
   label: string;
   dishLimit: number | null;
+  monthlyOrderLimit: number | null;
   features: Record<PlanFeature, boolean>;
 };
 
@@ -59,9 +75,17 @@ export type RestaurantBranding = {
   shortDescription: string;
 };
 
+export type RestaurantWhatsAppSettings = {
+  enabled: boolean;
+  directorName: string;
+  senderBehavior: "default" | "restaurant";
+  provider: "mock" | "meta_cloud" | "twilio";
+  updatedAt?: string;
+};
+
 const PROFILE_KEY = "mv_restaurant_profile_v1";
 const PROFILE_REGISTRY_KEY = "mv_restaurant_profiles_registry_v1";
-const DEFAULT_PRIMARY = "#E4572E";
+const DEFAULT_PRIMARY = "#FF6A1A";
 const DEFAULT_SECONDARY = "#E8D8C3";
 const DEFAULT_SHORT_DESCRIPTION = "Visualize";
 const DEFAULT_LOGO = `${import.meta.env.BASE_URL}ubhona-logo.jpeg`;
@@ -89,11 +113,29 @@ export const PLAN_CONFIG: Record<SubscriptionPlan, PlanConfig> = {
   starter: {
     label: "Starter",
     dishLimit: 25,
+    monthlyOrderLimit: 200,
     features: {
       analytics: false,
       ar: false,
       customBranding: false,
       advancedAnalytics: false,
+      printing: true,
+      waiterAccounts: false,
+      staffAccounts: false,
+      multiBranch: false,
+    },
+  },
+  growth: {
+    label: "Growth",
+    dishLimit: null,
+    monthlyOrderLimit: null,
+    features: {
+      analytics: true,
+      ar: true,
+      customBranding: true,
+      advancedAnalytics: false,
+      printing: true,
+      waiterAccounts: true,
       staffAccounts: false,
       multiBranch: false,
     },
@@ -101,40 +143,35 @@ export const PLAN_CONFIG: Record<SubscriptionPlan, PlanConfig> = {
   pro: {
     label: "Pro",
     dishLimit: null,
-    features: {
-      analytics: true,
-      ar: true,
-      customBranding: true,
-      advancedAnalytics: false,
-      staffAccounts: false,
-      multiBranch: false,
-    },
-  },
-  enterprise: {
-    label: "Enterprise",
-    dishLimit: null,
+    monthlyOrderLimit: null,
     features: {
       analytics: true,
       ar: true,
       customBranding: true,
       advancedAnalytics: true,
+      printing: true,
+      waiterAccounts: true,
       staffAccounts: true,
       multiBranch: true,
     },
   },
 };
 
-const PLAN_ORDER: SubscriptionPlan[] = ["starter", "pro", "enterprise"];
+const PLAN_ORDER: SubscriptionPlan[] = ["starter", "growth", "pro"];
 
 function normalizePlan(value: unknown): SubscriptionPlan {
   const plan = String(value || "").trim().toLowerCase();
-  if (plan === "pro" || plan === "enterprise") return plan;
+  // Backward compatibility for older local/server plan names.
+  if (plan === "enterprise") return "pro";
+  if (plan === "growth" || plan === "pro") return plan;
   return "starter";
 }
 
 function normalizeStatus(value: unknown): SubscriptionStatus {
   const status = String(value || "").trim().toLowerCase();
-  if (status === "active" || status === "past_due" || status === "canceled" || status === "suspended") return status;
+  if (status === "canceled") return "cancelled";
+  if (status === "suspended") return "past_due";
+  if (status === "active" || status === "past_due" || status === "cancelled" || status === "expired") return status;
   return "trialing";
 }
 
@@ -169,6 +206,28 @@ function firstDefined(...values: unknown[]) {
 function mapApiProfile(value: unknown): RestaurantProfile {
   const row = toRecord(value);
   const subscription = toRecord(row.subscription);
+  const entitlements = Array.isArray(row.entitlements)
+    ? row.entitlements
+        .map((item) => {
+          const entry = toRecord(item);
+          const featureKey = String(entry.featureKey || "").trim();
+          if (!featureKey) return null;
+          return {
+            featureKey,
+            enabled: Boolean(entry.enabled),
+            usageLimit:
+              entry.usageLimit == null || entry.usageLimit === ""
+                ? null
+                : Number.isFinite(Number(entry.usageLimit))
+                  ? Number(entry.usageLimit)
+                  : null,
+            currentUsage: Number.isFinite(Number(entry.currentUsage)) ? Number(entry.currentUsage) : 0,
+            planId: String(entry.planId || "").trim() || undefined,
+          } satisfies RestaurantEntitlement;
+        })
+        .filter((item): item is RestaurantEntitlement => !!item)
+    : undefined;
+  const usage = toRecord(row.usage);
 
   return {
     id: toStringValue(row.id),
@@ -182,10 +241,17 @@ function mapApiProfile(value: unknown): RestaurantProfile {
     themePrimary: normalizeColor(row.themePrimary, DEFAULT_PRIMARY),
     themeSecondary: normalizeColor(row.themeSecondary, DEFAULT_SECONDARY),
     shortDescription: toStringValue(row.shortDescription) || undefined,
-    subscriptionPlan: normalizePlan(firstDefined(subscription.plan, row.subscriptionPlan)),
+    subscriptionPlan: normalizePlan(
+      firstDefined(subscription.plan, subscription.planId, row.subscriptionPlan, toRecord(row.plan).id)
+    ),
     subscriptionStatus: normalizeStatus(firstDefined(subscription.status, row.subscriptionStatus)),
     trialEndsAt: firstDefined(subscription.trialEndsAt, row.trialEndsAt) as string | null | undefined,
     renewalDate: firstDefined(subscription.renewalDate, row.renewalDate) as string | null | undefined,
+    entitlements,
+    usage: {
+      dishes: Number.isFinite(Number(usage.dishes)) ? Number(usage.dishes) : undefined,
+      ordersPerMonth: Number.isFinite(Number(usage.ordersPerMonth)) ? Number(usage.ordersPerMonth) : undefined,
+    },
     createdAt: toStringValue(firstDefined(row.createdAt, new Date().toISOString())),
   };
 }
@@ -226,6 +292,8 @@ function toLocalProfile(
     subscriptionStatus: normalizeStatus(input.subscriptionStatus ?? existing?.subscriptionStatus),
     trialEndsAt: input.trialEndsAt ?? existing?.trialEndsAt ?? null,
     renewalDate: input.renewalDate ?? existing?.renewalDate ?? null,
+    entitlements: existing?.entitlements,
+    usage: existing?.usage,
     createdAt: input.createdAt || existing?.createdAt || new Date().toISOString(),
   };
 }
@@ -410,7 +478,10 @@ export function getPlanLabel(plan: SubscriptionPlan) {
 }
 
 export function canUseFeature(feature: PlanFeature, profile: RestaurantProfile | null = getRestaurantProfile()) {
-  const plan = normalizePlan(profile?.subscriptionPlan);
+  const sourceProfile = profile?.entitlements?.length ? profile : getRestaurantProfile();
+  const entitlement = sourceProfile?.entitlements?.find((item) => item.featureKey === feature);
+  if (entitlement) return entitlement.enabled;
+  const plan = normalizePlan(profile?.subscriptionPlan ?? sourceProfile?.subscriptionPlan);
   return PLAN_CONFIG[plan].features[feature];
 }
 
@@ -418,13 +489,13 @@ export function getMinimumPlanForFeature(feature: PlanFeature): SubscriptionPlan
   for (const plan of PLAN_ORDER) {
     if (PLAN_CONFIG[plan].features[feature]) return plan;
   }
-  return "enterprise";
+  return "pro";
 }
 
 export function getFeatureGate(feature: PlanFeature, profile: RestaurantProfile | null = getRestaurantProfile()): FeatureGate {
   const currentPlan = normalizePlan(profile?.subscriptionPlan);
   const minimumPlan = getMinimumPlanForFeature(feature);
-  const enabled = PLAN_CONFIG[currentPlan].features[feature];
+  const enabled = canUseFeature(feature, profile);
   const currentPlanLabel = getPlanLabel(currentPlan);
   const minimumPlanLabel = getPlanLabel(minimumPlan);
   return {
@@ -446,6 +517,8 @@ export function getPlanFeatureList(profile: RestaurantProfile | null = getRestau
     "ar",
     "customBranding",
     "advancedAnalytics",
+    "printing",
+    "waiterAccounts",
     "staffAccounts",
     "multiBranch",
   ];
@@ -453,8 +526,24 @@ export function getPlanFeatureList(profile: RestaurantProfile | null = getRestau
 }
 
 export function getDishLimit(profile: RestaurantProfile | null = getRestaurantProfile()) {
-  const plan = normalizePlan(profile?.subscriptionPlan);
+  const sourceProfile = profile?.entitlements?.length ? profile : getRestaurantProfile();
+  const entitlement = sourceProfile?.entitlements?.find((item) => item.featureKey === "dishes");
+  if (entitlement) return entitlement.usageLimit;
+  const plan = normalizePlan(profile?.subscriptionPlan ?? sourceProfile?.subscriptionPlan);
   return PLAN_CONFIG[plan].dishLimit;
+}
+
+export function getMonthlyOrderLimit(profile: RestaurantProfile | null = getRestaurantProfile()) {
+  const sourceProfile = profile?.entitlements?.length ? profile : getRestaurantProfile();
+  const entitlement = sourceProfile?.entitlements?.find((item) => item.featureKey === "ordersPerMonth");
+  if (entitlement) return entitlement.usageLimit;
+  const plan = normalizePlan(profile?.subscriptionPlan ?? sourceProfile?.subscriptionPlan);
+  return PLAN_CONFIG[plan].monthlyOrderLimit;
+}
+
+export function isPaidPlan(profile: RestaurantProfile | null = getRestaurantProfile()) {
+  const plan = normalizePlan(profile?.subscriptionPlan);
+  return plan !== "starter";
 }
 
 export async function updateSubscriptionPlan(subscriptionPlan: SubscriptionPlan) {
@@ -480,4 +569,54 @@ export function getRestaurantBranding(profile: RestaurantProfile | null = getRes
     secondary: normalizeColor(profile?.themeSecondary, DEFAULT_SECONDARY),
     shortDescription: String(profile?.shortDescription || "").trim() || DEFAULT_SHORT_DESCRIPTION,
   };
+}
+
+export async function getRestaurantWhatsAppSettings(): Promise<RestaurantWhatsAppSettings> {
+  if (!isApiConfigured) {
+    return {
+      enabled: false,
+      directorName: "Restaurant Director",
+      senderBehavior: "default",
+      provider: "mock",
+      updatedAt: new Date().toISOString(),
+    };
+  }
+  const response = await api.get<unknown>("/restaurants/me/whatsapp-settings");
+  const row = toRecord(response);
+  return {
+    enabled: Boolean(row.enabled),
+    directorName: toStringValue(row.directorName || "Restaurant Director"),
+    senderBehavior: row.senderBehavior === "restaurant" ? "restaurant" : "default",
+    provider:
+      row.provider === "meta_cloud" || row.provider === "twilio" || row.provider === "mock"
+        ? (row.provider as "mock" | "meta_cloud" | "twilio")
+        : "mock",
+    updatedAt: toStringValue(row.updatedAt || ""),
+  };
+}
+
+export async function updateRestaurantWhatsAppSettings(
+  input: Partial<Pick<RestaurantWhatsAppSettings, "enabled" | "directorName" | "senderBehavior" | "provider">>
+) {
+  if (!isApiConfigured) {
+    return {
+      enabled: Boolean(input.enabled),
+      directorName: String(input.directorName || "Restaurant Director"),
+      senderBehavior: input.senderBehavior || "default",
+      provider: input.provider || "mock",
+      updatedAt: new Date().toISOString(),
+    } satisfies RestaurantWhatsAppSettings;
+  }
+  const response = await api.patch<unknown>("/restaurants/me/whatsapp-settings", input);
+  const row = toRecord(response);
+  return {
+    enabled: Boolean(row.enabled),
+    directorName: toStringValue(row.directorName || "Restaurant Director"),
+    senderBehavior: row.senderBehavior === "restaurant" ? "restaurant" : "default",
+    provider:
+      row.provider === "meta_cloud" || row.provider === "twilio" || row.provider === "mock"
+        ? (row.provider as "mock" | "meta_cloud" | "twilio")
+        : "mock",
+    updatedAt: toStringValue(row.updatedAt || ""),
+  } satisfies RestaurantWhatsAppSettings;
 }

@@ -1,5 +1,5 @@
 import * as React from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { PlusCircle, ShoppingBag } from "lucide-react";
 import { DashboardLayout } from "../components/dashboard/dashboard-layout";
 import {
@@ -10,48 +10,64 @@ import { spacing } from "../design-system";
 import { useRestaurantDashboard } from "../hooks/use-restaurant-dashboard";
 import { getCurrentPlan, getRestaurantProfile, type RestaurantProfile } from "../lib/restaurant";
 import { isFeatureAvailable } from "../lib/plan-gates";
+import { getRemainingStarterAllowance, getRestaurantUsage } from "../lib/growth";
+import { canPerformAction, getPrimaryDashboardRole } from "../lib/roles";
+import { getActivityHistory, type ActivityItem } from "../lib/activity";
 import {
   KpiRow,
 } from "../components/dashboard/overview/kpi-row";
 import { RecentOrdersCard } from "../components/dashboard/overview/recent-orders-card";
 import { PopularDishesCard } from "../components/dashboard/overview/popular-dishes-card";
 import { RestaurantSummaryStrip } from "../components/dashboard/overview/restaurant-summary-strip";
+import { ActivityFeed } from "../components/dashboard/activity-feed";
 
 function OverviewHeaderActions({
-  _storefrontPath,
-  _analyticsAvailable,
+  storefrontPath,
+  analyticsAvailable,
 }: {
-  _storefrontPath: string;
-  _analyticsAvailable: boolean;
+  storefrontPath: string;
+  analyticsAvailable: boolean;
 }) {
+  void storefrontPath;
+  void analyticsAvailable;
   const navigate = useNavigate();
+  const canManageMenu = canPerformAction("manage_menu");
+  const canCreateOrder = canPerformAction("create_order");
+
+  if (!canManageMenu && !canCreateOrder) return null;
 
   return (
     <div className="flex flex-wrap items-center justify-end gap-2">
-      <Button
-        variant="secondary"
-        size="sm"
-        onClick={() => navigate("/dashboard/menu")}
-        className="rounded-full"
-      >
-        <PlusCircle className="h-4 w-4" />
-        Add Dish
-      </Button>
-      <Button
-        variant="primary"
-        size="sm"
-        onClick={() => navigate("/dashboard/orders/new")}
-        className="rounded-full border-primary/80 bg-primary text-[#FBF6EE]"
-      >
-        <ShoppingBag className="h-4 w-4" />
-        New Order
-      </Button>
+      {canManageMenu ? (
+        <Button
+          variant="secondary"
+          size="sm"
+          onClick={() => navigate("/dashboard/menu")}
+          className="rounded-full"
+        >
+          <PlusCircle className="h-4 w-4" />
+          Add Dish
+        </Button>
+      ) : null}
+      {canCreateOrder ? (
+        <Button
+          variant="primary"
+          size="sm"
+          onClick={() => navigate("/dashboard/orders/new")}
+          className="rounded-full border-primary/80 bg-primary text-[#FBF6EE]"
+        >
+          <ShoppingBag className="h-4 w-4" />
+          New Order
+        </Button>
+      ) : null}
     </div>
   );
 }
 
 export default function Dashboard() {
   const { data, loading, error } = useRestaurantDashboard();
+  const [activityLoading, setActivityLoading] = React.useState(true);
+  const [activityItems, setActivityItems] = React.useState<ActivityItem[]>([]);
   const storefrontPath = data?.restaurant.slug ? `/r/${data.restaurant.slug}` : "/r/demo";
   const persistedProfile = React.useMemo(() => getRestaurantProfile(), []);
 
@@ -80,7 +96,19 @@ export default function Dashboard() {
   }, [data, persistedProfile]);
 
   const currentPlan = React.useMemo(() => getCurrentPlan(profile), [profile]);
+  const usage = React.useMemo(
+    () => (profile ? getRestaurantUsage(profile.id) : null),
+    [profile]
+  );
+  const allowance = React.useMemo(
+    () => (profile ? getRemainingStarterAllowance(profile.id) : null),
+    [profile]
+  );
   const analyticsAvailable = React.useMemo(() => isFeatureAvailable("analytics", profile), [profile]);
+  const starterLimitWarning = React.useMemo(() => {
+    if (currentPlan.plan !== "starter" || !allowance) return false;
+    return (allowance.monthlyOrdersRemaining ?? 9999) <= 30 || (allowance.dishesRemaining ?? 9999) <= 5;
+  }, [allowance, currentPlan.plan]);
   const pendingOrders = React.useMemo(
     () =>
       data?.orders.filter((order) => {
@@ -106,12 +134,44 @@ export default function Dashboard() {
     ]);
     return Object.fromEntries(entries);
   }, [data?.dishes]);
+  const stockSummary = React.useMemo(() => {
+    const result = { lowStock: 0, unavailable: 0, hidden: 0 };
+    (data?.dishes || []).forEach((dish) => {
+      if (dish.stock?.availability_status === "low_stock") result.lowStock += 1;
+      if (dish.stock?.availability_status === "unavailable") result.unavailable += 1;
+      if (dish.stock?.hidden_from_public_menu) result.hidden += 1;
+    });
+    return result;
+  }, [data?.dishes]);
+  const role = getPrimaryDashboardRole();
+  const roleSubtitle =
+    role === "owner" || role === "admin"
+      ? "Business-wide operations, growth signals, and revenue visibility."
+      : "Operational control center for service flow, team performance, and shift execution.";
+
+  React.useEffect(() => {
+    let mounted = true;
+    setActivityLoading(true);
+    void getActivityHistory({ limit: 6 })
+      .then((rows) => {
+        if (mounted) setActivityItems(rows);
+      })
+      .catch(() => {
+        if (mounted) setActivityItems([]);
+      })
+      .finally(() => {
+        if (mounted) setActivityLoading(false);
+      });
+    return () => {
+      mounted = false;
+    };
+  }, [data?.restaurant.id]);
 
   return (
     <DashboardLayout
       profile={profile}
       title="Overview"
-      subtitle="Daily operations snapshot and live service performance"
+      subtitle={roleSubtitle}
       actions={<OverviewHeaderActions storefrontPath={storefrontPath} analyticsAvailable={analyticsAvailable} />}
     >
       <PageContainer className={spacing.stackLg}>
@@ -126,6 +186,52 @@ export default function Dashboard() {
         loading={loading}
         error={error}
       />
+      {usage ? (
+        <div className="flex flex-wrap gap-2 text-xs text-white/72">
+          <span className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1">
+            Monthly orders tracked: {usage.ordersCount}
+          </span>
+          <span className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1">
+            Active days this month: {usage.activeDays.length}
+          </span>
+          {currentPlan.plan === "starter" && allowance?.monthlyOrdersRemaining != null ? (
+            <span className="rounded-full border border-[#FF6A1A]/35 bg-[#FF6A1A]/10 px-3 py-1 text-[#F7F1E8]">
+              Starter orders remaining: {allowance.monthlyOrdersRemaining}
+            </span>
+          ) : null}
+        </div>
+      ) : null}
+      {stockSummary.lowStock > 0 || stockSummary.unavailable > 0 || stockSummary.hidden > 0 ? (
+        <div className="flex flex-wrap gap-2 text-xs text-white/72">
+          {stockSummary.lowStock > 0 ? (
+            <span className="rounded-full border border-[#FF6A1A]/35 bg-[#FF6A1A]/10 px-3 py-1 text-[#F7F1E8]">
+              Low-stock dishes: {stockSummary.lowStock}
+            </span>
+          ) : null}
+          {stockSummary.unavailable > 0 ? (
+            <span className="rounded-full border border-[#D36A59]/35 bg-[#D36A59]/10 px-3 py-1 text-[#F7F1E8]">
+              Unavailable dishes: {stockSummary.unavailable}
+            </span>
+          ) : null}
+          {stockSummary.hidden > 0 ? (
+            <span className="rounded-full border border-white/15 bg-white/[0.04] px-3 py-1">
+              Hidden from public menu: {stockSummary.hidden}
+            </span>
+          ) : null}
+        </div>
+      ) : null}
+      {starterLimitWarning ? (
+        <div className="rounded-2xl border border-[#FF6A1A]/35 bg-[#FF6A1A]/10 px-3 py-2 text-sm text-[#F7F1E8]">
+          <div className="font-semibold">Starter limits approaching</div>
+          <div className="text-xs text-[#F7F1E8]/85">
+            Remaining this month: {allowance.monthlyOrdersRemaining ?? "Unlimited"} orders,{" "}
+            {allowance.dishesRemaining ?? "Unlimited"} dish slots.
+          </div>
+          <Link to="/pricing" className="mt-2 inline-block text-xs font-bold text-[#F7F1E8] underline underline-offset-2">
+            Upgrade plan
+          </Link>
+        </div>
+      ) : null}
       <KpiRow
         ordersToday={data?.analyticsSummary.ordersToday ?? 0}
         revenue={data?.analyticsSummary.revenue ?? 0}
@@ -147,6 +253,15 @@ export default function Dashboard() {
           dishMetaById={dishMetaById}
         />
       </div>
+      </section>
+      <section>
+        <ActivityFeed
+          title="Activity"
+          subtitle="Recent operational changes across menu, orders, and settings."
+          items={activityItems}
+          loading={activityLoading}
+          emptyMessage="Activity will appear here after operational changes."
+        />
       </section>
       </PageContainer>
     </DashboardLayout>

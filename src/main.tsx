@@ -1,45 +1,52 @@
 /* eslint-disable react-refresh/only-export-components */
 import React from "react";
 import ReactDOM from "react-dom/client";
-import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
-import App from "./App";
-import Dashboard from "./pages/Dashboard";
-import ARViewer from "./pages/ARViewer";
-import MenuItemPage from "./pages/MenuItemPage";
-import Checkout from "./pages/Checkout";
-import Orders from "./pages/Orders";
-import Login from "./pages/Login";
-import Signup from "./pages/Signup";
-import Onboarding from "./pages/Onboarding";
-import MenuManager from "./pages/MenuManager";
-import Pricing from "./pages/Pricing";
-import OrdersDashboard from "./pages/OrdersDashboard";
-import NewOrderEntryPage from "./pages/NewOrderEntry";
-import Branding from "./pages/Branding";
-import SettingsPage from "./pages/Settings";
-import StaffManagementPage from "./pages/StaffManagement";
-import PrintingCenterPage from "./pages/PrintingCenter";
-import PaymentsCenterPage from "./pages/PaymentsCenter";
-import AnalyticsDashboard from "./pages/app/AnalyticsDashboard";
-import AdminHome from "./pages/admin/AdminHome";
-import RestaurantsAdmin from "./pages/admin/RestaurantsAdmin";
-import BillingAdmin from "./pages/admin/BillingAdmin";
-import SupportAdmin from "./pages/admin/SupportAdmin";
-import PlatformTracker from "./pages/admin/PlatformTracker";
-import RestaurantHome from "./pages/storefront/RestaurantHome";
-import MenuPage from "./pages/storefront/MenuPage";
-import ARPage from "./pages/storefront/ARPage";
-import CheckoutPage from "./pages/storefront/CheckoutPage";
-import OrderConfirmation from "./pages/storefront/OrderConfirmation";
+import { BrowserRouter, Navigate, Route, Routes, useLocation } from "react-router-dom";
 import { ensureDemoReferenceAccount, getCurrentUser, isAuthenticated } from "./lib/auth";
 import { hasRestaurantProfile } from "./lib/restaurant";
 import { isCurrentUserAdmin } from "./lib/admin";
-import StaffDeskPage from "./pages/StaffDesk";
-import KitchenDeskPage from "./pages/KitchenDesk";
-import CashierDeskPage from "./pages/CashierDesk";
-import { getDefaultRouteForRole, getPrimaryDashboardRole, isRoleAllowed } from "./lib/roles";
+import { canAccessRoute, getDefaultRouteForRole, getPrimaryDashboardRole, isRoleAllowed } from "./lib/roles";
 import type { DashboardRole } from "./types/roles";
 import "./index.css";
+
+const App = React.lazy(() => import("./App"));
+const Dashboard = React.lazy(() => import("./pages/Dashboard"));
+const ARViewer = React.lazy(() => import("./pages/ARViewer"));
+const MenuItemPage = React.lazy(() => import("./pages/MenuItemPage"));
+const Checkout = React.lazy(() => import("./pages/Checkout"));
+const Orders = React.lazy(() => import("./pages/Orders"));
+const Login = React.lazy(() => import("./pages/Login"));
+const Signup = React.lazy(() => import("./pages/Signup"));
+const Onboarding = React.lazy(() => import("./pages/Onboarding"));
+const MenuManager = React.lazy(() => import("./pages/MenuManager"));
+const Pricing = React.lazy(() => import("./pages/Pricing"));
+const OrdersDashboard = React.lazy(() => import("./pages/OrdersDashboard"));
+const NewOrderEntryPage = React.lazy(() => import("./pages/NewOrderEntry"));
+const Branding = React.lazy(() => import("./pages/Branding"));
+const SettingsPage = React.lazy(() => import("./pages/Settings"));
+const StaffManagementPage = React.lazy(() => import("./pages/StaffManagement"));
+const PrintingCenterPage = React.lazy(() => import("./pages/PrintingCenter"));
+const PaymentsCenterPage = React.lazy(() => import("./pages/PaymentsCenter"));
+const InventoryPage = React.lazy(() => import("./pages/Inventory"));
+const FloorManagerPage = React.lazy(() => import("./pages/FloorManager"));
+const AnalyticsDashboard = React.lazy(() => import("./pages/app/AnalyticsDashboard"));
+const KitchenDisplayPage = React.lazy(() => import("./pages/app/KitchenDisplayPage"));
+const StaffOrdersBoardPage = React.lazy(() => import("./pages/app/StaffOrdersBoardPage"));
+const AdminHome = React.lazy(() => import("./pages/admin/AdminHome"));
+const RestaurantsAdmin = React.lazy(() => import("./pages/admin/RestaurantsAdmin"));
+const BillingAdmin = React.lazy(() => import("./pages/admin/BillingAdmin"));
+const SupportAdmin = React.lazy(() => import("./pages/admin/SupportAdmin"));
+const PlatformTracker = React.lazy(() => import("./pages/admin/PlatformTracker"));
+const RestaurantHome = React.lazy(() => import("./pages/storefront/RestaurantHome"));
+const MenuPage = React.lazy(() => import("./pages/storefront/MenuPage"));
+const DishPage = React.lazy(() => import("./pages/storefront/DishPage"));
+const ARPage = React.lazy(() => import("./pages/storefront/ARPage"));
+const CheckoutPage = React.lazy(() => import("./pages/storefront/CheckoutPage"));
+const OrderConfirmation = React.lazy(() => import("./pages/storefront/OrderConfirmation"));
+const OrderTrackingPage = React.lazy(() => import("./pages/storefront/OrderTrackingPage"));
+const StaffDeskPage = React.lazy(() => import("./pages/StaffDesk"));
+const KitchenDeskPage = React.lazy(() => import("./pages/KitchenDesk"));
+const CashierDeskPage = React.lazy(() => import("./pages/CashierDesk"));
 
 ensureDemoReferenceAccount();
 
@@ -50,14 +57,17 @@ function RequireDashboardRoleAccess({
   children: React.ReactElement;
   allowedRoles: DashboardRole[];
 }) {
+  const location = useLocation();
   if (!isAuthenticated()) return <Navigate to="/login" replace />;
   if (!hasRestaurantProfile()) return <Navigate to="/onboarding" replace />;
 
   const user = getCurrentUser();
   const primaryRole = getPrimaryDashboardRole(user);
-  if (!isRoleAllowed(allowedRoles, user)) {
+  if (!primaryRole) return <Navigate to="/login" replace />;
+  const roleAllowed = isRoleAllowed(allowedRoles, user);
+  const routeAllowed = canAccessRoute(primaryRole, location.pathname);
+  if (!roleAllowed || !routeAllowed) {
     if (user?.role === "platform_admin") return <Navigate to="/admin" replace />;
-    if (!primaryRole) return <Navigate to="/login" replace />;
     const fallback = getDefaultRouteForRole(primaryRole);
     return <Navigate to={fallback} replace />;
   }
@@ -66,7 +76,10 @@ function RequireDashboardRoleAccess({
 
 function RequireAuthForOnboarding() {
   if (!isAuthenticated()) return <Navigate to="/login" replace />;
-  if (hasRestaurantProfile()) return <Navigate to="/dashboard" replace />;
+  if (hasRestaurantProfile()) {
+    const role = getPrimaryDashboardRole(getCurrentUser());
+    return <Navigate to={getDefaultRouteForRole(role)} replace />;
+  }
   return <Onboarding />;
 }
 
@@ -80,7 +93,9 @@ function RedirectAuthed({ children }: { children: React.ReactElement }) {
   if (!isAuthenticated()) return children;
   const user = getCurrentUser();
   if (user?.role === "platform_admin") return <Navigate to="/admin" replace />;
-  return <Navigate to={hasRestaurantProfile() ? "/dashboard" : "/onboarding"} replace />;
+  if (!hasRestaurantProfile()) return <Navigate to="/onboarding" replace />;
+  const role = getPrimaryDashboardRole(user);
+  return <Navigate to={getDefaultRouteForRole(role)} replace />;
 }
 
 function RedirectLegacyRoute({ to }: { to: string }) {
@@ -90,6 +105,7 @@ function RedirectLegacyRoute({ to }: { to: string }) {
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
     <BrowserRouter basename={import.meta.env.BASE_URL}>
+      <React.Suspense fallback={<div className="p-4 text-sm text-white/70">Loading...</div>}>
       <Routes>
         <Route path="/" element={<App />} />
         <Route path="/menu/:dishId" element={<MenuItemPage />} />
@@ -112,15 +128,31 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
         <Route
           path="/dashboard/orders"
           element={
-            <RequireDashboardRoleAccess allowedRoles={["owner", "admin", "manager"]}>
+            <RequireDashboardRoleAccess allowedRoles={["owner", "admin", "manager", "waiter"]}>
               <OrdersDashboard />
+            </RequireDashboardRoleAccess>
+          }
+        />
+        <Route
+          path="/dashboard/kitchen"
+          element={
+            <RequireDashboardRoleAccess allowedRoles={["owner", "admin", "manager", "kitchen"]}>
+              <KitchenDisplayPage />
+            </RequireDashboardRoleAccess>
+          }
+        />
+        <Route
+          path="/dashboard/staff-orders"
+          element={
+            <RequireDashboardRoleAccess allowedRoles={["owner", "admin", "manager", "waiter"]}>
+              <StaffOrdersBoardPage />
             </RequireDashboardRoleAccess>
           }
         />
         <Route
           path="/dashboard/orders/new"
           element={
-            <RequireDashboardRoleAccess allowedRoles={["owner", "admin", "manager"]}>
+            <RequireDashboardRoleAccess allowedRoles={["owner", "admin", "manager", "waiter"]}>
               <NewOrderEntryPage />
             </RequireDashboardRoleAccess>
           }
@@ -173,14 +205,43 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
             </RequireDashboardRoleAccess>
           }
         />
+        <Route
+          path="/dashboard/inventory"
+          element={
+            <RequireDashboardRoleAccess allowedRoles={["owner", "admin", "manager"]}>
+              <InventoryPage />
+            </RequireDashboardRoleAccess>
+          }
+        />
+        <Route
+          path="/dashboard/floor"
+          element={
+            <RequireDashboardRoleAccess allowedRoles={["owner", "admin", "manager", "waiter"]}>
+              <FloorManagerPage />
+            </RequireDashboardRoleAccess>
+          }
+        />
+        <Route
+          path="/dashboard/billing"
+          element={
+            <RequireDashboardRoleAccess allowedRoles={["owner", "admin"]}>
+              <Pricing />
+            </RequireDashboardRoleAccess>
+          }
+        />
         <Route path="/app/menu" element={<RedirectLegacyRoute to="/dashboard/menu" />} />
         <Route path="/app/orders" element={<RedirectLegacyRoute to="/dashboard/orders" />} />
+        <Route path="/app/kitchen" element={<RedirectLegacyRoute to="/dashboard/kitchen" />} />
+        <Route path="/app/staff-orders" element={<RedirectLegacyRoute to="/dashboard/staff-orders" />} />
         <Route path="/app/analytics" element={<RedirectLegacyRoute to="/dashboard/analytics" />} />
         <Route path="/app/branding" element={<RedirectLegacyRoute to="/dashboard/branding" />} />
         <Route path="/app/settings" element={<RedirectLegacyRoute to="/dashboard/settings" />} />
         <Route path="/app/staff" element={<RedirectLegacyRoute to="/dashboard/staff" />} />
         <Route path="/app/printing" element={<RedirectLegacyRoute to="/dashboard/printing" />} />
         <Route path="/app/payments" element={<RedirectLegacyRoute to="/dashboard/payments" />} />
+        <Route path="/app/inventory" element={<RedirectLegacyRoute to="/dashboard/inventory" />} />
+        <Route path="/app/floor" element={<RedirectLegacyRoute to="/dashboard/floor" />} />
+        <Route path="/app/billing" element={<RedirectLegacyRoute to="/dashboard/billing" />} />
         <Route
           path="/staff"
           element={
@@ -251,10 +312,12 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
         />
         <Route path="/r/:slug" element={<RestaurantHome />} />
         <Route path="/r/:slug/menu" element={<MenuPage />} />
+        <Route path="/r/:restaurantSlug/dish/:dishId" element={<DishPage />} />
         <Route path="/r/:slug/ar" element={<ARPage />} />
         <Route path="/r/:slug/checkout" element={<CheckoutPage />} />
         <Route path="/r/:slug/order/:orderId" element={<OrderConfirmation />} />
         <Route path="/r/:slug/confirmation" element={<OrderConfirmation />} />
+        <Route path="/order/:orderId" element={<OrderTrackingPage />} />
         <Route
           path="/login"
           element={
@@ -273,6 +336,7 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
         />
         <Route path="/onboarding" element={<RequireAuthForOnboarding />} />
       </Routes>
+      </React.Suspense>
     </BrowserRouter>
   </React.StrictMode>
 );

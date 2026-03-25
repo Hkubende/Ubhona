@@ -2,13 +2,24 @@ import { Router } from "express";
 import { z } from "zod";
 import { requireAuth } from "../middleware/auth.js";
 import type { AuthRequest } from "../types.js";
+import type { Response } from "express";
 import { getOwnedRestaurant } from "../services/restaurant.service.js";
 import { completeUpload, prepareUpload } from "../services/upload.service.js";
+import { authAwareRateLimitKey, createRateLimiter } from "../middleware/rate-limit.js";
 
 const uploadsRouter = Router();
 uploadsRouter.use(requireAuth);
+uploadsRouter.use(
+  createRateLimiter({
+    keyPrefix: "uploads",
+    windowMs: 60 * 1000,
+    max: 40,
+    keyGenerator: authAwareRateLimitKey,
+    message: "Upload rate limit exceeded. Please wait and retry.",
+  })
+);
 
-async function handleRequestUpload(req: AuthRequest, res: any) {
+async function handleRequestUpload(req: AuthRequest, res: Response) {
   const restaurant = await getOwnedRestaurant(req.user!.id);
   if (!restaurant) {
     res.status(400).json({ error: "Create restaurant profile first." });
@@ -21,6 +32,7 @@ async function handleRequestUpload(req: AuthRequest, res: any) {
         fileName: z.string().min(1),
         fileType: z.string().min(1),
         assetType: z.enum(["logo", "cover", "thumb", "model"]),
+        fileSize: z.number().int().positive().max(50 * 1024 * 1024).optional(),
       })
       .parse(req.body);
     const prepared = await prepareUpload({
@@ -28,6 +40,7 @@ async function handleRequestUpload(req: AuthRequest, res: any) {
       fileName: body.fileName,
       fileType: body.fileType,
       assetType: body.assetType,
+      fileSize: body.fileSize,
     });
     res.json(prepared);
   } catch (error) {
@@ -35,7 +48,7 @@ async function handleRequestUpload(req: AuthRequest, res: any) {
   }
 }
 
-async function handleCompleteUpload(req: AuthRequest, res: any) {
+async function handleCompleteUpload(req: AuthRequest, res: Response) {
   const restaurant = await getOwnedRestaurant(req.user!.id);
   if (!restaurant) {
     res.status(400).json({ error: "Create restaurant profile first." });

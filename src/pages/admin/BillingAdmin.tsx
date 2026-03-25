@@ -1,7 +1,14 @@
 import * as React from "react";
 import { ArrowLeft, Receipt } from "lucide-react";
 import { useNavigate } from "react-router-dom";
-import { getAdminMetrics, getAdminRestaurants, type AdminMetrics, type AdminRestaurant } from "../../lib/admin";
+import {
+  getAdminBillingOverview,
+  getAdminMetrics,
+  getAdminRestaurants,
+  type AdminBillingOverviewRow,
+  type AdminMetrics,
+  type AdminRestaurant,
+} from "../../lib/admin";
 
 function formatKsh(value: number) {
   return `KSh ${value.toLocaleString("en-KE")}`;
@@ -11,13 +18,15 @@ export default function BillingAdmin() {
   const navigate = useNavigate();
   const [metrics, setMetrics] = React.useState<AdminMetrics | null>(null);
   const [restaurants, setRestaurants] = React.useState<AdminRestaurant[]>([]);
+  const [billingOverview, setBillingOverview] = React.useState<AdminBillingOverviewRow[]>([]);
   const [error, setError] = React.useState("");
 
   React.useEffect(() => {
-    Promise.all([getAdminMetrics(), getAdminRestaurants()])
-      .then(([metricsData, restaurantsData]) => {
+    Promise.all([getAdminMetrics(), getAdminRestaurants(), getAdminBillingOverview()])
+      .then(([metricsData, restaurantsData, overviewData]) => {
         setMetrics(metricsData);
         setRestaurants(restaurantsData);
+        setBillingOverview(overviewData);
       })
       .catch((err) => setError(err instanceof Error ? err.message : "Failed to load billing admin."));
   }, []);
@@ -50,9 +59,7 @@ export default function BillingAdmin() {
         <div className="mb-6 grid gap-3 md:grid-cols-4">
           <div className="rounded-3xl border border-white/10 bg-white/[0.04] p-4">
             <div className="text-xs text-white/55">Total Revenue</div>
-            <div className="mt-2 text-2xl font-black text-emerald-300">
-              {metrics ? formatKsh(metrics.totalRevenue) : "-"}
-            </div>
+            <div className="mt-2 text-2xl font-black text-emerald-300">{metrics ? formatKsh(metrics.totalRevenue) : "-"}</div>
           </div>
           <div className="rounded-3xl border border-white/10 bg-white/[0.04] p-4">
             <div className="text-xs text-white/55">Orders (24h)</div>
@@ -100,7 +107,7 @@ export default function BillingAdmin() {
           </div>
           <div className="space-y-2">
             {restaurants
-              .filter((row) => ["past_due", "canceled", "suspended"].includes(row.subscriptionStatus))
+              .filter((row) => ["past_due", "cancelled", "expired"].includes(row.subscriptionStatus))
               .map((row) => (
                 <div key={row.id} className="rounded-2xl border border-white/10 bg-black/25 px-3 py-2 text-sm">
                   <div className="flex flex-wrap items-center justify-between gap-2">
@@ -112,7 +119,34 @@ export default function BillingAdmin() {
               ))}
           </div>
         </div>
+
+        <div className="mt-6 rounded-3xl border border-white/10 bg-white/[0.04] p-4">
+          <div className="mb-3 text-sm font-black uppercase tracking-wide text-white/70">Billing Operations Snapshot</div>
+          <div className="space-y-2">
+            {billingOverview.map((row) => (
+              <div key={row.restaurantId} className="rounded-2xl border border-white/10 bg-black/25 px-3 py-2 text-sm">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="font-semibold">{row.restaurantName}</div>
+                  <div className="text-orange-300">{row.currentPlan}</div>
+                </div>
+                <div className="mt-1 grid gap-1 text-xs text-white/65 md:grid-cols-2">
+                  <div>Status: {row.subscriptionStatus}</div>
+                  <div>Trial end: {row.trialEndDate || "n/a"}</div>
+                  <div>
+                    Latest invoice: {row.latestInvoice ? `${row.latestInvoice.status} • ${formatKsh(row.latestInvoice.amount)}` : "n/a"}
+                  </div>
+                  <div>
+                    Latest payment: {row.latestPayment ? `${row.latestPayment.status} • ${row.latestPayment.provider}` : "n/a"}
+                  </div>
+                  <div>Last method: {row.lastPaymentMethod || "n/a"}</div>
+                  <div>Outstanding: {formatKsh(row.outstandingBalance)}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
       </div>
     </div>
   );
 }
+

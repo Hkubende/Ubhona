@@ -1,11 +1,12 @@
 import * as React from "react";
-import { Pencil, PlusCircle, Trash2 } from "lucide-react";
+import { Pencil, PlusCircle, QrCode, Trash2 } from "lucide-react";
 import { DashboardPanel, SectionHeader } from "../dashboard/dashboard-primitives";
 import { Button } from "../ui/Button";
 import { EditorPanel } from "../ui/EditorPanel";
 import { Input } from "../ui/Input";
 import { Textarea } from "../ui/Textarea";
 import { UbhonaSelect, UbhonaSelectItem } from "../ui/ubhona-select";
+import UploadField from "../uploads/UploadField";
 import { cn } from "../../lib/utils";
 import { radius, spacing, tokens, typography } from "../../design-system";
 import type { Category, Dish } from "../../types/dashboard";
@@ -23,6 +24,7 @@ export type DishFormState = {
 type CategoryCount = Category & { count: number };
 
 type DishWorkspacePanelProps = {
+  restaurantId?: string;
   editingDishId: string | null;
   activeDish: Dish | null;
   dishForm: DishFormState;
@@ -35,6 +37,7 @@ type DishWorkspacePanelProps = {
   onSubmitDish: (event: React.FormEvent<HTMLFormElement>) => void;
   onResetDish: () => void;
   onCreateNewDish: () => void;
+  onOpenDishQr: () => void;
   onToggleCategoryManager: () => void;
   onNewCategoryNameChange: (value: string) => void;
   onAddCategory: (event: React.FormEvent<HTMLFormElement>) => void;
@@ -46,6 +49,7 @@ type DishWorkspacePanelProps = {
 };
 
 export function DishWorkspacePanel({
+  restaurantId,
   editingDishId,
   activeDish,
   dishForm,
@@ -58,6 +62,7 @@ export function DishWorkspacePanel({
   onSubmitDish,
   onResetDish,
   onCreateNewDish,
+  onOpenDishQr,
   onToggleCategoryManager,
   onNewCategoryNameChange,
   onAddCategory,
@@ -67,8 +72,9 @@ export function DishWorkspacePanel({
   onCancelCategoryEdit,
   onRemoveCategory,
 }: DishWorkspacePanelProps) {
+  const modelFileName = dishForm.modelUrl ? dishForm.modelUrl.split("/").pop() || "Model linked" : "";
   return (
-    <DashboardPanel className="space-y-4">
+    <DashboardPanel className="space-y-5 p-5 lg:space-y-6 lg:p-6">
       <SectionHeader
         title={editingDishId ? "Edit Dish" : "Dish Workspace"}
         subtitle={
@@ -78,21 +84,27 @@ export function DishWorkspacePanel({
         }
         action={
           editingDishId ? (
-            <Button size="sm" variant="ghost" onClick={onCreateNewDish}>
-              New Dish
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button size="sm" variant="secondary" onClick={onOpenDishQr}>
+                <QrCode className="h-3.5 w-3.5" />
+                Dish QR
+              </Button>
+              <Button size="sm" variant="ghost" onClick={onCreateNewDish}>
+                New Dish
+              </Button>
+            </div>
           ) : null
         }
       />
 
-      <EditorPanel className={spacing.stackLg}>
+      <EditorPanel className={cn("p-[18px]", spacing.stackMd)}>
         <div className={cn("flex flex-wrap items-start justify-between", spacing.gapMd)}>
           <div>
             <div className={cn("text-text-primary", typography.subSectionTitle)}>
               {editingDishId ? activeDish?.name || "Editing selected dish" : "Categories"}
             </div>
             <p className={cn("mt-1", typography.mutedBody)}>
-              Use categories directly in the dish workflow instead of a separate builder section.
+              Keep category handling lightweight inside the dish workflow.
             </p>
           </div>
           <Button
@@ -101,7 +113,7 @@ export function DishWorkspacePanel({
             className={cn(isCategoryManagerOpen && "border-primary/35 bg-primary/12 text-text-primary")}
             onClick={onToggleCategoryManager}
           >
-            {isCategoryManagerOpen ? "Hide categories" : "Manage categories"}
+            {isCategoryManagerOpen ? "Hide category tools" : "Quick category tools"}
           </Button>
         </div>
 
@@ -113,7 +125,7 @@ export function DishWorkspacePanel({
                 type="button"
                 onClick={() => onDishFormChange({ categoryId: category.id })}
                 className={cn(
-                  `${radius.panel} border px-3 py-1 text-xs transition-colors`,
+                  `${radius.panel} border px-3 py-1 text-xs transition-colors hover:border-white/25 hover:text-text-primary`,
                   dishForm.categoryId === category.id
                     ? tokens.classes.categoryChipActive
                     : tokens.classes.categoryChipIdle
@@ -128,7 +140,7 @@ export function DishWorkspacePanel({
         </div>
 
         {isCategoryManagerOpen ? (
-          <div className={cn(`border-t border-white/10 pt-4`, spacing.stackMd)}>
+          <div className={cn(`border-t border-white/10 pt-4`, spacing.stackSm)}>
             <form onSubmit={onAddCategory} className={cn(`grid sm:grid-cols-[1fr_auto]`, spacing.gapSm)}>
               <Input
                 id="new-category-name"
@@ -203,7 +215,7 @@ export function DishWorkspacePanel({
         ) : null}
       </EditorPanel>
 
-      <form onSubmit={onSubmitDish} className={spacing.stackMd}>
+      <form onSubmit={onSubmitDish} className={cn("border-t border-white/8 pt-4", spacing.stackMd)}>
         <div className={cn("grid sm:grid-cols-2", spacing.gapMd)}>
           <div>
             <label htmlFor="dish-name" className={cn("mb-1.5 block", typography.label)}>
@@ -272,13 +284,13 @@ export function DishWorkspacePanel({
               type="checkbox"
               checked={dishForm.available}
               onChange={(event) => onDishFormChange({ available: event.target.checked })}
-              className="h-4 w-4 rounded border-white/20 bg-black/30 accent-[#E4572E]"
+              className="h-4 w-4 rounded border-white/20 bg-black/30 accent-[#FF6A1A]"
             />
             Available
           </label>
         </div>
 
-        <div>
+        <div className="space-y-2">
           <label htmlFor="dish-image-url" className={cn("mb-1.5 block", typography.label)}>
             Image URL
           </label>
@@ -290,9 +302,22 @@ export function DishWorkspacePanel({
             placeholder="Image URL"
             aria-label="Dish image URL"
           />
+          <p className="text-[11px] text-text-secondary/68">
+            Uploading a thumbnail automatically fills this field. You can still paste a manual URL to override it.
+          </p>
+          <UploadField
+            label="Upload Thumbnail"
+            assetType="thumb"
+            accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp"
+            value={dishForm.imageUrl}
+            onUploaded={(url) => onDishFormChange({ imageUrl: url })}
+            linkedFieldLabel="Image URL"
+            restaurantId={restaurantId}
+            dishId={editingDishId || undefined}
+          />
         </div>
 
-        <div>
+        <div className="space-y-2">
           <label htmlFor="dish-model-url" className={cn("mb-1.5 block", typography.label)}>
             3D Model URL (Optional)
           </label>
@@ -304,15 +329,70 @@ export function DishWorkspacePanel({
             placeholder="Model URL (optional)"
             aria-label="Dish model URL"
           />
+          <UploadField
+            label="Upload 3D Model (.glb / .gltf)"
+            assetType="model"
+            accept=".glb,.gltf,model/gltf-binary,model/gltf+json"
+            value={dishForm.modelUrl}
+            onUploaded={(url) => onDishFormChange({ modelUrl: url })}
+            restaurantId={restaurantId}
+            dishId={editingDishId || undefined}
+          />
         </div>
 
-        {dishForm.imageUrl ? (
-          <div className={tokens.classes.previewFrame}>
-            <img
-              src={dishForm.imageUrl}
-              alt={dishForm.name || "Dish preview"}
-              className="h-40 w-full object-cover"
-            />
+        {(dishForm.imageUrl || dishForm.modelUrl) ? (
+          <div className="grid gap-3 sm:grid-cols-2">
+            {dishForm.imageUrl ? (
+              <div className={tokens.classes.previewFrame}>
+                <div className="border-b border-white/8 px-3 py-2 text-[11px] uppercase tracking-[0.08em] text-text-secondary/68">
+                  Thumbnail Preview
+                </div>
+                <img
+                  src={dishForm.imageUrl}
+                  alt={dishForm.name || "Dish preview"}
+                  className="h-44 w-full object-cover"
+                />
+              </div>
+            ) : (
+              <div className={cn(tokens.classes.previewFrame, "grid min-h-[176px] place-items-center px-3 py-6 text-xs text-text-secondary/60")}>
+                No thumbnail selected
+              </div>
+            )}
+            <div className={cn(tokens.classes.previewFrame, "p-3")}>
+              <div className="mb-2 flex items-center justify-between gap-2 text-[11px] uppercase tracking-[0.08em] text-text-secondary/68">
+                <span>3D Model</span>
+                <span
+                  className={cn(
+                    "rounded-full border px-2 py-0.5 text-[10px] font-semibold",
+                    dishForm.modelUrl
+                      ? "border-emerald-400/35 bg-emerald-500/12 text-emerald-200"
+                      : "border-white/12 bg-white/6 text-text-secondary/75"
+                  )}
+                >
+                  {dishForm.modelUrl ? "Linked" : "Not linked"}
+                </span>
+              </div>
+              {dishForm.modelUrl ? (
+                <div className="space-y-2">
+                  <div className="rounded-lg border border-white/12 bg-black/30 px-2.5 py-2 text-xs text-text-secondary">
+                    <div className="truncate font-medium text-text-primary">{modelFileName}</div>
+                    <div className="truncate text-text-secondary/68">{dishForm.modelUrl}</div>
+                  </div>
+                  <a
+                    href={dishForm.modelUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex rounded-lg border border-primary/30 bg-primary/10 px-2.5 py-1.5 text-xs font-semibold text-text-primary transition hover:bg-primary/15"
+                  >
+                    View model asset
+                  </a>
+                </div>
+              ) : (
+                <div className="rounded-lg border border-white/10 bg-black/25 px-2.5 py-2 text-xs text-text-secondary/65">
+                  No model linked yet
+                </div>
+              )}
+            </div>
           </div>
         ) : null}
 

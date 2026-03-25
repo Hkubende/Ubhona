@@ -7,6 +7,7 @@ export type PrepareUploadInput = {
   fileName: string;
   fileType: string;
   assetType: UploadAssetType;
+  fileSize?: number;
 };
 
 function safeName(input: string) {
@@ -27,21 +28,46 @@ function guessExtension(fileType: string, fallback: string) {
   if (fileType.startsWith("image/png")) return "png";
   if (fileType.startsWith("image/webp")) return "webp";
   if (fileType === "model/gltf-binary") return "glb";
+  if (fileType === "model/gltf+json") return "gltf";
   return fallback;
 }
 
 function assertFileType(assetType: UploadAssetType, fileType: string, ext: string) {
   if (assetType === "model") {
-    const okByType = fileType === "model/gltf-binary";
-    const okByExt = ext === "glb";
+    const okByType = fileType === "model/gltf-binary" || fileType === "model/gltf+json";
+    const okByExt = ext === "glb" || ext === "gltf";
     if (!okByType && !okByExt) {
-      throw new Error("Model upload must be a .glb file.");
+      throw new Error("Model upload must be a .glb or .gltf file.");
     }
     return;
   }
   if (!fileType.startsWith("image/")) {
     throw new Error("Logo, cover, and thumbnail uploads must be image files.");
   }
+}
+
+function assertFileSize(assetType: UploadAssetType, fileSize?: number) {
+  if (!Number.isFinite(fileSize)) return;
+  const sizeBytes = Number(fileSize);
+  if (sizeBytes <= 0) {
+    throw new Error("File size must be greater than 0 bytes.");
+  }
+  const maxBytes = assetType === "model" ? 25 * 1024 * 1024 : 8 * 1024 * 1024;
+  if (sizeBytes > maxBytes) {
+    const maxMb = assetType === "model" ? 25 : 8;
+    throw new Error(`File exceeds maximum allowed size (${maxMb}MB).`);
+  }
+}
+
+function getStorageBucket(assetType: UploadAssetType) {
+  const legacy = process.env.SUPABASE_STORAGE_BUCKET || "";
+  const thumbs = process.env.SUPABASE_STORAGE_BUCKET_THUMBNAILS || "";
+  const models = process.env.SUPABASE_STORAGE_BUCKET_MODELS || "";
+  const branding = process.env.SUPABASE_STORAGE_BUCKET_BRANDING || "";
+
+  if (assetType === "thumb") return thumbs || legacy || "dish-thumbnails";
+  if (assetType === "model") return models || legacy || "dish-models";
+  return branding || legacy || "restaurant-branding";
 }
 
 async function createSupabaseSignedUploadUrl(bucket: string, objectKey: string) {
@@ -80,8 +106,9 @@ export async function prepareUpload(input: PrepareUploadInput) {
   const defaultExt = input.assetType === "model" ? "glb" : "png";
   const ext = guessExtension(input.fileType, rawExt || defaultExt);
   assertFileType(input.assetType, input.fileType, ext);
+  assertFileSize(input.assetType, input.fileSize);
 
-  const bucket = process.env.SUPABASE_STORAGE_BUCKET || "menuvista-assets";
+  const bucket = getStorageBucket(input.assetType);
   const baseName = safeName(input.fileName.replace(/\.[^.]+$/, "")) || `${input.assetType}-${Date.now()}`;
   const objectKey = `restaurants/${input.restaurantId}/${input.assetType}/${Date.now()}-${baseName}.${ext}`;
   const { uploadUrl, token } = await createSupabaseSignedUploadUrl(bucket, objectKey);

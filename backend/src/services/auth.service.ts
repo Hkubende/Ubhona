@@ -3,7 +3,10 @@ import jwt from "jsonwebtoken";
 import { prisma } from "../prisma.js";
 import type { UserRole } from "@prisma/client";
 
-const JWT_SECRET = process.env.JWT_SECRET || "dev-secret";
+const JWT_SECRET = String(process.env.JWT_SECRET || "").trim();
+if (!JWT_SECRET || JWT_SECRET === "dev-secret" || JWT_SECRET.length < 32) {
+  throw new Error("Missing or weak JWT_SECRET. Set a strong secret (>=32 chars) before starting backend.");
+}
 
 function signToken(user: { id: string; email: string; role: UserRole }) {
   return jwt.sign({ sub: user.id, email: user.email, role: user.role }, JWT_SECRET, { expiresIn: "7d" });

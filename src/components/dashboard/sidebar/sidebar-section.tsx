@@ -12,9 +12,9 @@ export function SidebarSection({
   children: React.ReactNode;
 }) {
   return (
-    <section aria-label={title} className={collapsed ? "space-y-2" : "space-y-1"}>
+    <section aria-label={title} className={collapsed ? "space-y-1.5" : "space-y-1"}>
       {hideTitle ? <span className="sr-only">{title}</span> : null}
-      <div className="grid gap-0.5">{children}</div>
+      <div className={collapsed ? "grid gap-1" : "grid gap-0.5"}>{children}</div>
     </section>
   );
 }

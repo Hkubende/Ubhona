@@ -2,6 +2,7 @@ import * as React from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { DEMO_EMAIL, DEMO_PASSWORD, loginUser } from "../lib/auth";
 import { hasRestaurantProfile, syncRestaurantProfile } from "../lib/restaurant";
+import { getDefaultRouteForRole, getPrimaryDashboardRole } from "../lib/roles";
 import { Button } from "../components/ui/Button";
 import { Card } from "../components/ui/Card";
 import { Input } from "../components/ui/Input";
@@ -27,7 +28,22 @@ export default function Login() {
       return;
     }
     await syncRestaurantProfile();
-    navigate(hasRestaurantProfile() ? "/dashboard" : "/onboarding");
+    if (!hasRestaurantProfile()) {
+      navigate("/onboarding");
+      return;
+    }
+    navigate(getDefaultRouteForRole(getPrimaryDashboardRole(result.user)));
+  };
+
+  const loginAsDemo = async () => {
+    setError("");
+    const result = await loginUser(DEMO_EMAIL, DEMO_PASSWORD);
+    if (!result.ok) {
+      setError(result.error);
+      return;
+    }
+    await syncRestaurantProfile();
+    navigate(getDefaultRouteForRole(getPrimaryDashboardRole(result.user)));
   };
 
   return (
@@ -82,6 +98,15 @@ export default function Login() {
           <div className="font-semibold text-orange-200">Demo account</div>
           <div>Email: {DEMO_EMAIL}</div>
           <div>Password: {DEMO_PASSWORD}</div>
+          <Button
+            type="button"
+            onClick={() => void loginAsDemo()}
+            variant="secondary"
+            size="sm"
+            className="mt-2 w-full"
+          >
+            Enter Demo Mode
+          </Button>
         </div>
 
         <div className="mt-4 text-center text-sm text-white/65">

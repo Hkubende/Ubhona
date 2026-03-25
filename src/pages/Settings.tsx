@@ -12,7 +12,15 @@ import { Button } from "../components/ui/Button";
 import { Input } from "../components/ui/Input";
 import { UbhonaSelect, UbhonaSelectItem } from "../components/ui/ubhona-select";
 import { useRestaurantDashboard } from "../hooks/use-restaurant-dashboard";
-import { getCurrentPlan, getRestaurantProfile, type RestaurantProfile } from "../lib/restaurant";
+import {
+  getCurrentPlan,
+  getRestaurantProfile,
+  getRestaurantWhatsAppSettings,
+  isPaidPlan,
+  updateRestaurantWhatsAppSettings,
+  type RestaurantProfile,
+  type RestaurantWhatsAppSettings,
+} from "../lib/restaurant";
 import { getPlanFeatureSummary } from "../lib/plan-gates";
 import {
   connectBluetoothPrinter,
@@ -34,6 +42,21 @@ import {
 } from "../lib/waiters";
 import { cn } from "../lib/utils";
 import { spacing, tokens, typography } from "../design-system";
+import { canCurrentUser, canPerformAction, getPrimaryDashboardRole, getRoleConfig } from "../lib/roles";
+import { ActivityFeed } from "../components/dashboard/activity-feed";
+import { ApprovalQueue } from "../components/dashboard/approval-queue";
+import { getActivityHistory, getApprovals, reviewApproval, type ActivityItem, type ApprovalItem } from "../lib/activity";
+import { getAutomationSettings, updateAutomationSettings, type AutomationSettings } from "../services/automation-engine";
+
+const OPERATING_HOURS_DEFAULT = [
+  { day: "Monday", open: "08:00", close: "22:00", enabled: true },
+  { day: "Tuesday", open: "08:00", close: "22:00", enabled: true },
+  { day: "Wednesday", open: "08:00", close: "22:00", enabled: true },
+  { day: "Thursday", open: "08:00", close: "22:00", enabled: true },
+  { day: "Friday", open: "08:00", close: "23:00", enabled: true },
+  { day: "Saturday", open: "09:00", close: "23:00", enabled: true },
+  { day: "Sunday", open: "10:00", close: "21:00", enabled: false },
+] as const;
 
 export default function Settings() {
   const { data } = useRestaurantDashboard();
@@ -47,6 +70,17 @@ export default function Settings() {
   const [newWaiterName, setNewWaiterName] = React.useState("");
   const [newWaiterCode, setNewWaiterCode] = React.useState("");
   const [newWaiterPin, setNewWaiterPin] = React.useState("");
+  const [operatingHours, setOperatingHours] = React.useState(
+    OPERATING_HOURS_DEFAULT.map((entry) => ({ ...entry }))
+  );
+  const [whatsAppSettings, setWhatsAppSettings] = React.useState<RestaurantWhatsAppSettings>({
+    enabled: false,
+    directorName: "Restaurant Director",
+    senderBehavior: "default",
+    provider: "mock",
+  });
+  const [whatsAppSettingsState, setWhatsAppSettingsState] = React.useState<"idle" | "saving" | "saved" | "error">("idle");
+  const [whatsAppSettingsError, setWhatsAppSettingsError] = React.useState("");
 
   const profile = React.useMemo<RestaurantProfile | null>(() => {
     if (!data) return null;
@@ -71,8 +105,26 @@ export default function Settings() {
       createdAt: persistedProfile?.createdAt || new Date().toISOString(),
     };
   }, [data, persistedProfile]);
+  const activeRole = getPrimaryDashboardRole();
+  const roleLabel = activeRole ? getRoleConfig(activeRole).label : "User";
+  const canManageBilling = canPerformAction("manage_billing");
+  const canManageStaff = canPerformAction("manage_staff");
+  const canManagePrinting = canCurrentUser("managePrinting");
+  const canManageSettings = canPerformAction("manage_settings");
+  const canReviewApprovals = canManageSettings || canManageBilling;
+  const [settingsHistory, setSettingsHistory] = React.useState<ActivityItem[]>([]);
+  const [settingsHistoryLoading, setSettingsHistoryLoading] = React.useState(false);
+  const [approvals, setApprovals] = React.useState<ApprovalItem[]>([]);
+  const [approvalsLoading, setApprovalsLoading] = React.useState(false);
+  const [reviewingApprovalId, setReviewingApprovalId] = React.useState<string | null>(null);
+  const [automationSettings, setAutomationSettings] = React.useState<AutomationSettings | null>(null);
+  const [automationSettingsState, setAutomationSettingsState] = React.useState<"idle" | "saving" | "saved" | "error">(
+    "idle"
+  );
+  const [automationSettingsError, setAutomationSettingsError] = React.useState("");
 
   const currentPlan = React.useMemo(() => getCurrentPlan(profile), [profile]);
+  const canDisableBrandingFooter = React.useMemo(() => isPaidPlan(profile), [profile]);
   const planFeatures = React.useMemo(() => getPlanFeatureSummary(profile), [profile]);
   const savePrinterPatch = (patch: Partial<PrinterSettings>) => {
     const next = updatePrinterSettings(patch);
@@ -142,6 +194,106 @@ export default function Settings() {
   const toggleRowClass = cn(tokens.classes.mutedPanelRow, "text-sm");
   const selectFieldClass = cn(tokens.classes.panelInset, "text-sm");
 
+  React.useEffect(() => {
+    let mounted = true;
+    void getRestaurantWhatsAppSettings()
+      .then((settings) => {
+        if (mounted) setWhatsAppSettings(settings);
+      })
+      .catch(() => {
+        if (!mounted) return;
+        setWhatsAppSettingsError("Could not load WhatsApp settings.");
+      });
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  const patchWhatsAppSettings = async (patch: Partial<RestaurantWhatsAppSettings>) => {
+    setWhatsAppSettings((prev) => ({ ...prev, ...patch }));
+    setWhatsAppSettingsState("saving");
+    setWhatsAppSettingsError("");
+    try {
+      const updated = await updateRestaurantWhatsAppSettings({
+        enabled: patch.enabled,
+        directorName: patch.directorName,
+        senderBehavior: patch.senderBehavior,
+        provider: patch.provider,
+      });
+      setWhatsAppSettings(updated);
+      setWhatsAppSettingsState("saved");
+      window.setTimeout(() => setWhatsAppSettingsState((current) => (current === "saved" ? "idle" : current)), 1200);
+    } catch (error) {
+      setWhatsAppSettingsState("error");
+      setWhatsAppSettingsError(error instanceof Error ? error.message : "Failed to save WhatsApp settings.");
+    }
+  };
+
+  const refreshAuditPanels = React.useCallback(() => {
+    setSettingsHistoryLoading(true);
+    setApprovalsLoading(true);
+    void getActivityHistory({ limit: 8 })
+      .then((rows) => {
+        setSettingsHistory(rows.filter((row) => row.action.includes("settings")));
+      })
+      .catch(() => setSettingsHistory([]))
+      .finally(() => setSettingsHistoryLoading(false));
+    void getApprovals("pending")
+      .then((rows) => setApprovals(rows))
+      .catch(() => setApprovals([]))
+      .finally(() => setApprovalsLoading(false));
+  }, []);
+
+  React.useEffect(() => {
+    refreshAuditPanels();
+  }, [refreshAuditPanels]);
+
+  React.useEffect(() => {
+    let mounted = true;
+    void getAutomationSettings()
+      .then((settings) => {
+        if (mounted) setAutomationSettings(settings);
+      })
+      .catch(() => {
+        if (mounted) setAutomationSettings(null);
+      });
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  const patchAutomationSettings = async (patch: Partial<AutomationSettings>) => {
+    if (!automationSettings) return;
+    const optimistic = { ...automationSettings, ...patch };
+    setAutomationSettings(optimistic);
+    setAutomationSettingsState("saving");
+    setAutomationSettingsError("");
+    try {
+      const saved = await updateAutomationSettings(patch);
+      setAutomationSettings(saved);
+      setAutomationSettingsState("saved");
+      window.setTimeout(() => {
+        setAutomationSettingsState((value) => (value === "saved" ? "idle" : value));
+      }, 1200);
+      refreshAuditPanels();
+    } catch (error) {
+      setAutomationSettingsState("error");
+      setAutomationSettingsError(error instanceof Error ? error.message : "Failed to save automation settings.");
+    }
+  };
+
+  const handleReviewApproval = async (approvalId: string, decision: "approved" | "rejected") => {
+    setReviewingApprovalId(approvalId);
+    try {
+      await reviewApproval(approvalId, decision);
+      refreshAuditPanels();
+    } catch (error) {
+      setWaiterMessage(error instanceof Error ? error.message : "Failed to review approval.");
+    } finally {
+      setReviewingApprovalId(null);
+    }
+  };
+
   return (
     <DashboardLayout
       profile={profile}
@@ -155,7 +307,7 @@ export default function Settings() {
           <div className={cn(spacing.stackSm, "text-sm text-text-secondary/82")}>
             <div className={fieldRowClass}>Email: {data?.restaurant.email || "not-set"}</div>
             <div className={fieldRowClass}>Phone: {data?.restaurant.phone || "not-set"}</div>
-            <div className={fieldRowClass}>Role: Restaurant Owner</div>
+            <div className={fieldRowClass}>Role: {roleLabel}</div>
           </div>
         </DashboardPanel>
         <DashboardPanel>
@@ -164,6 +316,62 @@ export default function Settings() {
             <div className={fieldRowClass}>Name: {data?.restaurant.name || "not-set"}</div>
             <div className={fieldRowClass}>Slug: {data?.restaurant.slug || "not-set"}</div>
             <div className={fieldRowClass}>Location: {data?.restaurant.location || "not-set"}</div>
+          </div>
+        </DashboardPanel>
+        <DashboardPanel>
+          <SectionHeader title="Operating Hours" subtitle="Configure storefront visibility windows by day." />
+          <div className={cn(spacing.stackSm, "text-sm")}>
+            {operatingHours.map((row, index) => (
+              <div key={row.day} className={cn(tokens.classes.panelInset, "grid gap-2 p-3 md:grid-cols-[120px_1fr_1fr_auto]")}>
+                <div className="self-center text-xs font-semibold uppercase tracking-wide text-text-secondary/72">
+                  {row.day}
+                </div>
+                <Input
+                  id={`hours-open-${row.day}`}
+                  name={`hoursOpen${row.day}`}
+                  type="time"
+                  value={row.open}
+                  onChange={(event) =>
+                    setOperatingHours((current) =>
+                      current.map((entry, currentIndex) =>
+                        currentIndex === index ? { ...entry, open: event.target.value } : entry
+                      )
+                    )
+                  }
+                  disabled={!row.enabled}
+                />
+                <Input
+                  id={`hours-close-${row.day}`}
+                  name={`hoursClose${row.day}`}
+                  type="time"
+                  value={row.close}
+                  onChange={(event) =>
+                    setOperatingHours((current) =>
+                      current.map((entry, currentIndex) =>
+                        currentIndex === index ? { ...entry, close: event.target.value } : entry
+                      )
+                    )
+                  }
+                  disabled={!row.enabled}
+                />
+                <label className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/[0.06] px-3 py-2 text-xs font-semibold text-text-secondary/82">
+                  Open
+                  <input
+                    id={`hours-enabled-${row.day}`}
+                    name={`hoursEnabled${row.day}`}
+                    type="checkbox"
+                    checked={row.enabled}
+                    onChange={(event) =>
+                      setOperatingHours((current) =>
+                        current.map((entry, currentIndex) =>
+                          currentIndex === index ? { ...entry, enabled: event.target.checked } : entry
+                        )
+                      )
+                    }
+                  />
+                </label>
+              </div>
+            ))}
           </div>
         </DashboardPanel>
         <DashboardPanel>
@@ -177,6 +385,73 @@ export default function Settings() {
               <span>SMS order alerts</span>
               <input id="settings-sms-alerts" name="smsOrderAlerts" type="checkbox" defaultChecked />
             </label>
+            <label className={toggleRowClass}>
+              <span>WhatsApp order notifications</span>
+              <input
+                id="settings-whatsapp-enabled"
+                name="whatsappEnabled"
+                type="checkbox"
+                checked={whatsAppSettings.enabled}
+                onChange={(event) => {
+                  void patchWhatsAppSettings({ enabled: event.target.checked });
+                }}
+              />
+            </label>
+            <label className={selectFieldClass}>
+              <div className={cn("mb-1", typography.label)}>Director Name</div>
+              <Input
+                id="settings-whatsapp-director-name"
+                name="whatsappDirectorName"
+                value={whatsAppSettings.directorName}
+                onChange={(event) => setWhatsAppSettings((prev) => ({ ...prev, directorName: event.target.value }))}
+                onBlur={() => {
+                  void patchWhatsAppSettings({ directorName: whatsAppSettings.directorName });
+                }}
+                placeholder="Restaurant Director"
+              />
+            </label>
+            <label className={selectFieldClass}>
+              <div className={cn("mb-1", typography.label)}>Sender Behavior</div>
+              <UbhonaSelect
+                name="whatsappSenderBehavior"
+                value={whatsAppSettings.senderBehavior}
+                onValueChange={(value) => {
+                  void patchWhatsAppSettings({ senderBehavior: value as "default" | "restaurant" });
+                }}
+              >
+                <UbhonaSelectItem value="default">Default Sender</UbhonaSelectItem>
+                <UbhonaSelectItem value="restaurant">Restaurant Branded Sender</UbhonaSelectItem>
+              </UbhonaSelect>
+            </label>
+            <label className={selectFieldClass}>
+              <div className={cn("mb-1", typography.label)}>Provider</div>
+              <UbhonaSelect
+                name="whatsappProvider"
+                value={whatsAppSettings.provider}
+                onValueChange={(value) => {
+                  void patchWhatsAppSettings({ provider: value as "mock" | "meta_cloud" | "twilio" });
+                }}
+              >
+                <UbhonaSelectItem value="mock">Mock (Development)</UbhonaSelectItem>
+                <UbhonaSelectItem value="meta_cloud">Meta Cloud API</UbhonaSelectItem>
+                <UbhonaSelectItem value="twilio">Twilio WhatsApp</UbhonaSelectItem>
+              </UbhonaSelect>
+            </label>
+            {whatsAppSettingsState === "saving" ? (
+              <div className="rounded-xl border border-primary/30 bg-primary/10 px-3 py-2 text-xs text-primary">
+                Saving WhatsApp settings...
+              </div>
+            ) : null}
+            {whatsAppSettingsState === "saved" ? (
+              <div className="rounded-xl border border-emerald-300/30 bg-emerald-500/10 px-3 py-2 text-xs text-emerald-100">
+                WhatsApp settings saved.
+              </div>
+            ) : null}
+            {whatsAppSettingsError ? (
+              <div className="rounded-xl border border-red-400/30 bg-red-500/10 px-3 py-2 text-xs text-red-200">
+                {whatsAppSettingsError}
+              </div>
+            ) : null}
           </div>
         </DashboardPanel>
         <DashboardPanel>
@@ -188,12 +463,13 @@ export default function Settings() {
           </div>
         </DashboardPanel>
         </ContentGrid>
+        {canManageBilling ? (
         <DashboardPanel>
           <SectionHeader title="Plan & Feature Access" subtitle="SaaS plan foundations and feature gating readiness." />
           <div className="mb-3 flex flex-wrap items-center gap-2 text-sm">
             <Badge variant="accent" className="px-3 py-1">{currentPlan.label}</Badge>
             <Badge variant="neutral" className="px-3 py-1">{currentPlan.status}</Badge>
-            <span className="text-text-secondary/68">Use `/pricing` to change plan when billing is connected.</span>
+            <span className="text-text-secondary/68">Plan and feature access are controlled by backend billing state.</span>
           </div>
           <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
             {planFeatures.map((feature) => (
@@ -210,12 +486,16 @@ export default function Settings() {
                   {feature.label}
                 </div>
                 {!feature.enabled ? (
-                  <div className="mt-1 text-xs text-amber-100/80">Requires {feature.minimumPlanLabel}</div>
+                  <div className="mt-1 text-xs text-amber-100/80">
+                    Locked on {feature.currentPlanLabel}. Upgrade to {feature.minimumPlanLabel} to unlock.
+                  </div>
                 ) : null}
               </div>
             ))}
           </div>
         </DashboardPanel>
+        ) : null}
+        {canManagePrinting ? (
         <DashboardPanel>
           <SectionHeader title="Printer Settings" subtitle="Thermal printing foundation with browser fallback and ESC/POS preview mode." />
           <div className="grid gap-3 md:grid-cols-2">
@@ -262,9 +542,15 @@ export default function Settings() {
                 name="showBrandingFooter"
                 type="checkbox"
                 checked={printerSettings.showBrandingFooter}
+                disabled={!canDisableBrandingFooter}
                 onChange={(event) => savePrinterPatch({ showBrandingFooter: event.target.checked })}
               />
             </label>
+            {!canDisableBrandingFooter ? (
+              <div className="md:col-span-2 rounded-xl border border-amber-400/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-100">
+                Starter requires the &quot;Powered by Ubhona&quot; footer. Upgrade to Growth or Pro to remove it.
+              </div>
+            ) : null}
             <label className={toggleRowClass}>
               <span>Auto print customer receipt on order</span>
               <input
@@ -324,6 +610,160 @@ export default function Settings() {
             Manual mode prints only on click. Auto mode prints on enabled lifecycle events using your selected transport, with browser fallback.
           </p>
         </DashboardPanel>
+        ) : null}
+        {(canManageSettings || canManagePrinting) && automationSettings ? (
+          <DashboardPanel>
+            <SectionHeader
+              title="Automation Rules"
+              subtitle="Event-driven automations for printing, messaging, overdue handling, and operational reliability."
+            />
+            <div className="grid gap-2 md:grid-cols-2">
+              <label className={toggleRowClass}>
+                <span>Auto print kitchen tickets</span>
+                <input
+                  id="settings-auto-print-kitchen-tickets"
+                  name="autoPrintKitchenTickets"
+                  type="checkbox"
+                  checked={automationSettings.auto_print_kitchen_tickets}
+                  onChange={(event) => {
+                    void patchAutomationSettings({ auto_print_kitchen_tickets: event.target.checked });
+                  }}
+                />
+              </label>
+              <label className={toggleRowClass}>
+                <span>Auto print receipts on payment complete</span>
+                <input
+                  id="settings-auto-print-receipts"
+                  name="autoPrintReceipts"
+                  type="checkbox"
+                  checked={automationSettings.auto_print_receipts}
+                  onChange={(event) => {
+                    void patchAutomationSettings({ auto_print_receipts: event.target.checked });
+                  }}
+                />
+              </label>
+              <label className={toggleRowClass}>
+                <span>WhatsApp status updates</span>
+                <input
+                  id="settings-automation-whatsapp-status"
+                  name="automationWhatsappStatusUpdates"
+                  type="checkbox"
+                  checked={automationSettings.whatsapp_status_updates_enabled}
+                  onChange={(event) => {
+                    void patchAutomationSettings({ whatsapp_status_updates_enabled: event.target.checked });
+                  }}
+                />
+              </label>
+              <label className={toggleRowClass}>
+                <span>Director thank-you on completion</span>
+                <input
+                  id="settings-automation-director-thankyou"
+                  name="automationDirectorThankYou"
+                  type="checkbox"
+                  checked={automationSettings.director_thank_you_enabled}
+                  onChange={(event) => {
+                    void patchAutomationSettings({ director_thank_you_enabled: event.target.checked });
+                  }}
+                />
+              </label>
+              <label className={toggleRowClass}>
+                <span>Notify manager when overdue</span>
+                <input
+                  id="settings-automation-notify-overdue"
+                  name="automationNotifyOverdue"
+                  type="checkbox"
+                  checked={automationSettings.notify_manager_on_overdue}
+                  onChange={(event) => {
+                    void patchAutomationSettings({ notify_manager_on_overdue: event.target.checked });
+                  }}
+                />
+              </label>
+              <label className={toggleRowClass}>
+                <span>Auto-hide unavailable dishes on low stock</span>
+                <input
+                  id="settings-automation-auto-hide-unavailable"
+                  name="automationAutoHideUnavailable"
+                  type="checkbox"
+                  checked={automationSettings.auto_hide_unavailable_dishes}
+                  onChange={(event) => {
+                    void patchAutomationSettings({ auto_hide_unavailable_dishes: event.target.checked });
+                  }}
+                />
+              </label>
+              <label className={toggleRowClass}>
+                <span>Print on order created</span>
+                <input
+                  id="settings-automation-print-order-created"
+                  name="automationPrintOnOrderCreated"
+                  type="checkbox"
+                  checked={automationSettings.print_on_order_created}
+                  onChange={(event) => {
+                    void patchAutomationSettings({ print_on_order_created: event.target.checked });
+                  }}
+                />
+              </label>
+              <label className={toggleRowClass}>
+                <span>Print on order confirmed</span>
+                <input
+                  id="settings-automation-print-order-confirmed"
+                  name="automationPrintOnOrderConfirmed"
+                  type="checkbox"
+                  checked={automationSettings.print_on_order_confirmed}
+                  onChange={(event) => {
+                    void patchAutomationSettings({ print_on_order_confirmed: event.target.checked });
+                  }}
+                />
+              </label>
+            </div>
+            <div className="mt-3 grid gap-2 md:max-w-xs">
+              <label className={selectFieldClass}>
+                <div className={cn("mb-1", typography.label)}>Overdue Threshold (minutes)</div>
+                <Input
+                  id="settings-overdue-threshold"
+                  name="overdueThresholdMinutes"
+                  type="number"
+                  min={5}
+                  max={240}
+                  step={1}
+                  value={String(automationSettings.overdue_threshold_minutes)}
+                  onChange={(event) => {
+                    const next = Number(event.target.value);
+                    setAutomationSettings((prev) =>
+                      prev
+                        ? {
+                            ...prev,
+                            overdue_threshold_minutes: Number.isFinite(next) ? Math.max(5, Math.min(240, next)) : 20,
+                          }
+                        : prev
+                    );
+                  }}
+                  onBlur={(event) => {
+                    const next = Number(event.target.value);
+                    void patchAutomationSettings({
+                      overdue_threshold_minutes: Number.isFinite(next) ? Math.max(5, Math.min(240, next)) : 20,
+                    });
+                  }}
+                />
+              </label>
+            </div>
+            {automationSettingsState === "saving" ? (
+              <div className="mt-3 rounded-xl border border-primary/30 bg-primary/10 px-3 py-2 text-xs text-primary">
+                Saving automation settings...
+              </div>
+            ) : null}
+            {automationSettingsState === "saved" ? (
+              <div className="mt-3 rounded-xl border border-emerald-300/30 bg-emerald-500/10 px-3 py-2 text-xs text-emerald-100">
+                Automation settings saved.
+              </div>
+            ) : null}
+            {automationSettingsError ? (
+              <div className="mt-3 rounded-xl border border-red-400/30 bg-red-500/10 px-3 py-2 text-xs text-red-200">
+                {automationSettingsError}
+              </div>
+            ) : null}
+          </DashboardPanel>
+        ) : null}
+        {canManageStaff ? (
         <DashboardPanel>
           <SectionHeader title="Waiter Management" subtitle="Create and maintain restaurant waiter identities for admin-side order entry." />
           <div className="grid gap-2 md:grid-cols-4">
@@ -400,6 +840,23 @@ export default function Settings() {
           </div>
           {waiterMessage ? <p className="mt-2 text-xs text-text-secondary/70">{waiterMessage}</p> : null}
         </DashboardPanel>
+        ) : null}
+        <ContentGrid columns="two">
+          <ActivityFeed
+            title="Settings History"
+            subtitle="Track who changed operational configuration."
+            items={settingsHistory}
+            loading={settingsHistoryLoading}
+            emptyMessage="No settings changes recorded yet."
+          />
+          <ApprovalQueue
+            items={approvals}
+            loading={approvalsLoading}
+            canReview={canReviewApprovals}
+            reviewingId={reviewingApprovalId}
+            onReview={handleReviewApproval}
+          />
+        </ContentGrid>
       </PageContainer>
     </DashboardLayout>
   );

@@ -93,7 +93,7 @@ export async function sendToBluetoothPrinter(payload: string[]): Promise<Bluetoo
 
   if (SHOULD_LOG_INFO) {
     // TODO: Replace preview delivery with real GATT/WebUSB/bridge transport write.
-    // eslint-disable-next-line no-console
+     
     console.info(`[BLUETOOTH PRINTER PREVIEW] ${printer.name}\n${payload.join("\n")}`);
   }
 

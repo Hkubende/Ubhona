@@ -1,12 +1,12 @@
 import * as React from "react";
 import { useNavigate } from "react-router-dom";
+import { Menu } from "lucide-react";
 import { Card } from "./components/ui/Card";
 import { Hero } from "./components/landing/Hero";
 import { InteractiveImageAccordion, type FeatureItem } from "./components/ui/interactive-image-accordion";
 import { MotionButton } from "./components/ui/motion-button";
 import { SecondaryButton } from "./components/ui/secondary-button";
-
-const LOGO_SRC = `${import.meta.env.BASE_URL}ubhona-logo.jpeg`;
+import { UbhonaLogo } from "./components/ui/ubhona-logo";
 
 const PREVIEW_ITEMS = [
   {
@@ -71,34 +71,74 @@ const FEATURE_HIGHLIGHTS: FeatureItem[] = [
 
 export default function App() {
   const navigate = useNavigate();
+  const scrollToSection = React.useCallback((id: string) => {
+    if (id === "home") {
+      window.scrollTo({ top: 0, behavior: "smooth" });
+      return;
+    }
+    const target = document.getElementById(id);
+    if (target) target.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, []);
 
   return (
     <div className="ubhona-landing-shell">
-      <div className="mx-auto max-w-6xl px-4 py-6 sm:px-6 lg:px-8">
-        <header className="ubhona-landing-header mb-8 flex items-center justify-between px-4 py-3">
-          <div className="flex items-center gap-3">
-            <img src={LOGO_SRC} alt="Ubhona" className="h-10 w-10 rounded-2xl object-cover" />
-            <div>
-              <div className="text-lg font-black">
-                <span className="text-primary">Ubhona</span>
-              </div>
-              <div className="text-xs text-text-secondary/90">Visualize</div>
-            </div>
+      <header className="ubhona-landing-header">
+        <div className="mx-auto flex h-[74px] w-full max-w-7xl items-center justify-between gap-4 px-6 sm:px-8 lg:px-10">
+          <div className="min-w-0 shrink-0">
+            <button
+              type="button"
+              onClick={() => scrollToSection("home")}
+              className="inline-flex items-center"
+              aria-label="Go to top"
+            >
+              <UbhonaLogo
+                size={32}
+                showWordmark
+                theme="dark"
+                className="max-w-full translate-y-[0.5px]"
+                ariaLabel="Ubhona logo"
+              />
+            </button>
           </div>
-          <div className="flex items-center gap-2">
-            <SecondaryButton
+          <nav className="hidden items-center gap-8 lg:flex">
+            <button type="button" onClick={() => scrollToSection("home")} className="ubhona-landing-nav-link">
+              Home
+            </button>
+            <button type="button" onClick={() => scrollToSection("feature-highlights")} className="ubhona-landing-nav-link">
+              Features
+            </button>
+            <button type="button" onClick={() => navigate("/pricing")} className="ubhona-landing-nav-link">
+              Pricing
+            </button>
+            <button type="button" onClick={() => scrollToSection("contact")} className="ubhona-landing-nav-link">
+              Contact
+            </button>
+          </nav>
+          <div className="flex shrink-0 items-center gap-2 sm:gap-3">
+            <button
+              type="button"
               onClick={() => navigate("/login")}
-              label="Sign In"
-              className="min-h-10 px-4 text-xs sm:text-sm"
-            />
+              className="hidden min-h-10 rounded-xl px-4 text-sm font-medium text-white/72 transition-colors duration-200 hover:text-white md:inline-flex md:items-center"
+            >
+              Sign In
+            </button>
             <MotionButton
               onClick={() => navigate("/signup")}
-              label="Sign Up"
-              className="min-h-10 px-4 text-xs sm:text-sm"
+              label="Get Started"
+              className="ubhona-landing-cta min-h-10 px-4 text-xs sm:px-5 sm:text-sm"
             />
+            <button
+              type="button"
+              className="inline-flex h-10 w-10 items-center justify-center rounded-xl text-white/78 transition-colors duration-200 hover:text-white lg:hidden"
+              aria-label="Open menu"
+            >
+              <Menu className="h-5 w-5" />
+            </button>
           </div>
-        </header>
+        </div>
+      </header>
 
+      <div className="mx-auto max-w-6xl px-4 py-6 sm:px-6 lg:px-8">
         <main>
           <Hero
             onGetStarted={() => navigate("/signup")}
@@ -110,7 +150,7 @@ export default function App() {
 
           <section
             id="feature-highlights"
-            className="mb-10 rounded-3xl border border-[#E4572E]/20 bg-gradient-to-br from-[#2B1E17]/55 via-black/70 to-[#2B1E17]/35 p-5 sm:p-6"
+            className="mb-10 rounded-3xl border border-[#FF6A1A]/20 bg-gradient-to-br from-[#2B1E17]/55 via-black/70 to-[#2B1E17]/35 p-5 sm:p-6"
           >
             <div className="mt-1 grid gap-5 lg:grid-cols-[minmax(260px,320px)_minmax(0,1fr)] lg:items-stretch">
               <div className="min-w-0 p-1 lg:flex lg:h-full lg:flex-col lg:justify-center lg:pr-5">
@@ -172,7 +212,7 @@ export default function App() {
             </div>
           </section>
 
-          <section className="ubhona-landing-section bg-[linear-gradient(112deg,rgba(228,87,46,0.2),rgba(13,11,11,0.95)_46%,rgba(8,7,7,0.96)_100%)] p-6 text-center">
+          <section id="contact" className="ubhona-landing-section bg-[linear-gradient(112deg,rgba(255,106,26,0.2),rgba(13,11,11,0.95)_46%,rgba(8,7,7,0.96)_100%)] p-6 text-center">
             <h2 className="text-2xl font-black text-[#FBF6EE]">Build your next menu experience with Ubhona</h2>
             <p className="mx-auto mt-3 max-w-2xl text-sm text-[#E8D8C3]/88">
               Show food better, increase confidence before checkout, and move faster from menu to order.

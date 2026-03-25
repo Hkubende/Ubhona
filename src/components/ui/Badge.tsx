@@ -8,9 +8,9 @@ const badgeVariants = cva(
     variants: {
       variant: {
         neutral: "border-border/80 bg-[linear-gradient(180deg,rgba(255,248,241,0.06),rgba(255,255,255,0.03))] text-text-primary/85",
-        accent: "border-primary/40 bg-[linear-gradient(180deg,rgba(228,87,46,0.22),rgba(121,48,25,0.18))] text-text-primary",
-        success: "border-secondary-accent/35 bg-[linear-gradient(180deg,rgba(245,138,31,0.2),rgba(128,70,16,0.18))] text-text-primary",
-        warning: "border-secondary-accent/35 bg-[linear-gradient(180deg,rgba(245,138,31,0.2),rgba(128,70,16,0.16))] text-text-primary",
+        accent: "border-primary/40 bg-[linear-gradient(180deg,rgba(255,106,26,0.24),rgba(122,49,18,0.18))] text-text-primary",
+        success: "border-success/35 bg-[linear-gradient(180deg,rgba(46,230,166,0.2),rgba(27,196,125,0.16))] text-text-primary",
+        warning: "border-primary/35 bg-[linear-gradient(180deg,rgba(255,106,26,0.2),rgba(122,49,18,0.16))] text-text-primary",
         danger: "border-error/35 bg-[linear-gradient(180deg,rgba(211,106,89,0.2),rgba(102,43,37,0.16))] text-red-100",
       },
     },

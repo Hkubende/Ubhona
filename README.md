@@ -178,3 +178,5 @@ GitHub Pages (`https://hkubende.github.io/Ubhona/`):
 - Keep `VITE_API_BASE` empty for static/demo mode unless a real backend is available.
 
 More deployment details: `docs/deployment.md`.
+
+Environment matrix (local/staging/production): `docs/env-matrix.md`.

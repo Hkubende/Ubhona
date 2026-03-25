@@ -59,7 +59,7 @@ export function UbhonaDropdown({
           id={id}
           type="button"
           className={cn(
-            `inline-flex h-10 w-full items-center justify-between gap-2 rounded-2xl border border-border/80 bg-[linear-gradient(180deg,rgba(255,248,241,0.05),rgba(255,255,255,0.02))] px-3 text-sm font-medium text-text-primary shadow-[inset_0_1px_0_rgba(255,248,241,0.05)] outline-none hover:border-primary/45 focus-visible:ring-2 focus-visible:ring-primary/50 ${motion.standard}`,
+            `inline-flex min-h-11 w-full items-center justify-between gap-2 rounded-xl border border-border bg-[linear-gradient(180deg,rgba(20,16,16,0.98),rgba(13,11,11,0.97))] px-3 text-sm font-medium text-text-primary shadow-[inset_0_1px_0_rgba(255,255,255,0.03)] outline-none hover:border-primary/45 focus-visible:ring-2 focus-visible:ring-primary/50 ${motion.standard}`,
             triggerClassName,
             className
           )}
@@ -76,7 +76,7 @@ export function UbhonaDropdown({
           align={align}
           sideOffset={8}
           className={cn(
-            "z-[80] w-[min(22rem,var(--radix-popover-trigger-width))] rounded-2xl border border-border/80 bg-[linear-gradient(180deg,rgba(38,26,20,0.98),rgba(24,18,15,0.96))] p-2 text-text-primary shadow-elevated outline-none",
+            "z-50 w-[min(22rem,var(--radix-popover-trigger-width))] rounded-2xl border border-border/80 bg-[linear-gradient(180deg,rgba(38,26,20,0.98),rgba(24,18,15,0.96))] p-2 text-text-primary shadow-elevated outline-none",
             "data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=open]:fade-in-0 data-[state=closed]:fade-out-0",
             "data-[state=open]:zoom-in-95 data-[state=closed]:zoom-out-95",
             contentClassName

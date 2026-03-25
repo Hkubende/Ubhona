@@ -1,6 +1,8 @@
 import * as React from "react";
 import {
   BarChart3,
+  Boxes,
+  LayoutGrid,
   CreditCard,
   LifeBuoy,
   LayoutDashboard,
@@ -19,7 +21,7 @@ import { logoutUser } from "../../lib/auth";
 import { getRestaurantBranding, type RestaurantProfile } from "../../lib/restaurant";
 import { canAccessDashboardRoute, getPrimaryDashboardRole } from "../../lib/roles";
 import type { DashboardRole } from "../../types/roles";
-import { AppShell } from "../layout/AppShell";
+import { AppLayout } from "../layout/AppLayout";
 import { Button } from "../ui/Button";
 import { DashboardContent } from "./layout/dashboard-content";
 import { DashboardSidebar } from "./layout/dashboard-sidebar";
@@ -47,22 +49,46 @@ const CONTROL_CENTER_NAV: DashboardNavItem[] = [
   { to: "/dashboard", label: "Overview", icon: LayoutDashboard, group: "core" },
   { to: "/dashboard/menu", label: "Menu", icon: UtensilsCrossed, group: "core" },
   { to: "/dashboard/orders", label: "Orders", icon: ShoppingBag, group: "core" },
+  { to: "/dashboard/kitchen", label: "Kitchen", icon: UtensilsCrossed, group: "core" },
+  { to: "/dashboard/staff-orders", label: "Staff Board", icon: Users2, group: "core" },
   { to: "/dashboard/analytics", label: "Analytics", icon: BarChart3, group: "core" },
+  { to: "/dashboard/inventory", label: "Inventory", icon: Boxes, group: "core" },
+  { to: "/dashboard/floor", label: "Floor", icon: LayoutGrid, group: "core" },
   { to: "/dashboard/branding", label: "Branding", icon: Palette, group: "ops" },
   { to: "/dashboard/staff", label: "Staff", icon: Users2, group: "ops" },
   { to: "/dashboard/printing", label: "Printing", icon: Printer, group: "ops" },
   { to: "/dashboard/payments", label: "Payments", icon: CreditCard, group: "ops" },
+  { to: "/dashboard/billing", label: "Billing", icon: CreditCard, group: "ops" },
+  { to: "/dashboard/settings", label: "Settings", icon: Settings, group: "ops" },
+];
+
+const MANAGER_NAV: DashboardNavItem[] = [
+  { to: "/dashboard", label: "Overview", icon: LayoutDashboard, group: "core" },
+  { to: "/dashboard/menu", label: "Menu", icon: UtensilsCrossed, group: "core" },
+  { to: "/dashboard/orders", label: "Orders", icon: ShoppingBag, group: "core" },
+  { to: "/dashboard/kitchen", label: "Kitchen", icon: UtensilsCrossed, group: "core" },
+  { to: "/dashboard/staff-orders", label: "Staff Board", icon: Users2, group: "core" },
+  { to: "/dashboard/analytics", label: "Analytics", icon: BarChart3, group: "core" },
+  { to: "/dashboard/inventory", label: "Inventory", icon: Boxes, group: "core" },
+  { to: "/dashboard/floor", label: "Floor", icon: LayoutGrid, group: "core" },
+  { to: "/dashboard/staff", label: "Staff", icon: Users2, group: "ops" },
+  { to: "/dashboard/printing", label: "Printing", icon: Printer, group: "ops" },
   { to: "/dashboard/settings", label: "Settings", icon: Settings, group: "ops" },
 ];
 
 const ROLE_NAV: Record<DashboardRole, DashboardNavItem[]> = {
   owner: CONTROL_CENTER_NAV,
   admin: CONTROL_CENTER_NAV,
-  manager: CONTROL_CENTER_NAV,
+  manager: MANAGER_NAV,
   waiter: [
+    { to: "/dashboard/floor", label: "Floor", icon: LayoutGrid },
+    { to: "/dashboard/staff-orders", label: "Staff Board", icon: ShoppingBag },
+    { to: "/dashboard/orders/new", label: "New Order", icon: Menu },
+    { to: "/dashboard/orders", label: "Orders", icon: ShoppingBag },
     { to: "/staff", label: "Staff Desk", icon: Users2 },
   ],
   kitchen: [
+    { to: "/dashboard/kitchen", label: "Kitchen Display", icon: LayoutDashboard },
     { to: "/kitchen", label: "Kitchen Desk", icon: UtensilsCrossed },
   ],
   cashier: [
@@ -204,7 +230,7 @@ export function DashboardLayout({
 
   return (
     <TooltipProvider>
-      <AppShell
+      <AppLayout
         sidebar={
           <DashboardSidebar collapsed={sidebarCollapsed}>
             <div className={cn("flex h-full flex-col", tokens.classes.accentRail)}>
@@ -315,7 +341,7 @@ export function DashboardLayout({
             </div>
           </div>
         ) : null}
-      </AppShell>
+      </AppLayout>
     </TooltipProvider>
   );
 }

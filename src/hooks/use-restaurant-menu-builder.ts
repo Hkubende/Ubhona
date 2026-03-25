@@ -33,8 +33,8 @@ type UseRestaurantMenuBuilderState = {
   createCategory: (input: MenuCategoryInput) => Promise<void>;
   editCategory: (id: string, input: MenuCategoryInput) => Promise<void>;
   removeCategory: (id: string) => Promise<void>;
-  createDish: (input: MenuDishInput) => Promise<void>;
-  editDish: (id: string, input: MenuDishInput) => Promise<void>;
+  createDish: (input: MenuDishInput) => Promise<boolean>;
+  editDish: (id: string, input: MenuDishInput) => Promise<boolean>;
   removeDish: (id: string) => Promise<void>;
 };
 
@@ -62,6 +62,7 @@ function mapDish(row: RestaurantDish): Dish {
     imageUrl: row.thumb,
     modelUrl: row.model || undefined,
     available: row.isAvailable,
+    stock: row.stock || null,
   };
 }
 
@@ -163,7 +164,7 @@ export function useRestaurantMenuBuilder(): UseRestaurantMenuBuilderState {
       const validationError = validateDishInput(input);
       if (validationError) {
         setError(validationError);
-        return;
+        return false;
       }
       setSaving(true);
       setError("");
@@ -178,8 +179,10 @@ export function useRestaurantMenuBuilder(): UseRestaurantMenuBuilderState {
           isAvailable: input.available,
         });
         await refresh();
+        return true;
       } catch (err) {
         setError(err instanceof Error ? err.message : "Failed to create dish.");
+        return false;
       } finally {
         setSaving(false);
       }
@@ -192,7 +195,7 @@ export function useRestaurantMenuBuilder(): UseRestaurantMenuBuilderState {
       const validationError = validateDishInput(input);
       if (validationError) {
         setError(validationError);
-        return;
+        return false;
       }
       setSaving(true);
       setError("");
@@ -207,8 +210,10 @@ export function useRestaurantMenuBuilder(): UseRestaurantMenuBuilderState {
           isAvailable: input.available,
         });
         await refresh();
+        return true;
       } catch (err) {
         setError(err instanceof Error ? err.message : "Failed to update dish.");
+        return false;
       } finally {
         setSaving(false);
       }
@@ -248,4 +253,3 @@ export function useRestaurantMenuBuilder(): UseRestaurantMenuBuilderState {
     removeDish,
   };
 }
-

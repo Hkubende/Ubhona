@@ -5,7 +5,14 @@ export type AuthUser = {
   id: string;
   name: string;
   email: string;
-  role: "platform_admin" | "restaurant_owner" | "restaurant_manager" | "staff";
+  role:
+    | "platform_admin"
+    | "restaurant_owner"
+    | "restaurant_admin"
+    | "restaurant_manager"
+    | "restaurant_waiter"
+    | "restaurant_kitchen"
+    | "staff";
   createdAt: string;
 };
 
@@ -57,7 +64,10 @@ function normalizeRole(value: unknown): AuthUser["role"] {
   if (
     role === "platform_admin" ||
     role === "restaurant_owner" ||
+    role === "restaurant_admin" ||
     role === "restaurant_manager" ||
+    role === "restaurant_waiter" ||
+    role === "restaurant_kitchen" ||
     role === "staff"
   ) {
     return role;

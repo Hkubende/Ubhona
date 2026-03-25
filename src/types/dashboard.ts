@@ -5,8 +5,8 @@ export type Restaurant = {
   email: string;
   phone: string;
   location: string;
-  subscriptionPlan?: "starter" | "pro" | "enterprise";
-  subscriptionStatus?: "trialing" | "active" | "past_due" | "canceled" | "suspended";
+  subscriptionPlan?: "starter" | "growth" | "pro";
+  subscriptionStatus?: "trialing" | "active" | "past_due" | "cancelled" | "expired";
   logoUrl?: string;
   coverImageUrl?: string;
   primaryColor?: string;
@@ -31,10 +31,17 @@ export type Dish = {
   imageUrl?: string;
   modelUrl?: string;
   available: boolean;
+  stock?: {
+    branchId: string;
+    availability_status: "available" | "low_stock" | "unavailable";
+    stock_quantity: number | null;
+    low_stock_threshold: number;
+    hidden_from_public_menu: boolean;
+  } | null;
   popularityCount?: number;
 };
 
-export type OrderStatus = "pending" | "confirmed" | "preparing" | "ready" | "completed";
+export type OrderStatus = "pending" | "confirmed" | "preparing" | "ready" | "completed" | "cancelled";
 
 export type OrderItem = {
   dishId: string;

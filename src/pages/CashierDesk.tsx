@@ -87,7 +87,7 @@ export default function CashierDeskPage() {
       location: restaurant.location,
       logo: restaurant.logoUrl,
       coverImage: restaurant.coverImageUrl,
-      themePrimary: restaurant.primaryColor || "#E4572E",
+      themePrimary: restaurant.primaryColor || "#FF6A1A",
       themeSecondary: "#E8D8C3",
       shortDescription: restaurant.description,
       subscriptionPlan: restaurant.subscriptionPlan || "starter",

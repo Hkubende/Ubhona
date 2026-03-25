@@ -1,14 +1,17 @@
 import { buildCartLines, type Cart } from "./cart";
 import type { Dish } from "./dishes";
 import { api } from "./api";
+import { canCreateOrderWithPlan, recordOrderCreated, recordPaymentUpdate } from "./growth";
+import { emitOrderRealtimeEvent } from "./orders-realtime";
 
-export type OrderStatus = "pending" | "confirmed" | "preparing" | "ready" | "completed";
+export type OrderStatus = "pending" | "confirmed" | "preparing" | "ready" | "completed" | "cancelled";
 export const ORDER_STATUS_OPTIONS: OrderStatus[] = [
   "pending",
   "confirmed",
   "preparing",
   "ready",
   "completed",
+  "cancelled",
 ];
 
 export type OrderPaymentMethod = "manual_mpesa" | "stk_push";
@@ -43,12 +46,44 @@ export type Order = {
   takenByWaiterName?: string;
 };
 
+export type PublicOrderTracking = {
+  id: string;
+  status: string;
+  createdAt: string;
+  totalAmount: number;
+  paymentStatus: string;
+  paymentMethod: string;
+  paymentReference: string;
+  customerName?: string | null;
+  customerPhone?: string | null;
+  tableNumber?: string | null;
+  estimatedMinutes?: number;
+  restaurant: {
+    id: string;
+    name: string;
+    slug: string;
+    phone?: string | null;
+    location?: string | null;
+  };
+  items: Array<{
+    id: string;
+    dishId: string;
+    name: string;
+    quantity: number;
+    unitPrice: number;
+    subtotal: number;
+  }>;
+};
+
 export type StorefrontCreateOrderPayload = {
   restaurantId: string;
+  branchId?: string;
   restaurantSlug?: string;
   items: Array<{ dishId: string; quantity: number }>;
   customerName?: string;
   customerPhone?: string;
+  whatsappNumber?: string;
+  whatsappOptIn?: boolean;
   tableNumber?: string;
   customerNotes?: string;
   createdAt?: string;
@@ -71,6 +106,7 @@ export type StorefrontCreateOrderPayload = {
 };
 
 export const ORDERS_KEY = "mv_orders_v1";
+const ORDER_TRACKING_TOKENS_KEY = "mv_order_tracking_tokens_v1";
 
 type LooseRecord = Record<string, unknown>;
 
@@ -81,6 +117,37 @@ function toRecord(value: unknown): LooseRecord {
 
 function writeCache(orders: Order[]) {
   localStorage.setItem(ORDERS_KEY, JSON.stringify(orders));
+}
+
+function readTrackingTokens(): Record<string, string> {
+  try {
+    const raw = JSON.parse(localStorage.getItem(ORDER_TRACKING_TOKENS_KEY) || "{}");
+    if (!raw || typeof raw !== "object" || Array.isArray(raw)) return {};
+    const out: Record<string, string> = {};
+    for (const [orderId, token] of Object.entries(raw as Record<string, unknown>)) {
+      if (typeof token !== "string" || !token.trim()) continue;
+      out[String(orderId)] = token.trim();
+    }
+    return out;
+  } catch {
+    return {};
+  }
+}
+
+function writeTrackingTokens(tokens: Record<string, string>) {
+  localStorage.setItem(ORDER_TRACKING_TOKENS_KEY, JSON.stringify(tokens));
+}
+
+function saveOrderTrackingToken(orderId: string, token: string) {
+  if (!orderId || !token) return;
+  const existing = readTrackingTokens();
+  existing[orderId] = token;
+  writeTrackingTokens(existing);
+}
+
+export function getOrderTrackingToken(orderId: string) {
+  const row = readTrackingTokens();
+  return row[String(orderId || "").trim()] || "";
 }
 
 function sortOrders(rows: Order[]) {
@@ -369,14 +436,19 @@ function createLocalStorefrontOrder(payload: StorefrontCreateOrderPayload): Orde
 }
 
 export async function createStorefrontOrder(payload: StorefrontCreateOrderPayload): Promise<string> {
+  const orderLimitGate = canCreateOrderWithPlan(payload.restaurantId);
+  if (!orderLimitGate.allowed) throw new Error(orderLimitGate.reason);
   const trimmedPayload = {
     restaurantId: payload.restaurantId,
+    branchId: payload.branchId?.trim() || "",
     restaurantSlug: payload.restaurantSlug?.trim() || "",
     items: payload.items,
     subtotalAmount: payload.subtotalAmount ?? payload.totalAmount ?? 0,
     totalAmount: payload.totalAmount ?? 0,
     customerName: payload.customerName?.trim() || "",
     customerPhone: payload.customerPhone?.trim() || "",
+    whatsappNumber: payload.whatsappNumber?.trim() || "",
+    whatsappOptIn: Boolean(payload.whatsappOptIn),
     tableNumber: payload.tableNumber?.trim() || "",
     customerNotes: payload.customerNotes?.trim() || "",
     createdAt: payload.createdAt || new Date().toISOString(),
@@ -393,16 +465,30 @@ export async function createStorefrontOrder(payload: StorefrontCreateOrderPayloa
     const row = toRecord(response);
     const orderId = String(row.orderId || row.id || "");
     if (!orderId) throw new Error("Order was created but no order ID was returned.");
+    const trackingToken = String(row.trackingToken || "").trim();
+    if (trackingToken) saveOrderTrackingToken(orderId, trackingToken);
 
     const localOrder = createLocalStorefrontOrder(payload);
     localOrder.id = orderId;
     const next = [localOrder, ...readCache().filter((order) => order.id !== orderId)];
     writeCache(next);
+    recordOrderCreated(localOrder.restaurantId || payload.restaurantId, localOrder.total, localOrder.createdAt);
+    emitOrderRealtimeEvent({
+      restaurantId: localOrder.restaurantId || payload.restaurantId,
+      orderId,
+      reason: "order_created",
+    });
     return orderId;
   } catch {
     const order = createLocalStorefrontOrder(payload);
     const next = [order, ...readCache().filter((item) => item.id !== order.id)];
     writeCache(next);
+    recordOrderCreated(order.restaurantId || payload.restaurantId, order.total, order.createdAt);
+    emitOrderRealtimeEvent({
+      restaurantId: order.restaurantId || payload.restaurantId,
+      orderId: order.id,
+      reason: "order_created_offline",
+    });
     return order.id;
   }
 }
@@ -426,7 +512,16 @@ export function setLocalStorefrontOrderPayment(
     };
   });
   writeCache(next);
-  return next.find((order) => order.id === orderId && order.restaurantId === restaurantId) || null;
+  const updated = next.find((order) => order.id === orderId && order.restaurantId === restaurantId) || null;
+  if (updated) {
+    recordPaymentUpdate(updated, payment.paymentStatus);
+    emitOrderRealtimeEvent({
+      restaurantId,
+      orderId,
+      reason: "payment_updated",
+    });
+  }
+  return updated;
 }
 
 export async function getStorefrontOrder(orderId: string, restaurantId: string): Promise<Order> {
@@ -442,6 +537,85 @@ export async function getStorefrontOrder(orderId: string, restaurantId: string):
     const row = readCache().find((order) => order.id === orderId && order.restaurantId === restaurantId);
     if (!row) throw new Error("Order not found.");
     return row;
+  }
+}
+
+export async function getPublicOrderTracking(orderId: string, trackingToken?: string): Promise<PublicOrderTracking> {
+  try {
+    const effectiveToken = String(trackingToken || "").trim() || getOrderTrackingToken(orderId);
+    if (effectiveToken) {
+      saveOrderTrackingToken(orderId, effectiveToken);
+    }
+    const suffix = effectiveToken ? `?token=${encodeURIComponent(effectiveToken)}` : "";
+    const response = await api.get<unknown>(`/orders/${encodeURIComponent(orderId)}/public${suffix}`);
+    const row = toRecord(response);
+    const items = Array.isArray(row.items)
+      ? row.items
+          .map((value) => {
+            const item = toRecord(value);
+            return {
+              id: String(item.id || ""),
+              dishId: String(item.dishId || ""),
+              name: String(item.name || "Dish"),
+              quantity: Number(item.quantity || 0),
+              unitPrice: Number(item.unitPrice || 0),
+              subtotal: Number(item.subtotal || 0),
+            };
+          })
+          .filter((item) => item.id && item.dishId && item.quantity > 0)
+      : [];
+    const restaurant = toRecord(row.restaurant);
+    return {
+      id: String(row.id || orderId),
+      status: String(row.status || "pending"),
+      createdAt: String(row.createdAt || new Date().toISOString()),
+      totalAmount: Number(row.totalAmount || 0),
+      paymentStatus: String(row.paymentStatus || "pending"),
+      paymentMethod: String(row.paymentMethod || "manual_mpesa"),
+      paymentReference: String(row.paymentReference || ""),
+      customerName: row.customerName ? String(row.customerName) : null,
+      customerPhone: row.customerPhone ? String(row.customerPhone) : null,
+      tableNumber: row.tableNumber ? String(row.tableNumber) : null,
+      estimatedMinutes: Number.isFinite(Number(row.estimatedMinutes)) ? Number(row.estimatedMinutes) : undefined,
+      restaurant: {
+        id: String(restaurant.id || ""),
+        name: String(restaurant.name || "Restaurant"),
+        slug: String(restaurant.slug || ""),
+        phone: restaurant.phone ? String(restaurant.phone) : null,
+        location: restaurant.location ? String(restaurant.location) : null,
+      },
+      items,
+    };
+  } catch {
+    const cached = readCache().find((order) => order.id === orderId);
+    if (!cached) throw new Error("Order not found.");
+    return {
+      id: cached.id,
+      status: cached.status,
+      createdAt: cached.createdAt,
+      totalAmount: cached.total,
+      paymentStatus: cached.paymentStatus,
+      paymentMethod: cached.paymentMethod,
+      paymentReference: cached.paymentReference,
+      customerName: cached.customerName || null,
+      customerPhone: cached.customerPhone || null,
+      tableNumber: cached.tableNumber || null,
+      restaurant: {
+        id: cached.restaurantId || "local_restaurant",
+        name: "Restaurant",
+        slug: cached.restaurantSlug || "demo",
+        phone: null,
+        location: null,
+      },
+      items: cached.items.map((item, index) => ({
+        id: `${cached.id}-${index}`,
+        dishId: item.dishId,
+        name: item.name,
+        quantity: item.quantity,
+        unitPrice: item.unitPrice,
+        subtotal: item.subtotal,
+      })),
+    };
   }
 }
 
@@ -469,12 +643,22 @@ export async function updateOrderStatus(
       order.id === orderId && matchesRestaurant(order) ? { ...order, ...updated } : order
     );
     writeCache(next);
+    emitOrderRealtimeEvent({
+      restaurantId: params?.restaurantId,
+      orderId,
+      reason: "status_updated",
+    });
     return next;
   } catch {
     const next = readCache().map((order) =>
       order.id === orderId && matchesRestaurant(order) ? { ...order, status } : order
     );
     writeCache(next);
+    emitOrderRealtimeEvent({
+      restaurantId: params?.restaurantId,
+      orderId,
+      reason: "status_updated_offline",
+    });
     return next;
   }
 }

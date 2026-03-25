@@ -2,6 +2,7 @@ import * as React from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { signupUser } from "../lib/auth";
 import { hasRestaurantProfile, syncRestaurantProfile } from "../lib/restaurant";
+import { getDefaultRouteForRole, getPrimaryDashboardRole } from "../lib/roles";
 import { Button } from "../components/ui/Button";
 import { Card } from "../components/ui/Card";
 import { Input } from "../components/ui/Input";
@@ -37,7 +38,11 @@ export default function Signup() {
       return;
     }
     await syncRestaurantProfile();
-    navigate(hasRestaurantProfile() ? "/dashboard" : "/onboarding");
+    if (!hasRestaurantProfile()) {
+      navigate("/onboarding");
+      return;
+    }
+    navigate(getDefaultRouteForRole(getPrimaryDashboardRole(result.user)));
   };
 
   return (

@@ -52,7 +52,7 @@ export function UbhonaSelect({
       <SelectPrimitive.Trigger
         id={id}
         className={cn(
-          `inline-flex min-h-11 w-full items-center justify-between gap-2 rounded-2xl border border-[rgba(232,216,195,0.16)] bg-[linear-gradient(180deg,rgba(60,42,33,0.94),rgba(30,21,17,0.98))] px-3 text-sm font-medium text-[#FBF6EE] shadow-[0_14px_30px_rgba(14,10,8,0.26),inset_0_1px_0_rgba(255,248,241,0.06)] outline-none hover:border-primary/38 hover:bg-[linear-gradient(180deg,rgba(68,48,38,0.96),rgba(33,24,19,1))] focus-visible:border-primary/55 focus-visible:ring-2 focus-visible:ring-primary/45 focus-visible:ring-offset-1 focus-visible:ring-offset-[#1a120f] data-[placeholder]:text-[#E8D8C3]/68 disabled:cursor-not-allowed disabled:opacity-60 ${motion.standard}`,
+          `inline-flex min-h-11 w-full items-center justify-between gap-2 rounded-xl border border-border bg-[linear-gradient(180deg,rgba(20,16,16,0.98),rgba(13,11,11,0.97))] px-3 text-sm font-medium text-text-primary shadow-[inset_0_1px_0_rgba(255,255,255,0.03)] outline-none hover:border-primary/38 hover:bg-[linear-gradient(180deg,rgba(24,19,19,0.98),rgba(16,13,13,0.97))] focus-visible:border-primary/55 focus-visible:ring-2 focus-visible:ring-primary/45 focus-visible:ring-offset-1 focus-visible:ring-offset-[#1a120f] data-[placeholder]:text-text-secondary/68 disabled:cursor-not-allowed disabled:opacity-60 ${motion.standard}`,
           triggerClassName,
           className
         )}
@@ -68,7 +68,7 @@ export function UbhonaSelect({
           position="popper"
           sideOffset={8}
           className={cn(
-            "z-[80] min-w-[var(--radix-select-trigger-width)] overflow-hidden rounded-2xl border border-border/80 bg-[linear-gradient(180deg,rgba(38,26,20,0.98),rgba(24,18,15,0.96))] p-1 text-text-primary shadow-elevated",
+            "z-50 min-w-[var(--radix-select-trigger-width)] overflow-hidden rounded-2xl border border-border/80 bg-[linear-gradient(180deg,rgba(38,26,20,0.98),rgba(24,18,15,0.96))] p-1 text-text-primary shadow-elevated",
             "backdrop-blur-xl",
             "data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=open]:fade-in-0 data-[state=closed]:fade-out-0",
             "data-[state=open]:zoom-in-95 data-[state=closed]:zoom-out-95",

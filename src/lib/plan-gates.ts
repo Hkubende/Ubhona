@@ -10,6 +10,8 @@ export const PLAN_FEATURE_LABELS: Record<PlanFeature, string> = {
   ar: "AR Previews",
   customBranding: "Custom Branding",
   advancedAnalytics: "Advanced Analytics",
+  printing: "Printing",
+  waiterAccounts: "Waiter Accounts",
   staffAccounts: "Staff Accounts",
   multiBranch: "Multi-Branch",
 };

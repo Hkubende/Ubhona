@@ -19,8 +19,8 @@ export function DownloadHoverButton({
     <a
       href={href}
       className={cn(
-        "group inline-flex items-center gap-2 rounded-2xl border border-[#E4572E]/45",
-        "bg-[#E4572E] px-4 py-3 text-sm font-black text-black transition hover:bg-[#ff6d40]",
+        "group inline-flex items-center gap-2 rounded-2xl border border-[#FF6A1A]/45",
+        "bg-[#FF6A1A] px-4 py-3 text-sm font-black text-black transition hover:bg-[#ff6d40]",
         className
       )}
       download

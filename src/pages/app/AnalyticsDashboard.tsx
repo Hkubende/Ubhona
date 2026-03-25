@@ -50,7 +50,7 @@ export default function AnalyticsDashboard() {
       location: restaurant.location,
       logo: restaurant.logoUrl,
       coverImage: restaurant.coverImageUrl,
-      themePrimary: restaurant.primaryColor || "#E4572E",
+      themePrimary: restaurant.primaryColor || "#FF6A1A",
       themeSecondary: "#34d399",
       shortDescription: restaurant.description,
       subscriptionPlan: "starter",
@@ -60,6 +60,20 @@ export default function AnalyticsDashboard() {
       createdAt: new Date().toISOString(),
     };
   }, [restaurant]);
+
+  const chartSeries = React.useMemo(() => {
+    const base = summary?.popularDishes || [];
+    return base.slice(0, 6).map((dish) => ({
+      name: dish.name,
+      value: dish.count,
+      revenue: dish.revenue || 0,
+    }));
+  }, [summary?.popularDishes]);
+
+  const maxCount = React.useMemo(
+    () => Math.max(...chartSeries.map((point) => point.value), 1),
+    [chartSeries]
+  );
 
   return (
     <DashboardLayout
@@ -93,40 +107,87 @@ export default function AnalyticsDashboard() {
         <MetricCard label="Orders Placed" value={String(summary?.totalOrdersPlaced ?? 0)} tone="emerald" />
       </ContentGrid>
 
-      <ContentGrid columns="two">
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,1.55fr)_minmax(320px,1fr)]">
         <DashboardPanel>
-          <SectionHeader title="Top Dishes" subtitle="Most ordered menu items." />
-          {summary?.popularDishes.length ? (
-            <div className={spacing.stackSm}>
-              {summary.popularDishes.map((dish) => (
-                <div key={dish.dishId} className={cn(tokens.classes.panelInset, "px-3 py-2")}>
-                  <div className="flex items-center justify-between">
-                    <div className="font-semibold text-text-primary">{dish.name}</div>
-                    <div className="text-sm text-text-secondary">{dish.count} orders</div>
+          <SectionHeader
+            title="Order Volume Trend"
+            subtitle="Main analytics chart for current top-performing dishes."
+          />
+          {chartSeries.length ? (
+            <div className={cn(tokens.classes.panelInset, "space-y-3 p-4")}>
+              {chartSeries.map((point) => (
+                <div key={point.name} className="space-y-1">
+                  <div className="flex items-center justify-between text-xs text-text-secondary/80">
+                    <span className="truncate pr-2 text-text-primary">{point.name}</span>
+                    <span>{point.value} orders</span>
                   </div>
-                  <div className="text-xs text-text-secondary/68">Revenue {formatKsh(dish.revenue || 0)}</div>
+                  <div className="h-2 overflow-hidden rounded-full bg-white/[0.08]">
+                    <div
+                      className="h-full rounded-full bg-gradient-to-r from-primary to-primary-hover"
+                      style={{ width: `${Math.max((point.value / maxCount) * 100, 8)}%` }}
+                    />
+                  </div>
                 </div>
               ))}
             </div>
           ) : (
-            <EmptyStateCard message="No top dish analytics yet." />
+            <EmptyStateCard message="No trend data yet. Orders will populate chart bars." />
           )}
         </DashboardPanel>
+
         <DashboardPanel>
-          <SectionHeader title="Trend Blocks" subtitle="Placeholder cards ready for backend chart integration." />
-          <div className="grid gap-3 sm:grid-cols-2">
-            <div className={cn(tokens.classes.panelInset, "p-4 text-sm text-text-secondary/72")}>
-              AR Engagement summary placeholder
+          <SectionHeader
+            title="Engagement Mix"
+            subtitle="Secondary chart: conversion behavior snapshot."
+          />
+          <div className="grid gap-3">
+            <div className={cn(tokens.classes.panelInset, "p-4")}>
+              <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-text-secondary/72">
+                AR Opens vs Orders
+              </div>
+              <div className="flex items-end gap-2">
+                <div className="w-full">
+                  <div className="mb-1 text-[11px] text-text-secondary/70">AR Opens</div>
+                  <div
+                    className="h-2 rounded-full bg-success/70"
+                    style={{
+                      width: `${Math.min(
+                        100,
+                        ((summary?.arOpens ?? 0) / Math.max(summary?.totalDishViews ?? 1, 1)) * 100 * 2
+                      )}%`,
+                    }}
+                  />
+                </div>
+                <div className="w-full">
+                  <div className="mb-1 text-[11px] text-text-secondary/70">Orders</div>
+                  <div
+                    className="h-2 rounded-full bg-primary/80"
+                    style={{
+                      width: `${Math.min(
+                        100,
+                        ((summary?.totalOrdersPlaced ?? 0) / Math.max(summary?.totalDishViews ?? 1, 1)) * 100 * 2
+                      )}%`,
+                    }}
+                  />
+                </div>
+              </div>
             </div>
-            <div className={cn(tokens.classes.panelInset, "p-4 text-sm text-text-secondary/72")}>
-              Order trends summary placeholder
+            <div className={cn(tokens.classes.panelInset, "p-4 text-sm text-text-secondary/80")}>
+              <div className="mb-1 text-xs font-semibold uppercase tracking-wide text-text-secondary/72">
+                Quick Signal
+              </div>
+              <p>
+                {summary?.totalDishViews
+                  ? `${Math.round(((summary?.totalOrdersPlaced ?? 0) / Math.max(summary?.totalDishViews ?? 1, 1)) * 100)}% of dish views currently convert to orders.`
+                  : "No traffic yet to compute conversion signals."}
+              </p>
             </div>
           </div>
         </DashboardPanel>
-      </ContentGrid>
+      </div>
 
       <DashboardPanel>
-        <SectionHeader title="Recent Orders" subtitle="Most recent checkout activity from storefront." />
+        <SectionHeader title="Performance Table" subtitle="Most recent checkout activity with fulfillment state." />
         {loading ? (
           <div className={spacing.stackSm}>
             <div className="h-3 w-40 animate-pulse rounded bg-white/10" />
@@ -139,6 +200,7 @@ export default function AnalyticsDashboard() {
             <table className="min-w-full text-sm">
               <thead className={tokens.classes.tableHeader}>
                 <tr>
+                  <th className="px-3 py-2.5">Order</th>
                   <th className="px-3 py-2.5">Customer</th>
                   <th className="px-3 py-2.5">Status</th>
                   <th className="px-3 py-2.5">Total</th>
@@ -147,6 +209,7 @@ export default function AnalyticsDashboard() {
               <tbody>
                 {summary.recentOrders.map((order) => (
                   <tr key={order.id} className={tokens.classes.tableRow}>
+                    <td className="px-3 py-2.5 font-mono text-xs text-text-secondary/82">{order.id}</td>
                     <td className="px-3 py-2.5 font-semibold text-text-primary">{order.customerName || "Guest"}</td>
                     <td className="px-3 py-2.5 text-xs text-text-secondary/70 capitalize">{order.status}</td>
                     <td className="px-3 py-2.5 text-text-secondary">{formatKsh(order.total)}</td>

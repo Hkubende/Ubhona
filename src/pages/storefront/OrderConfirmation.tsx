@@ -9,20 +9,14 @@ import {
   printCustomerReceipt as printCustomerReceiptService,
   printPaymentReceipt as printPaymentReceiptService,
 } from "../../lib/print";
-import { BackButton } from "../../components/ui/back-button";
-import { Button } from "../../components/ui/Button";
-import { cn } from "../../lib/utils";
-import { tokens, typography } from "../../design-system";
-
-function formatKsh(value: number) {
-  return `KSh ${value.toLocaleString("en-KE")}`;
-}
+import { CheckoutSuccessPage } from "../../components/storefront/checkout-components";
 
 export default function OrderConfirmation() {
   const navigate = useNavigate();
   const { slug = "", orderId: orderIdParam = "" } = useParams();
   const [searchParams] = useSearchParams();
   const orderId = orderIdParam || searchParams.get("orderId") || "";
+  const trackingToken = searchParams.get("trackingToken") || "";
   const [restaurant, setRestaurant] = React.useState<PublicRestaurant | null>(null);
   const [order, setOrder] = React.useState<Order | null>(null);
   const [loading, setLoading] = React.useState(true);
@@ -86,6 +80,10 @@ export default function OrderConfirmation() {
 
   React.useEffect(() => {
     if (!restaurant || !order) return;
+    if (typeof window !== "undefined") {
+      const alreadyPrinted = sessionStorage.getItem(`ubhona:auto_printed_order:${order.id}`);
+      if (alreadyPrinted) return;
+    }
     const settings = getPrinterSettings();
     if (settings.printMode !== "auto") return;
     if (autoPrintedOrderRef.current) return;
@@ -95,6 +93,9 @@ export default function OrderConfirmation() {
     }
     if (settings.autoPrintCustomerReceiptOnOrder) {
       void printCustomerReceiptService(toPrintOrder(order, restaurant.name), { trigger: "auto" });
+    }
+    if (typeof window !== "undefined") {
+      sessionStorage.setItem(`ubhona:auto_printed_order:${order.id}`, "1");
     }
   }, [order, restaurant, toPrintOrder]);
 
@@ -122,89 +123,33 @@ export default function OrderConfirmation() {
   }
   if (!order) return <div className="ubhona-storefront-shell min-h-screen p-8 text-white/70">Order not found.</div>;
 
-  const primary = restaurant.themePrimary || "#E4572E";
-  const printReceipt = () => {
-    void printCustomerReceiptService(toPrintOrder(order, restaurant.name));
-  };
-  const handlePrintPaymentReceipt = () => {
-    void printPaymentReceiptService(toPrintOrder(order, restaurant.name));
-  };
-
   return (
-    <div className={tokens.classes.storefrontShell}>
-      <div className="mx-auto max-w-4xl px-4 py-6 sm:px-6 lg:px-8">
-        <div className={cn(tokens.classes.storefrontPanel, "p-6")}>
-          <div className={typography.label}>Order Confirmed</div>
-          <div className="text-2xl font-semibold tracking-[-0.04em]" style={{ color: primary }}>
-            Reference: {order.id}
-          </div>
-          <div className="mt-1 text-sm text-white/60">
-            Status: <span className="font-semibold text-amber-300">{order.status}</span>
-          </div>
-          <div className="mt-1 text-sm text-white/60">
-            Payment:{" "}
-            <span className="font-semibold text-cyan-200">
-              {getPaymentMethodLabel(order.paymentMethod)} - {order.paymentStatus}
-            </span>
-          </div>
-          <div className="mt-1 text-sm text-white/60">Payment Ref: {order.paymentReference || "Pending"}</div>
-          <div className="mt-1 text-sm text-white/60">
-            Submitted: {new Date(order.createdAt).toLocaleString("en-KE")}
-          </div>
-          {order.customerName ? <div className="mt-1 text-sm text-white/60">Customer: {order.customerName}</div> : null}
-          {order.customerPhone ? <div className="mt-1 text-sm text-white/60">Phone: {order.customerPhone}</div> : null}
-          {order.tableNumber ? <div className="mt-1 text-sm text-white/60">Table: {order.tableNumber}</div> : null}
-          {order.customerNotes ? <div className="mt-1 text-sm text-white/60">Notes: {order.customerNotes}</div> : null}
-
-          <div id="receipt-content" className={cn(tokens.classes.previewFrame, "mt-4 p-4")}>
-            <div className="mb-2 text-sm font-semibold text-white/80">Order Summary</div>
-            <div className="space-y-2">
-              {order.items.map((item) => (
-                <div key={`${order.id}-${item.dishId}`} className="flex items-center justify-between text-sm">
-                  <div>
-                    {item.quantity} x {item.name}
-                  </div>
-                  <div className="text-orange-300">{formatKsh(item.subtotal)}</div>
-                </div>
-              ))}
-            </div>
-            <div className="mt-4 flex items-center justify-between text-sm text-white/70">
-              <span>Subtotal</span>
-              <span>{formatKsh(order.subtotal)}</span>
-            </div>
-            <div className="mt-4 text-lg font-semibold">{formatKsh(order.total)}</div>
-          </div>
-
-          <div className="mt-5 flex flex-wrap gap-2">
-            <Button
-              onClick={() => navigate(`/r/${slug}`)}
-              variant="primary"
-              size="lg"
-            >
-              Done
-            </Button>
-            <Button
-              onClick={printReceipt}
-              variant="secondary"
-              size="lg"
-            >
-              Print Receipt
-            </Button>
-            <Button
-              onClick={handlePrintPaymentReceipt}
-              variant="secondary"
-              size="lg"
-            >
-              Print Payment Receipt
-            </Button>
-            <BackButton
-              label="Back to Menu"
-              fallbackHref={`/r/${slug}/menu`}
-              className="border-white/15 bg-white/[0.06] hover:bg-white/[0.12]"
-            />
-          </div>
-        </div>
-      </div>
-    </div>
+    <CheckoutSuccessPage
+      slug={slug}
+      restaurant={restaurant}
+      orderReference={order.id}
+      orderStatus={order.status}
+      paymentMethodLabel={getPaymentMethodLabel(order.paymentMethod)}
+      paymentStatus={order.paymentStatus}
+      paymentReference={order.paymentReference}
+      createdAt={order.createdAt}
+      customerName={order.customerName}
+      customerPhone={order.customerPhone}
+      tableNumber={order.tableNumber}
+      customerNotes={order.customerNotes}
+      total={order.total}
+      items={order.items}
+      onPrimary={() =>
+        navigate(
+          trackingToken
+            ? `/order/${encodeURIComponent(order.id)}?token=${encodeURIComponent(trackingToken)}`
+            : `/r/${slug}`
+        )
+      }
+      onSecondary={() => navigate(`/r/${slug}/menu`)}
+      onPrintPayment={() => {
+        void printPaymentReceiptService(toPrintOrder(order, restaurant.name));
+      }}
+    />
   );
 }

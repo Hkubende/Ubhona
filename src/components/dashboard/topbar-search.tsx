@@ -53,7 +53,7 @@ export function TopbarSearch({ items, className }: TopbarSearchProps) {
       </label>
 
       {open ? (
-        <div className="absolute left-0 right-0 top-[calc(100%+8px)] z-40 overflow-hidden rounded-xl border border-border bg-[linear-gradient(180deg,rgba(36,26,20,0.98),rgba(22,16,12,0.96))] shadow-elevated">
+        <div className="absolute left-0 right-0 top-[calc(100%+8px)] z-50 overflow-hidden rounded-xl border border-border bg-[linear-gradient(180deg,rgba(36,26,20,0.98),rgba(22,16,12,0.96))] shadow-elevated">
           {results.length ? (
             <div className="max-h-72 overflow-y-auto p-1.5">
               {results.map((item) => (

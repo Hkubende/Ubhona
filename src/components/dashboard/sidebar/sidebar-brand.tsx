@@ -19,7 +19,7 @@ export function SidebarBrand({
       size="icon"
       variant="ghost"
       onClick={onToggleCollapse}
-      className="h-9 w-9 shrink-0 rounded-xl border border-white/10 bg-white/[0.04] text-text-secondary hover:bg-white/[0.08] hover:text-text-primary"
+      className="h-9 w-9 shrink-0 rounded-xl border border-white/12 bg-white/[0.045] text-text-secondary shadow-[0_6px_18px_rgba(0,0,0,0.18)] hover:border-white/18 hover:bg-white/[0.08] hover:text-text-primary"
       aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
     >
       <Menu className="h-4 w-4" />
@@ -27,7 +27,7 @@ export function SidebarBrand({
   );
 
   return (
-    <div className={cn("mb-6 flex items-center px-2", collapsed ? "justify-center gap-2" : "gap-3")}>
+    <div className={cn("mb-5 flex items-center", collapsed ? "justify-center px-0" : "gap-3 px-2.5")}>
       {collapsed ? (
         <Tooltip>
           <TooltipTrigger asChild>{toggleButton}</TooltipTrigger>
@@ -36,16 +36,20 @@ export function SidebarBrand({
       ) : (
         toggleButton
       )}
-      <img src={LOGO_SRC} alt="Ubhona" className="h-9 w-9 shrink-0 rounded-xl object-cover ring-1 ring-white/10" />
-      <div className={cn(`min-w-0 ${motion.width}`, collapsed && "pointer-events-none w-0 overflow-hidden opacity-0")}>
-        <div className="text-base font-semibold tracking-[-0.03em]">
-          <span className="text-primary">Ubhona</span>
-        </div>
-        <div className="flex items-center gap-1 text-[11px] text-text-secondary/62">
-          <ShieldCheck className="h-3 w-3 text-text-secondary/65" />
-          Visualize operations
-        </div>
-      </div>
+      {!collapsed ? (
+        <>
+          <img src={LOGO_SRC} alt="Ubhona" className="h-9 w-9 shrink-0 rounded-xl object-cover ring-1 ring-white/10" />
+          <div className={cn(`min-w-0 ${motion.width}`)}>
+            <div className="text-base font-semibold tracking-[-0.03em]">
+              <span className="text-primary">Ubhona</span>
+            </div>
+            <div className="flex items-center gap-1 text-[11px] text-text-secondary/62">
+              <ShieldCheck className="h-3 w-3 text-text-secondary/65" />
+              Visualize operations
+            </div>
+          </div>
+        </>
+      ) : null}
     </div>
   );
 }

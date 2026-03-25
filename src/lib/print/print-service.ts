@@ -9,6 +9,7 @@ import { formatKitchenTicket } from "./format-kitchen-ticket";
 import { formatPaymentReceipt } from "./format-payment-receipt";
 import type { FormattedPrintDocument, PrintOrder } from "./models";
 import { getPrinterSettings } from "./printer-settings";
+import { getRestaurantProfile, isPaidPlan } from "../restaurant";
 
 export type PrintTrigger = "manual" | "auto";
 
@@ -21,7 +22,7 @@ export type PrintJobResult = {
 
 function applyFooterSetting(order: PrintOrder, lines: string[]) {
   const settings = getPrinterSettings();
-  if (settings.showBrandingFooter) return lines;
+  if (settings.showBrandingFooter || !isPaidPlan(getRestaurantProfile())) return lines;
   const hiddenFooter = (order.restaurant.footerText || "Powered by Ubhona").trim().toLowerCase();
   return lines.filter((line) => line.trim().toLowerCase() !== hiddenFooter);
 }

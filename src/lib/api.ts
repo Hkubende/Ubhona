@@ -4,7 +4,7 @@ const API_BASE = appConfig.apiUrl.replace(/\/+$/, "");
 const API_NOT_CONFIGURED_MESSAGE = "API is not configured. Running in static/demo mode.";
 const API_UNREACHABLE_MESSAGE = "API is unreachable. Running in static/demo mode.";
 const API_RECHECK_MS = 30_000;
-const SHOULD_LOG_INFO = import.meta.env.DEV;
+const SHOULD_LOG_INFO = import.meta.env.DEV && import.meta.env.VITE_LOG_API_INFO === "true";
 let hasWarnedApiNotConfigured = false;
 let hasWarnedApiUnreachable = false;
 let reachabilityState: "unknown" | "reachable" | "unreachable" = "unknown";

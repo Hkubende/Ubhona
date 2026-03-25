@@ -13,7 +13,7 @@ type SecondaryButtonProps = {
 };
 
 const baseClass =
-  "inline-flex min-h-11 items-center justify-center rounded-full border border-[rgba(232,216,195,0.38)] bg-[linear-gradient(180deg,rgba(23,18,17,0.95),rgba(12,10,10,0.92))] px-6 py-3 text-sm font-semibold text-[#F7F1E8] shadow-[inset_0_1px_0_rgba(255,248,241,0.08),0_12px_26px_rgba(0,0,0,0.28)] backdrop-blur-sm transition hover:-translate-y-0.5 hover:border-primary/55 hover:bg-[linear-gradient(180deg,rgba(31,24,22,0.95),rgba(15,12,12,0.94))] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/55 disabled:cursor-not-allowed disabled:opacity-50";
+  "inline-flex min-h-11 items-center justify-center rounded-full border border-[rgba(232,216,195,0.38)] bg-[linear-gradient(180deg,rgba(23,18,17,0.95),rgba(12,10,10,0.92))] px-6 py-3 text-sm font-semibold text-[#F7F1E8] shadow-[inset_0_1px_0_rgba(255,248,241,0.08),0_12px_26px_rgba(0,0,0,0.28)] backdrop-blur-sm transition-all duration-300 ease-out hover:-translate-y-[1px] hover:border-primary/50 hover:bg-[linear-gradient(180deg,rgba(29,23,21,0.95),rgba(14,11,11,0.94))] hover:shadow-[inset_0_1px_0_rgba(255,248,241,0.1),0_16px_30px_rgba(0,0,0,0.3)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 disabled:cursor-not-allowed disabled:opacity-50";
 
 export function SecondaryButton({
   label,

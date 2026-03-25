@@ -98,7 +98,7 @@ export default function RestaurantHome() {
     );
   }
 
-  const primary = restaurant.themePrimary || "#E4572E";
+  const primary = restaurant.themePrimary || "#FF6A1A";
   const secondary = restaurant.themeSecondary || "#E8D8C3";
 
   return (
@@ -201,6 +201,9 @@ export default function RestaurantHome() {
             </Button>
           </div>
         </Card>
+        <div className="mt-4 text-center text-xs font-semibold uppercase tracking-[0.14em] text-[#B8AEA3]/75">
+          Powered by Ubhona
+        </div>
       </div>
     </div>
   );

@@ -7,6 +7,7 @@ function formatKsh(value: number) {
 
 function statusChipClass(status: string) {
   if (status === "completed") return "border-emerald-400/35 bg-emerald-500/20 text-emerald-200";
+  if (status === "cancelled") return "border-red-400/35 bg-red-500/20 text-red-200";
   if (status === "ready") return "border-cyan-400/35 bg-cyan-500/20 text-cyan-200";
   if (status === "preparing") return "border-orange-400/35 bg-orange-500/20 text-orange-200";
   if (status === "confirmed") return "border-indigo-400/35 bg-indigo-500/20 text-indigo-200";
@@ -59,7 +60,7 @@ export default function OrderCard({ order, expanded, onToggleExpanded, onSetStat
               </div>
             ))}
           </div>
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-6">
             {ORDER_STATUS_OPTIONS.map((status) => {
               const active = order.status === status;
               return (

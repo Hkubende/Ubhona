@@ -137,8 +137,10 @@ export async function loadRestaurantDishes(): Promise<Dish[]> {
       name: String(dish.name || ""),
       price: Number(dish.price || 0),
       desc: String(dish.description || dish.desc || ""),
-      model: withBase(await resolveLocalAssetPath(String(dish.modelUrl || dish.model || ""))),
-      thumb: withBase(await resolveLocalAssetPath(String(dish.thumbUrl || dish.thumb || ""))),
+      model: withBase(await resolveLocalAssetPath(String(dish.model_url || dish.modelUrl || dish.model || ""))),
+      thumb: withBase(
+        await resolveLocalAssetPath(String(dish.thumbnail_url || dish.thumbnailUrl || dish.thumbUrl || dish.thumb || ""))
+      ),
     }))
   );
 }

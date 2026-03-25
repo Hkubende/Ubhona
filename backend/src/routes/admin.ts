@@ -5,6 +5,7 @@ import { prisma } from "../prisma.js";
 import { requireAdmin } from "../middleware/auth.js";
 import type { AuthRequest } from "../types.js";
 import { logAuditEvent } from "../services/audit.service.js";
+import { confirmManualPayment, ensureBillingStateForRestaurant, markInvoiceManualPayment } from "../services/billing.service.js";
 
 export const adminRouter = Router();
 adminRouter.use(requireAdmin);
@@ -282,6 +283,107 @@ adminRouter.get("/metrics", async (_req, res) => {
     planBreakdown: plansAgg.map((row) => ({ plan: row.subscriptionPlan, count: row._count._all })),
     statusBreakdown: statusAgg.map((row) => ({ status: row.subscriptionStatus, count: row._count._all })),
   });
+});
+
+adminRouter.get("/billing-overview", async (_req, res) => {
+  const restaurants = await prisma.restaurant.findMany({
+    select: {
+      id: true,
+      name: true,
+      subscriptionPlan: true,
+      subscriptionStatus: true,
+      createdAt: true,
+      trialEndsAt: true,
+      renewalDate: true,
+    },
+    orderBy: { createdAt: "desc" },
+    take: 30,
+  });
+  const rows = await Promise.all(
+    restaurants.map(async (restaurant) => {
+      const state = await ensureBillingStateForRestaurant(restaurant);
+      const latestInvoice = state.invoices[0] || null;
+      const latestPayment = state.payments[0] || null;
+      const outstandingBalance = state.invoices
+        .filter((invoice) => invoice.status === "pending" || invoice.status === "draft")
+        .reduce((sum, invoice) => sum + invoice.amount, 0);
+      return {
+        restaurantId: restaurant.id,
+        restaurantName: restaurant.name,
+        currentPlan: state.subscription.planId,
+        trialEndDate: state.subscription.trialEndsAt,
+        subscriptionStatus: state.subscription.status,
+        latestInvoice,
+        latestPayment,
+        lastPaymentMethod: latestPayment?.method || null,
+        outstandingBalance,
+      };
+    })
+  );
+  res.json(rows);
+});
+
+adminRouter.post("/billing/restaurants/:restaurantId/invoices/:invoiceId/manual-mark", async (req: AuthRequest, res) => {
+  try {
+    const params = z.object({ restaurantId: z.string().min(1), invoiceId: z.string().min(1) }).parse(req.params);
+    const body = z.object({ notes: z.string().max(500).optional() }).parse(req.body || {});
+    const restaurant = await prisma.restaurant.findUnique({
+      where: { id: params.restaurantId },
+      select: {
+        id: true,
+        subscriptionPlan: true,
+        subscriptionStatus: true,
+        createdAt: true,
+        trialEndsAt: true,
+        renewalDate: true,
+      },
+    });
+    if (!restaurant) {
+      res.status(404).json({ error: "Restaurant not found." });
+      return;
+    }
+    const payment = await markInvoiceManualPayment({
+      restaurant,
+      invoiceId: params.invoiceId,
+      notes: body.notes || "Marked by admin for manual verification.",
+      actorUserId: req.user?.id,
+    });
+    res.json({ ok: true, payment });
+  } catch (error) {
+    res.status(400).json({ error: error instanceof Error ? error.message : "Failed to mark invoice manually." });
+  }
+});
+
+adminRouter.post("/billing/restaurants/:restaurantId/invoices/:invoiceId/confirm-manual", async (req: AuthRequest, res) => {
+  try {
+    const params = z.object({ restaurantId: z.string().min(1), invoiceId: z.string().min(1) }).parse(req.params);
+    const body = z.object({ notes: z.string().max(500).optional(), paymentId: z.string().optional() }).parse(req.body || {});
+    const restaurant = await prisma.restaurant.findUnique({
+      where: { id: params.restaurantId },
+      select: {
+        id: true,
+        subscriptionPlan: true,
+        subscriptionStatus: true,
+        createdAt: true,
+        trialEndsAt: true,
+        renewalDate: true,
+      },
+    });
+    if (!restaurant) {
+      res.status(404).json({ error: "Restaurant not found." });
+      return;
+    }
+    const state = await confirmManualPayment({
+      restaurant,
+      invoiceId: params.invoiceId,
+      paymentId: body.paymentId,
+      notes: body.notes || "Manual payment confirmed by admin.",
+      actorUserId: req.user?.id,
+    });
+    res.json({ ok: true, subscription: state.subscription, invoices: state.invoices.slice(0, 10), payments: state.payments.slice(0, 10) });
+  } catch (error) {
+    res.status(400).json({ error: error instanceof Error ? error.message : "Failed to confirm manual payment." });
+  }
 });
 
 adminRouter.get("/support", async (_req, res) => {

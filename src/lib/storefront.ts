@@ -4,6 +4,7 @@ import { fetchDishes } from "./dishes";
 import { getCategories } from "./categories";
 import { getRestaurantDishes } from "./restaurant-dishes";
 import { getRestaurantProfile } from "./restaurant";
+import { getLocalDishStockOverride } from "./stock";
 
 export type PublicRestaurant = {
   id: string;
@@ -33,6 +34,11 @@ export type PublicDish = {
   thumbUrl: string;
   modelUrl: string;
   isAvailable: boolean;
+  availability_status?: "available" | "low_stock" | "unavailable";
+  stock_quantity?: number | null;
+  low_stock_threshold?: number;
+  hidden_from_public_menu?: boolean;
+  branchId?: string;
 };
 
 export type PublicStorefrontData = {
@@ -118,9 +124,24 @@ function mapApiDish(rowValue: unknown): PublicDish {
     name: String(row.name || ""),
     description: String(row.description || ""),
     price: Number(row.price || 0),
-    thumbUrl: String(row.thumbUrl || ""),
-    modelUrl: String(row.modelUrl || ""),
+    thumbUrl: String(row.thumbnail_url || row.thumbnailUrl || row.thumbUrl || ""),
+    modelUrl: String(row.model_url || row.modelUrl || ""),
     isAvailable: row.isAvailable !== false,
+    availability_status:
+      String(row.availability_status || "").toLowerCase() === "low_stock"
+        ? "low_stock"
+        : String(row.availability_status || "").toLowerCase() === "unavailable"
+          ? "unavailable"
+          : "available",
+    stock_quantity:
+      row.stock_quantity == null || row.stock_quantity === ""
+        ? null
+        : Number.isFinite(Number(row.stock_quantity))
+          ? Number(row.stock_quantity)
+          : null,
+    low_stock_threshold: Number.isFinite(Number(row.low_stock_threshold)) ? Number(row.low_stock_threshold) : 5,
+    hidden_from_public_menu: Boolean(row.hidden_from_public_menu),
+    branchId: String(row.branchId || "") || undefined,
   };
 }
 
@@ -157,7 +178,7 @@ async function getLocalFallback(slug: string) {
         location: profile?.location || "Nairobi, Kenya",
         logoUrl: profile?.logo || undefined,
         coverImage: profile?.coverImage || undefined,
-        themePrimary: profile?.themePrimary || "#E4572E",
+        themePrimary: profile?.themePrimary || "#FF6A1A",
         themeSecondary: profile?.themeSecondary || "#E8D8C3",
         shortDescription: profile?.shortDescription || "Visualize",
       }
@@ -168,7 +189,7 @@ async function getLocalFallback(slug: string) {
         location: "Nairobi, Kenya",
         logoUrl: undefined,
         coverImage: undefined,
-        themePrimary: "#E4572E",
+        themePrimary: "#FF6A1A",
         themeSecondary: "#E8D8C3",
         shortDescription: "Visualize",
       };
@@ -255,31 +276,51 @@ export async function getRestaurantCategoriesBySlug(slug: string) {
   return [...fallback.categories].sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name));
 }
 
-export async function getRestaurantDishesBySlug(slug: string) {
+export async function getRestaurantDishesBySlug(slug: string, options?: { branchId?: string }) {
   assertSlug(slug);
   const normalizedSlug = normalizeSlug(slug);
+  const branchId = String(options?.branchId || "").trim();
   if (isApiConfigured) {
     try {
-      const rows = await api.get<unknown[]>(`/restaurants/${encodeURIComponent(normalizedSlug)}/dishes`);
-      return rows.map(mapApiDish).filter((dish) => dish.isAvailable);
+      const suffix = branchId ? `?branchId=${encodeURIComponent(branchId)}` : "";
+      const rows = await api.get<unknown[]>(`/restaurants/${encodeURIComponent(normalizedSlug)}/dishes${suffix}`);
+      return rows.map(mapApiDish).filter((dish) => !dish.hidden_from_public_menu);
     } catch (error) {
       if (!isNotFoundError(error) && !isApiUnavailable(error)) throw error;
     }
   }
   const fallback = await getLocalFallbackCached(normalizedSlug);
-  return fallback.dishes.filter((dish) => dish.isAvailable);
+  return fallback.dishes
+    .map((dish) => {
+      const localStock = getLocalDishStockOverride({
+        restaurantId: dish.restaurantId,
+        dishId: dish.id,
+        branchId: branchId || "main",
+      });
+      if (!localStock) return dish;
+      return {
+        ...dish,
+        availability_status: localStock.availability_status,
+        stock_quantity: localStock.stock_quantity,
+        low_stock_threshold: localStock.low_stock_threshold,
+        hidden_from_public_menu: localStock.hidden_from_public_menu,
+        branchId: localStock.branchId,
+        isAvailable: dish.isAvailable && localStock.availability_status !== "unavailable",
+      };
+    })
+    .filter((dish) => !dish.hidden_from_public_menu);
 }
 
-export async function getStorefrontDataBySlug(slug: string): Promise<PublicStorefrontData> {
+export async function getStorefrontDataBySlug(slug: string, options?: { branchId?: string }): Promise<PublicStorefrontData> {
   const [restaurant, categories, dishes] = await Promise.all([
     getRestaurantBySlug(slug),
     getRestaurantCategoriesBySlug(slug),
-    getRestaurantDishesBySlug(slug),
+    getRestaurantDishesBySlug(slug, options),
   ]);
   return { restaurant, categories, dishes };
 }
 
-export async function getRestaurantArDishesBySlug(slug: string) {
-  const dishes = await getRestaurantDishesBySlug(slug);
+export async function getRestaurantArDishesBySlug(slug: string, options?: { branchId?: string }) {
+  const dishes = await getRestaurantDishesBySlug(slug, options);
   return dishes.filter((dish) => String(dish.modelUrl || "").trim().length > 0);
 }

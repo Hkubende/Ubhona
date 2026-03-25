@@ -66,6 +66,33 @@ export type AdminAuditLog = {
   };
 };
 
+export type AdminBillingOverviewRow = {
+  restaurantId: string;
+  restaurantName: string;
+  currentPlan: string;
+  trialEndDate: string | null;
+  subscriptionStatus: string;
+  latestInvoice: {
+    id: string;
+    amount: number;
+    currency: string;
+    status: string;
+    issuedAt: string;
+    dueAt: string | null;
+    paymentReference: string;
+  } | null;
+  latestPayment: {
+    id: string;
+    amount: number;
+    provider: string;
+    status: string;
+    method: string;
+    createdAt: string;
+  } | null;
+  lastPaymentMethod: string | null;
+  outstandingBalance: number;
+};
+
 export function isCurrentUserAdmin() {
   return isPlatformAdmin();
 }
@@ -85,6 +112,10 @@ export function updateAdminRestaurantStatus(restaurantId: string, status: "activ
 
 export function getAdminMetrics() {
   return api.get<AdminMetrics>("/admin/metrics");
+}
+
+export function getAdminBillingOverview() {
+  return api.get<AdminBillingOverviewRow[]>("/admin/billing-overview");
 }
 
 export function getAdminSupportRecords() {

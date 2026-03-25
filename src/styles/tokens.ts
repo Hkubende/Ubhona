@@ -1,7 +1,10 @@
 export const tokens = {
   colors: {
-    primary: "#E4572E",
-    primaryHover: "#CC4A24",
+    primary: "#FF6A1A",
+    primaryHover: "#FF7F33",
+    primaryActive: "#E85C14",
+    mintPrimary: "#2EE6A6",
+    mintSecondary: "#1BC47D",
     background: "#FBF6EE",
     surface: "#E8D8C3",
     sidebar: "#2B1E17",
@@ -10,8 +13,8 @@ export const tokens = {
     textPrimary: "#FBF6EE",
     textSecondary: "#E8D8C3",
     border: "rgba(232,216,195,0.24)",
-    success: "#34D399",
-    warning: "#F59E0B",
+    success: "#2EE6A6",
+    warning: "#FF6A1A",
     error: "#F87171",
   },
   spacing: {

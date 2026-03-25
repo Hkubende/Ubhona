@@ -43,7 +43,7 @@ export function UbhonaActionMenu({
           align={align}
           sideOffset={8}
           className={cn(
-            "z-[80] min-w-44 rounded-2xl border border-border/80 bg-[linear-gradient(180deg,rgba(38,26,20,0.98),rgba(24,18,15,0.96))] p-1.5 text-text-primary shadow-elevated outline-none",
+            "z-50 min-w-44 rounded-2xl border border-border/80 bg-[linear-gradient(180deg,rgba(38,26,20,0.98),rgba(24,18,15,0.96))] p-1.5 text-text-primary shadow-elevated outline-none",
             "data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=open]:fade-in-0 data-[state=closed]:fade-out-0",
             "data-[state=open]:zoom-in-95 data-[state=closed]:zoom-out-95"
           )}

@@ -1,6 +1,12 @@
 import * as React from "react";
 import { getActiveRestaurantId, getDashboardRestaurant, getOrders, setOrderStatus } from "../lib/dashboard-data";
 import type { Order, OrderStatus, Restaurant } from "../types/dashboard";
+import { platformStore } from "../state/platform-store";
+import { updateOrderStatusWorkflow } from "../services";
+import { subscribeOrderRealtimeEvents } from "../lib/orders-realtime";
+import { isSupabaseConfigured, supabase } from "../lib/supabase";
+import { getPrimaryDashboardRole } from "../lib/roles";
+import { emitAutomationEvent, getAutomationSettings, getCurrentBranchId, getOrderOverdueState } from "../services/automation-engine";
 
 type UseRestaurantOrdersState = {
   restaurantId: string;
@@ -12,6 +18,7 @@ type UseRestaurantOrdersState = {
   setStatusFilter: React.Dispatch<React.SetStateAction<OrderStatus | "all">>;
   refresh: () => Promise<void>;
   updateStatus: (orderId: string, status: OrderStatus) => Promise<void>;
+  overdueOrderIds: string[];
 };
 
 export function useRestaurantOrders(): UseRestaurantOrdersState {
@@ -21,10 +28,12 @@ export function useRestaurantOrders(): UseRestaurantOrdersState {
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState("");
   const [statusFilter, setStatusFilter] = React.useState<OrderStatus | "all">("all");
+  const [overdueOrderIds, setOverdueOrderIds] = React.useState<string[]>([]);
+  const overdueEventGuard = React.useRef<Record<string, true>>({});
 
-  const refresh = React.useCallback(async () => {
-    setLoading(true);
-    setError("");
+  const refresh = React.useCallback(async (options?: { silent?: boolean }) => {
+    if (!options?.silent) setLoading(true);
+    if (!options?.silent) setError("");
     try {
       const activeRestaurantId = await getActiveRestaurantId();
       setRestaurantId(activeRestaurantId);
@@ -34,12 +43,19 @@ export function useRestaurantOrders(): UseRestaurantOrdersState {
       ]);
       setRestaurant(restaurantData);
       setAllOrders(ordersData);
+      platformStore.setSessionContext({
+        restaurantId: activeRestaurantId,
+        role: getPrimaryDashboardRole() || "manager",
+      });
+      for (const order of ordersData) {
+        platformStore.upsertOrderStatus(order.id, order.status);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load orders.");
       setRestaurant(null);
       setAllOrders([]);
     } finally {
-      setLoading(false);
+      if (!options?.silent) setLoading(false);
     }
   }, []);
 
@@ -48,6 +64,12 @@ export function useRestaurantOrders(): UseRestaurantOrdersState {
       if (!restaurantId) return;
       setError("");
       try {
+        await updateOrderStatusWorkflow({
+          restaurantId,
+          orderId,
+          status,
+          role: "manager",
+        });
         const next = await setOrderStatus(restaurantId, orderId, status);
         setAllOrders(next);
       } catch (err) {
@@ -62,11 +84,108 @@ export function useRestaurantOrders(): UseRestaurantOrdersState {
   }, [refresh]);
 
   React.useEffect(() => {
+    if (!restaurantId) return () => undefined;
+
+    const unsubscribeRealtimeEvents = subscribeOrderRealtimeEvents(() => {
+      void refresh({ silent: true });
+    }, { restaurantId });
+
+    // Fallback short polling keeps remote changes fresh where push events are unavailable.
     const timer = window.setInterval(() => {
-      void refresh();
-    }, 8000);
-    return () => window.clearInterval(timer);
-  }, [refresh]);
+      void refresh({ silent: true });
+    }, 5000);
+
+    let unsubscribeSupabase: (() => void) | null = null;
+    if (isSupabaseConfigured && supabase) {
+      const channel = supabase
+        .channel(`orders-live-${restaurantId}`)
+        .on(
+          "postgres_changes",
+          {
+            event: "*",
+            schema: "public",
+            table: "orders",
+            filter: `restaurant_id=eq.${restaurantId}`,
+          },
+          () => {
+            void refresh({ silent: true });
+          }
+        )
+        .subscribe();
+
+      unsubscribeSupabase = () => {
+        void supabase.removeChannel(channel);
+      };
+    }
+
+    return () => {
+      unsubscribeRealtimeEvents();
+      window.clearInterval(timer);
+      if (unsubscribeSupabase) unsubscribeSupabase();
+    };
+  }, [refresh, restaurantId]);
+
+  React.useEffect(() => {
+    if (!restaurantId || !allOrders.length) {
+      setOverdueOrderIds([]);
+      return;
+    }
+    let mounted = true;
+    void getAutomationSettings(getCurrentBranchId())
+      .then(async (settings) => {
+        if (!mounted) return;
+        const overdueIds: string[] = [];
+        for (const order of allOrders) {
+          const result = getOrderOverdueState({
+            createdAt: order.createdAt,
+            status: order.status,
+            overdueThresholdMinutes: settings.overdue_threshold_minutes,
+          });
+          if (!result.overdue) continue;
+          overdueIds.push(order.id);
+          const key = `${order.id}:${String(order.status).toLowerCase()}`;
+          if (overdueEventGuard.current[key]) continue;
+          overdueEventGuard.current[key] = true;
+          await emitAutomationEvent({
+            type: "ORDER_OVERDUE",
+            context: {
+              restaurantId,
+              branchId: getCurrentBranchId(),
+              role: getPrimaryDashboardRole() || "manager",
+              order: {
+                id: order.id,
+                createdAt: order.createdAt,
+                customerName: order.customerName,
+                customerPhone: order.customerPhone,
+                tableNumber: order.tableNumber,
+                customerNotes: order.customerNotes,
+                paymentStatus: order.paymentStatus,
+                paymentMethod: order.paymentMethod,
+                paymentReference: order.paymentReference,
+                subtotal: order.subtotal,
+                total: order.total,
+                status: order.status,
+                items: order.items.map((item) => ({
+                  name: item.name,
+                  quantity: item.quantity,
+                  unitPrice: item.unitPrice,
+                  totalPrice: item.totalPrice,
+                })),
+              },
+              metadata: { elapsedMinutes: result.elapsedMinutes },
+            },
+          });
+        }
+        setOverdueOrderIds(overdueIds);
+      })
+      .catch(() => {
+        if (!mounted) return;
+        setOverdueOrderIds([]);
+      });
+    return () => {
+      mounted = false;
+    };
+  }, [allOrders, restaurantId]);
 
   const orders = React.useMemo(() => {
     if (statusFilter === "all") return allOrders;
@@ -83,5 +202,6 @@ export function useRestaurantOrders(): UseRestaurantOrdersState {
     setStatusFilter,
     refresh,
     updateStatus,
+    overdueOrderIds,
   };
 }

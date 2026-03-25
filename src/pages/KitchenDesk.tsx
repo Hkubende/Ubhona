@@ -58,7 +58,7 @@ function getNextKitchenStatus(status: OrderStatus): OrderStatus {
 }
 
 export default function KitchenDeskPage() {
-  const { restaurant, orders, loading, error, refresh, updateStatus } = useRestaurantOrders();
+  const { restaurant, orders, loading, error, refresh, updateStatus, overdueOrderIds } = useRestaurantOrders();
   const [submittingOrderId, setSubmittingOrderId] = React.useState("");
   const canPrintKitchen = canCurrentUser("printKitchenTicket");
   const autoPrintedRef = React.useRef<Record<string, true>>({});
@@ -74,7 +74,7 @@ export default function KitchenDeskPage() {
       location: restaurant.location,
       logo: restaurant.logoUrl,
       coverImage: restaurant.coverImageUrl,
-      themePrimary: restaurant.primaryColor || "#E4572E",
+      themePrimary: restaurant.primaryColor || "#FF6A1A",
       themeSecondary: "#E8D8C3",
       shortDescription: restaurant.description,
       subscriptionPlan: restaurant.subscriptionPlan || "starter",
@@ -167,8 +167,14 @@ export default function KitchenDeskPage() {
           {kitchenOrders.map((order) => {
             const nextStatus = getNextKitchenStatus(order.status);
             const processing = submittingOrderId === order.id;
+            const isOverdue = overdueOrderIds.includes(order.id);
             return (
-              <article key={order.id} className="rounded-2xl border border-white/10 bg-black/30 p-3">
+              <article
+                key={order.id}
+                className={`rounded-2xl border p-3 ${
+                  isOverdue ? "border-[#FF6A1A]/45 bg-[#FF6A1A]/[0.09]" : "border-white/10 bg-black/30"
+                }`}
+              >
                 <div className="mb-2 flex items-start justify-between gap-2">
                   <div>
                     <div className="font-mono text-[11px] text-white/70">{order.id}</div>
@@ -177,7 +183,10 @@ export default function KitchenDeskPage() {
                       {new Date(order.createdAt).toLocaleTimeString("en-KE")}
                     </div>
                   </div>
-                  <StatusBadge status={order.status} />
+                  <div className="flex flex-col items-end gap-1">
+                    <StatusBadge status={order.status} />
+                    {isOverdue ? <Badge variant="warning">Overdue</Badge> : null}
+                  </div>
                 </div>
 
                 <div className="mb-2 rounded-xl border border-white/10 bg-white/[0.03] px-2.5 py-2">
@@ -199,7 +208,7 @@ export default function KitchenDeskPage() {
                     <div key={`${order.id}-${item.dishId}`} className="rounded-lg border border-white/10 bg-black/25 px-2 py-1.5">
                       <div className="flex items-center justify-between gap-2">
                         <div className="text-base font-black text-[#FBF6EE]">{item.name}</div>
-                        <div className="rounded-md bg-[#E4572E]/20 px-2 py-0.5 text-sm font-black text-orange-200">
+                        <div className="rounded-md bg-[#FF6A1A]/20 px-2 py-0.5 text-sm font-black text-orange-200">
                           x{item.quantity}
                         </div>
                       </div>

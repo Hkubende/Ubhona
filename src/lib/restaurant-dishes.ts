@@ -1,6 +1,9 @@
 import { ApiError, api } from "./api";
 import { isApiConfigured } from "./config";
 import { getRestaurantProfile } from "./restaurant";
+import { canCreateDishWithPlan, setDishCount } from "./growth";
+import { getCurrentBranchId } from "../services/automation-engine";
+import { getLocalDishStockOverride } from "./stock";
 
 export type RestaurantDish = {
   id: string;
@@ -12,6 +15,13 @@ export type RestaurantDish = {
   thumb: string;
   model: string;
   isAvailable: boolean;
+  stock?: {
+    branchId: string;
+    availability_status: "available" | "low_stock" | "unavailable";
+    stock_quantity: number | null;
+    low_stock_threshold: number;
+    hidden_from_public_menu: boolean;
+  } | null;
   createdAt: string;
 };
 
@@ -27,10 +37,14 @@ type ApiDishRow = {
   desc?: unknown;
   price?: unknown;
   thumbUrl?: unknown;
+  thumbnailUrl?: unknown;
+  thumbnail_url?: unknown;
   thumb?: unknown;
   modelUrl?: unknown;
+  model_url?: unknown;
   model?: unknown;
   isAvailable?: unknown;
+  stock?: unknown;
   createdAt?: unknown;
 };
 
@@ -41,6 +55,13 @@ function toDishRow(value: unknown): ApiDishRow {
 
 function mapDish(row: ApiDishRow): RestaurantDish {
   const profile = getRestaurantProfile();
+  const branchId = getCurrentBranchId();
+  const stockRecord = row.stock && typeof row.stock === "object" ? (row.stock as Record<string, unknown>) : null;
+  const localStock = getLocalDishStockOverride({
+    restaurantId: String(row.restaurantId || profile?.id || "local_default_restaurant"),
+    dishId: String(row.id || ""),
+    branchId,
+  });
   return {
     id: String(row.id),
     restaurantId: String(row.restaurantId || profile?.id || "local_default_restaurant"),
@@ -48,9 +69,32 @@ function mapDish(row: ApiDishRow): RestaurantDish {
     name: String(row.name || ""),
     desc: String(row.description || row.desc || ""),
     price: Number(row.price || 0),
-    thumb: String(row.thumbUrl || row.thumb || ""),
-    model: String(row.modelUrl || row.model || ""),
+    thumb: String(row.thumbnail_url || row.thumbnailUrl || row.thumbUrl || row.thumb || ""),
+    model: String(row.model_url || row.modelUrl || row.model || ""),
     isAvailable: row.isAvailable === false ? false : true,
+    stock: localStock
+      ? localStock
+      : stockRecord
+      ? {
+          branchId: String(stockRecord.branchId || branchId),
+          availability_status:
+            String(stockRecord.availability_status || "").toLowerCase() === "low_stock"
+              ? "low_stock"
+              : String(stockRecord.availability_status || "").toLowerCase() === "unavailable"
+                ? "unavailable"
+                : "available",
+          stock_quantity:
+            stockRecord.stock_quantity == null || stockRecord.stock_quantity === ""
+              ? null
+              : Number.isFinite(Number(stockRecord.stock_quantity))
+                ? Number(stockRecord.stock_quantity)
+                : null,
+          low_stock_threshold: Number.isFinite(Number(stockRecord.low_stock_threshold))
+            ? Number(stockRecord.low_stock_threshold)
+            : 5,
+          hidden_from_public_menu: Boolean(stockRecord.hidden_from_public_menu),
+        }
+      : null,
     createdAt: String(row.createdAt || new Date().toISOString()),
   };
 }
@@ -116,15 +160,23 @@ function isApiUnavailable(error: unknown) {
 
 export async function getRestaurantDishes(): Promise<RestaurantDish[]> {
   const restaurantId = getActiveRestaurantId();
-  if (!isApiConfigured) return readCache();
+  const branchId = getCurrentBranchId();
+  if (!isApiConfigured) {
+    const cached = readCache();
+    setDishCount(restaurantId, cached.length);
+    return cached;
+  }
 
   try {
-    const rows = await api.get<unknown[]>("/dishes");
+    const rows = await api.get<unknown[]>(`/dishes?branchId=${encodeURIComponent(branchId)}`);
     const mapped = rows.map((row) => mapDish(toDishRow(row))).filter((dish) => dish.restaurantId === restaurantId);
     writeCache(mapped);
+    setDishCount(restaurantId, mapped.length);
     return mapped;
   } catch {
-    return readCache();
+    const cached = readCache();
+    setDishCount(restaurantId, cached.length);
+    return cached;
   }
 }
 
@@ -134,6 +186,8 @@ export function saveRestaurantDishes(dishes: RestaurantDish[]) {
 
 export async function addRestaurantDish(input: Omit<RestaurantDish, "id" | "createdAt" | "restaurantId">) {
   const restaurantId = getActiveRestaurantId();
+  const limitGate = canCreateDishWithPlan(restaurantId);
+  if (!limitGate.allowed) throw new Error(limitGate.reason);
   const payload = {
     restaurantId,
     categoryId: input.categoryId,
@@ -159,6 +213,7 @@ export async function addRestaurantDish(input: Omit<RestaurantDish, "id" | "crea
     };
     const next = [created, ...readCache()];
     writeCache(next);
+    setDishCount(restaurantId, next.length);
     return created;
   }
   try {
@@ -167,7 +222,10 @@ export async function addRestaurantDish(input: Omit<RestaurantDish, "id" | "crea
       name: payload.name,
       description: payload.desc,
       price: payload.price,
+      thumbnail_url: payload.thumb,
       thumbUrl: payload.thumb,
+      thumbnailUrl: payload.thumb,
+      model_url: payload.model,
       modelUrl: payload.model,
       isAvailable: payload.isAvailable,
       restaurantId: payload.restaurantId,
@@ -175,6 +233,7 @@ export async function addRestaurantDish(input: Omit<RestaurantDish, "id" | "crea
     const created = mapDish(toDishRow(row));
     const next = [created, ...readCache()];
     writeCache(next);
+    setDishCount(restaurantId, next.length);
     return created;
   } catch (error) {
     if (!isApiUnavailable(error)) throw error;
@@ -192,6 +251,7 @@ export async function addRestaurantDish(input: Omit<RestaurantDish, "id" | "crea
     };
     const next = [created, ...readCache()];
     writeCache(next);
+    setDishCount(restaurantId, next.length);
     return created;
   }
 }
@@ -235,7 +295,10 @@ export async function updateRestaurantDish(
       name: patch.name,
       description: patch.desc,
       price: patch.price,
+      thumbnail_url: patch.thumb,
       thumbUrl: patch.thumb,
+      thumbnailUrl: patch.thumb,
+      model_url: patch.model,
       modelUrl: patch.model,
       isAvailable: patch.isAvailable,
     });
@@ -267,20 +330,24 @@ export async function updateRestaurantDish(
 }
 
 export async function deleteRestaurantDish(id: string) {
+  const restaurantId = getActiveRestaurantId();
   if (!isApiConfigured) {
     const next = readCache().filter((dish) => dish.id !== id);
     writeCache(next);
+    setDishCount(restaurantId, next.length);
     return next;
   }
   try {
     await api.delete(`/dishes/${id}`);
     const next = readCache().filter((dish) => dish.id !== id);
     writeCache(next);
+    setDishCount(restaurantId, next.length);
     return next;
   } catch (error) {
     if (!isApiUnavailable(error)) throw error;
     const next = readCache().filter((dish) => dish.id !== id);
     writeCache(next);
+    setDishCount(restaurantId, next.length);
     return next;
   }
 }

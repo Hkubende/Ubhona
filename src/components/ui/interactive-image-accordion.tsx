@@ -114,11 +114,11 @@ export function InteractiveImageAccordion({
   return (
     <div
       className={cn(
-        "relative w-full max-w-full overflow-hidden rounded-[1.5rem] border border-[#E4572E]/35 bg-[#2B1E17]/84 p-2 shadow-[0_20px_48px_rgba(0,0,0,0.34)] sm:p-3",
+        "relative w-full max-w-full overflow-hidden rounded-[1.5rem] border border-[#FF6A1A]/35 bg-[#2B1E17]/84 p-2 shadow-[0_20px_48px_rgba(0,0,0,0.34)] sm:p-3",
         className
       )}
     >
-      <div className="pointer-events-none absolute -right-8 top-10 h-44 w-44 rounded-full bg-[#E4572E]/14 blur-3xl" />
+      <div className="pointer-events-none absolute -right-8 top-10 h-44 w-44 rounded-full bg-[#FF6A1A]/14 blur-3xl" />
       <div className="pointer-events-none absolute -left-10 bottom-4 h-36 w-36 rounded-full bg-[#E8D8C3]/8 blur-3xl" />
 
       <div
@@ -140,7 +140,7 @@ export function InteractiveImageAccordion({
                 "group relative overflow-hidden border text-left transition-[width,height,border-color,box-shadow,filter] duration-300 ease-out",
                 "w-full rounded-2xl md:h-full md:flex-none md:rounded-[1.15rem]",
                 active
-                  ? "h-[176px] border-transparent shadow-[0_0_0_1px_rgba(228,87,46,0.45)_inset,0_18px_42px_rgba(228,87,46,0.22)] md:w-[260px] lg:w-[260px] xl:w-[300px] 2xl:w-[320px]"
+                  ? "h-[176px] border-transparent shadow-[0_0_0_1px_rgba(255,106,26,0.45)_inset,0_18px_42px_rgba(255,106,26,0.22)] md:w-[260px] lg:w-[260px] xl:w-[300px] 2xl:w-[320px]"
                   : "h-[88px] border-transparent bg-[#2B1E17]/45 shadow-[0_8px_18px_rgba(0,0,0,0.18)] md:w-[64px] lg:w-[64px] xl:w-[72px]"
               )}
               aria-pressed={active}
@@ -157,13 +157,13 @@ export function InteractiveImageAccordion({
                   onError={() => setFailedImages((prev) => ({ ...prev, [itemKey]: true }))}
                 />
               ) : (
-                <div className="absolute inset-0 bg-gradient-to-br from-[#E4572E]/30 via-[#2B1E17] to-[#2B1E17]" />
+                <div className="absolute inset-0 bg-gradient-to-br from-[#FF6A1A]/30 via-[#2B1E17] to-[#2B1E17]" />
               )}
               <div
                 className={cn(
                   "absolute inset-0",
                   active
-                    ? "bg-gradient-to-t from-[#2B1E17]/96 via-[#2B1E17]/55 to-[#E4572E]/28"
+                    ? "bg-gradient-to-t from-[#2B1E17]/96 via-[#2B1E17]/55 to-[#FF6A1A]/28"
                     : "bg-gradient-to-t from-[#2B1E17]/96 via-black/65 to-[#2B1E17]/45"
                 )}
               />
@@ -188,8 +188,8 @@ export function InteractiveImageAccordion({
                       {item.description}
                     </motion.p>
                   </AnimatePresence>
-                  <div className="mt-3 h-1.5 w-20 rounded-full bg-gradient-to-r from-[#E4572E] to-[#FBF6EE]/85" />
-                  <div className="pointer-events-none absolute inset-x-6 bottom-0 h-px bg-gradient-to-r from-transparent via-[#E4572E]/70 to-transparent" />
+                  <div className="mt-3 h-1.5 w-20 rounded-full bg-gradient-to-r from-[#FF6A1A] to-[#FBF6EE]/85" />
+                  <div className="pointer-events-none absolute inset-x-6 bottom-0 h-px bg-gradient-to-r from-transparent via-[#FF6A1A]/70 to-transparent" />
                 </div>
               ) : (
                 <div className="relative z-10 flex h-full w-full items-center justify-center p-2">

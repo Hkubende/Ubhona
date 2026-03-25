@@ -113,7 +113,7 @@ export function NotificationsFilter({
           align="end"
           sideOffset={10}
           className={cn(
-            "z-[80] w-[min(92vw,24rem)] overflow-hidden rounded-2xl border border-border/80 bg-[linear-gradient(180deg,rgba(38,26,20,0.98),rgba(24,18,15,0.96))] text-text-primary shadow-elevated",
+            "z-50 w-[min(92vw,24rem)] overflow-hidden rounded-2xl border border-border/80 bg-[linear-gradient(180deg,rgba(38,26,20,0.98),rgba(24,18,15,0.96))] text-text-primary shadow-elevated",
             "data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=open]:fade-in-0 data-[state=closed]:fade-out-0",
             "data-[state=open]:zoom-in-95 data-[state=closed]:zoom-out-95"
           )}

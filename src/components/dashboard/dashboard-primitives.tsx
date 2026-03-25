@@ -3,6 +3,8 @@ import { cn } from "../../lib/utils";
 import { radius, spacing, tokens, typography } from "../../design-system";
 import { Badge } from "../ui/Badge";
 import { Button } from "../ui/Button";
+import { StatCard } from "../ui/StatCard";
+import { normalizeOrderStatus, getSharedStatusLabel } from "../../lib/order-status";
 
 export function PageContainer({
   className,
@@ -28,7 +30,7 @@ export function PageHeader({
   return (
     <div className={cn(`flex flex-wrap items-start justify-between ${spacing.gapMd}`, className)}>
       <div>
-        <h2 className={typography.sectionTitle}>{title}</h2>
+        <h1 className={typography.pageTitle}>{title}</h1>
         {subtitle ? <p className={cn("mt-1", typography.body)}>{subtitle}</p> : null}
       </div>
       {actions ? <div className="inline-flex items-center gap-2">{actions}</div> : null}
@@ -137,33 +139,24 @@ export function MetricCard({
   value: string;
   tone?: "default" | "orange" | "emerald" | "sand";
 }) {
-  const toneMap = {
-    default: "text-text-primary",
-    orange: "text-primary",
-    emerald: "text-success",
-    sand: "text-text-secondary",
-  } as const;
-  return (
-    <div className={cn("ui-surface-soft p-3 transition duration-300 ease-out hover:-translate-y-0.5 hover:border-primary/20", radius.panel)}>
-      <div className={typography.label}>{label}</div>
-      <div className={cn("mt-1 text-[1.25rem] font-semibold tracking-[-0.03em]", toneMap[tone])}>{value}</div>
-    </div>
-  );
+  return <StatCard label={label} value={value} tone={tone} className={radius.panel} />;
 }
 
 export function StatusBadge({ status }: { status: string }) {
-  const normalized = status.toLowerCase();
+  const normalized = normalizeOrderStatus(status);
   const variant =
     normalized === "completed"
       ? "success"
+      : normalized === "cancelled"
+        ? "danger"
       : normalized === "ready"
-        ? "accent"
+        ? "success"
         : normalized === "preparing"
           ? "warning"
-          : normalized === "confirmed"
-            ? "neutral"
-            : "neutral";
-  return <Badge variant={variant} className="capitalize">{status}</Badge>;
+        : normalized === "confirmed"
+            ? "accent"
+            : "warning";
+  return <Badge variant={variant} className="capitalize">{getSharedStatusLabel(status)}</Badge>;
 }
 
 export function EmptyStateCard({
@@ -200,5 +193,5 @@ export function DataTable({
   className?: string;
   children: React.ReactNode;
 }) {
-  return <div className={cn(`overflow-x-auto ${tokens.classes.tableShell}`, className)}>{children}</div>;
+  return <div className={cn(`w-full max-w-full overflow-x-auto ${tokens.classes.tableShell}`, className)}>{children}</div>;
 }

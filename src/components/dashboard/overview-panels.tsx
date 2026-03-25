@@ -40,9 +40,16 @@ function formatPlanStatus(status: string) {
     .join(" ");
 }
 
+function planBadgeTone(planLabel: string) {
+  const normalized = planLabel.trim().toLowerCase();
+  if (normalized === "pro") return "border-emerald-400/30 bg-emerald-500/12 text-emerald-100";
+  if (normalized === "growth") return "border-[#FF6A1A]/35 bg-[#FF6A1A]/12 text-[#F7F1E8]";
+  return "border-cyan-400/30 bg-cyan-500/12 text-cyan-100";
+}
+
 export function RestaurantSummaryStrip({
   restaurantName,
-  logoUrl: _logoUrl,
+  logoUrl,
   planLabel,
   planStatus,
   categoryCount,
@@ -61,19 +68,23 @@ export function RestaurantSummaryStrip({
   loading: boolean;
   error?: string;
 }) {
+  void logoUrl;
   return (
     <DashboardPanel className="rounded-3xl px-5 py-4 sm:px-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-3.5">
-            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-primary/30 bg-[linear-gradient(180deg,rgba(228,87,46,0.26),rgba(121,48,25,0.18))] text-sm font-semibold tracking-[0.14em] text-[#FBF6EE] shadow-[0_12px_24px_rgba(90,37,19,0.22)]">
+            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-primary/30 bg-[linear-gradient(180deg,rgba(255,106,26,0.26),rgba(121,48,25,0.18))] text-sm font-semibold tracking-[0.14em] text-[#FBF6EE] shadow-[0_12px_24px_rgba(90,37,19,0.22)]">
               {getRestaurantInitials(restaurantName)}
             </div>
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2">
                 <h2 className="truncate text-base font-semibold text-text-primary">{restaurantName}</h2>
-                <Badge variant="accent" className="h-6 rounded-full px-2.5 text-[10px] uppercase tracking-[0.14em]">
-                  {planLabel} ({formatPlanStatus(planStatus)})
+                <Badge className={`h-6 rounded-full px-2.5 text-[10px] uppercase tracking-[0.14em] ${planBadgeTone(planLabel)}`}>
+                  {planLabel}
+                </Badge>
+                <Badge variant="neutral" className="h-6 rounded-full px-2.5 text-[10px] uppercase tracking-[0.14em]">
+                  {formatPlanStatus(planStatus)}
                 </Badge>
               </div>
               <p className={cn("mt-1", typography.body)}>

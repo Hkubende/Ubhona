@@ -5,6 +5,14 @@ import { Link } from "react-router-dom";
 import type { RestaurantProfile } from "../../lib/restaurant";
 import { cn } from "../../lib/utils";
 import { motion } from "../../design-system";
+import {
+  clearDevRoleOverride,
+  getDefaultRouteForRole,
+  getDevRoleOverride,
+  getRoleConfig,
+  setDevRoleOverride,
+} from "../../lib/roles";
+import type { DashboardRole } from "../../types/roles";
 
 const LOGO_SRC = `${import.meta.env.BASE_URL}ubhona-logo.jpeg`;
 
@@ -17,6 +25,21 @@ type ProfileMenuProps = {
 };
 
 export function ProfileMenu({ profile, logoUrl, onLogout, className, compact = false }: ProfileMenuProps) {
+  const [devRoleOverride, setLocalDevRoleOverride] = React.useState<DashboardRole | null>(() => getDevRoleOverride());
+
+  const onSelectDevRole = (role: DashboardRole | null) => {
+    if (!import.meta.env.DEV) return;
+    if (role) {
+      setDevRoleOverride(role);
+      setLocalDevRoleOverride(role);
+      window.location.assign(getDefaultRouteForRole(role));
+      return;
+    }
+    clearDevRoleOverride();
+    setLocalDevRoleOverride(null);
+    window.location.assign("/dashboard");
+  };
+
   return (
     <DropdownMenu.Root>
       <DropdownMenu.Trigger asChild>
@@ -47,7 +70,7 @@ export function ProfileMenu({ profile, logoUrl, onLogout, className, compact = f
           align="end"
           sideOffset={10}
           className={cn(
-            "z-[80] min-w-52 overflow-hidden rounded-2xl border border-border/80 bg-[linear-gradient(180deg,rgba(38,26,20,0.98),rgba(24,18,15,0.96))] p-1.5 text-text-primary shadow-elevated outline-none",
+            "z-50 min-w-52 overflow-hidden rounded-2xl border border-border/80 bg-[linear-gradient(180deg,rgba(38,26,20,0.98),rgba(24,18,15,0.96))] p-1.5 text-text-primary shadow-elevated outline-none",
             "data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=open]:fade-in-0 data-[state=closed]:fade-out-0",
             "data-[state=open]:zoom-in-95 data-[state=closed]:zoom-out-95"
           )}
@@ -71,6 +94,39 @@ export function ProfileMenu({ profile, logoUrl, onLogout, className, compact = f
             </Link>
           </DropdownMenu.Item>
           <DropdownMenu.Separator className="my-1 h-px bg-white/8" />
+          {import.meta.env.DEV ? (
+            <>
+              <div className="px-3 pb-1 pt-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-text-secondary/70">
+                Dev Role Preview
+              </div>
+              {(["owner", "manager", "waiter", "kitchen"] as DashboardRole[]).map((role) => (
+                <DropdownMenu.Item
+                  key={role}
+                  onSelect={(event) => {
+                    event.preventDefault();
+                    onSelectDevRole(role);
+                  }}
+                  className={cn(
+                    "flex cursor-pointer items-center justify-between gap-2 rounded-xl px-3 py-2 text-sm font-medium outline-none transition-colors hover:bg-white/[0.06] focus:bg-white/[0.06]",
+                    devRoleOverride === role && "bg-primary/10 text-primary"
+                  )}
+                >
+                  <span>{getRoleConfig(role).label}</span>
+                  {devRoleOverride === role ? <span className="text-[11px] text-primary">Active</span> : null}
+                </DropdownMenu.Item>
+              ))}
+              <DropdownMenu.Item
+                onSelect={(event) => {
+                  event.preventDefault();
+                  onSelectDevRole(null);
+                }}
+                className="flex cursor-pointer items-center justify-between gap-2 rounded-xl px-3 py-2 text-sm font-medium outline-none transition-colors hover:bg-white/[0.06] focus:bg-white/[0.06]"
+              >
+                <span>Use Account Role</span>
+              </DropdownMenu.Item>
+              <DropdownMenu.Separator className="my-1 h-px bg-white/8" />
+            </>
+          ) : null}
           <DropdownMenu.Item
             onSelect={(event) => {
               event.preventDefault();

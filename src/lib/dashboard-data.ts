@@ -41,7 +41,7 @@ const MOCK_RESTAURANT: Restaurant = {
   subscriptionStatus: "active",
   logoUrl: `${import.meta.env.BASE_URL}ubhona-logo.jpeg`,
   coverImageUrl: "",
-  primaryColor: "#E4572E",
+  primaryColor: "#FF6A1A",
   description: "Visualize",
   onboardingCompleted: true,
 };
@@ -130,7 +130,7 @@ function toDashboardRestaurant(profile: RestaurantProfile | null): Restaurant {
     subscriptionStatus: profile.subscriptionStatus,
     logoUrl: profile.logo || undefined,
     coverImageUrl: profile.coverImage || undefined,
-    primaryColor: profile.themePrimary || "#E4572E",
+    primaryColor: profile.themePrimary || "#FF6A1A",
     description: profile.shortDescription || "Visualize",
     onboardingCompleted: Boolean(profile.restaurantName && profile.slug && profile.email),
   };

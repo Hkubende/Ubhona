@@ -1,5 +1,5 @@
 import * as React from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useLocation, useNavigate, useParams } from "react-router-dom";
 import {
   getStorefrontDataBySlug,
   type PublicCategory,
@@ -24,11 +24,21 @@ function formatKsh(value: number) {
   return `KSh ${value.toLocaleString("en-KE")}`;
 }
 
+function isDishOrderable(dish: PublicDish) {
+  if (dish.isAvailable === false) return false;
+  return dish.availability_status !== "unavailable" && !dish.hidden_from_public_menu;
+}
+
 const LOGO_SRC = `${import.meta.env.BASE_URL}ubhona-logo.jpeg`;
 
 export default function MenuPage() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { slug = "" } = useParams();
+  const branchId = React.useMemo(() => {
+    const params = new URLSearchParams(location.search);
+    return params.get("branch")?.trim() || "main";
+  }, [location.search]);
   const skipNextPersistRef = React.useRef(true);
   const [restaurant, setRestaurant] = React.useState<PublicRestaurant | null>(null);
   const [categories, setCategories] = React.useState<PublicCategory[]>([]);
@@ -42,7 +52,7 @@ export default function MenuPage() {
   React.useEffect(() => {
     skipNextPersistRef.current = true;
     setCart({});
-    getStorefrontDataBySlug(slug)
+    getStorefrontDataBySlug(slug, { branchId })
       .then((payload) => {
         setRestaurant(payload.restaurant);
         setCategories(payload.categories);
@@ -51,7 +61,7 @@ export default function MenuPage() {
         setError("");
       })
       .catch((err) => setError(err instanceof Error ? err.message : "Failed to load menu."));
-  }, [slug]);
+  }, [branchId, slug]);
 
   React.useEffect(() => {
     if (skipNextPersistRef.current) {
@@ -146,11 +156,11 @@ export default function MenuPage() {
   }, [displayCategories, filteredGrouped]);
 
   const totalItems = storefrontCartCount(cart);
-  const primary = restaurant?.themePrimary || "#E4572E";
+  const primary = restaurant?.themePrimary || "#FF6A1A";
 
   const addToCart = React.useCallback(
     (dish: PublicDish) => {
-      if (!dish.isAvailable || !restaurant) return;
+      if (!isDishOrderable(dish) || !restaurant) return;
       setCart((prev) => addStorefrontCartItem(prev, dish.id));
       void trackAnalyticsEvent({
         restaurantId: restaurant.id,
@@ -209,7 +219,7 @@ export default function MenuPage() {
                 AR
               </Button>
               <Button
-                onClick={() => navigate(`/r/${slug}/checkout`)}
+                onClick={() => navigate(`/r/${slug}/checkout?branch=${encodeURIComponent(branchId)}`)}
                 variant="primary"
                 style={{ backgroundColor: primary }}
               >
@@ -291,15 +301,28 @@ export default function MenuPage() {
                         <h3 className="text-lg font-semibold tracking-[-0.02em]">{dish.name}</h3>
                         <p className="text-sm text-white/65">{dish.description}</p>
                       </div>
-                      <Badge variant={dish.isAvailable ? "success" : "danger"} className="uppercase tracking-wide">
-                        {dish.isAvailable ? "Available" : "Sold out"}
+                      <Badge
+                        variant={
+                          dish.availability_status === "unavailable"
+                            ? "danger"
+                            : dish.availability_status === "low_stock"
+                              ? "warning"
+                              : "success"
+                        }
+                        className="uppercase tracking-wide"
+                      >
+                        {dish.availability_status === "unavailable"
+                          ? "Unavailable"
+                          : dish.availability_status === "low_stock"
+                            ? "Low stock"
+                            : "Available"}
                       </Badge>
                     </div>
                     <div className="mt-2 font-semibold text-orange-300">{formatKsh(dish.price)}</div>
                     <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
                       <Button
                         onClick={() => addToCart(dish)}
-                        disabled={!dish.isAvailable}
+                        disabled={!isDishOrderable(dish)}
                         variant="primary"
                         size="sm"
                         className="w-full"
@@ -344,7 +367,7 @@ export default function MenuPage() {
             <div className="mt-4 flex flex-wrap gap-2">
               <Button
                 onClick={() => addToCart(selectedDish)}
-                disabled={!selectedDish.isAvailable}
+                disabled={!isDishOrderable(selectedDish)}
                 variant="primary"
                 className="min-w-[124px]"
                 style={{ backgroundColor: primary }}
@@ -378,6 +401,10 @@ export default function MenuPage() {
         </div>
       ) : null}
 
+      <div className="pb-20 text-center text-xs font-semibold uppercase tracking-[0.14em] text-[#B8AEA3]/75 md:pb-0">
+        Powered by Ubhona
+      </div>
+
       <div className="ubhona-storefront-floating fixed inset-x-4 bottom-4 z-30 p-3 shadow-xl md:hidden">
         <div className="flex items-center justify-between gap-3">
           <div>
@@ -385,7 +412,7 @@ export default function MenuPage() {
             <div className="text-sm font-semibold text-[#FBF6EE]">{totalItems} {totalItems === 1 ? "item" : "items"}</div>
           </div>
           <Button
-            onClick={() => navigate(`/r/${slug}/checkout`)}
+            onClick={() => navigate(`/r/${slug}/checkout?branch=${encodeURIComponent(branchId)}`)}
             variant="primary"
             style={{ backgroundColor: primary }}
           >

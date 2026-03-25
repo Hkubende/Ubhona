@@ -10,6 +10,10 @@ import { paymentsRouter } from "./routes/payments.js";
 import { uploadsRouter } from "./routes/uploads.js";
 import { analyticsRouter } from "./routes/analytics.js";
 import { adminRouter } from "./routes/admin.js";
+import { billingRouter } from "./routes/billing.js";
+import { inventoryRouter } from "./routes/inventory.js";
+import { floorRouter } from "./routes/floor.js";
+import { createRateLimiter } from "./middleware/rate-limit.js";
 
 const app = express();
 const port = Number(process.env.PORT || 4000);
@@ -21,6 +25,14 @@ app.use(
   })
 );
 app.use(express.json());
+app.use(
+  createRateLimiter({
+    keyPrefix: "global",
+    windowMs: 60 * 1000,
+    max: 240,
+    message: "Rate limit exceeded. Please slow down.",
+  })
+);
 
 app.get("/health", (_req, res) => {
   res.json({ ok: true, service: "menuvista-backend" });
@@ -35,8 +47,11 @@ app.use("/payments", paymentsRouter);
 app.use("/uploads", uploadsRouter);
 app.use("/analytics", analyticsRouter);
 app.use("/admin", adminRouter);
+app.use("/billing", billingRouter);
+app.use("/inventory", inventoryRouter);
+app.use("/floor", floorRouter);
 
-app.use((err: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+app.use((err: unknown, _req: express.Request, res: express.Response) => {
   console.error(err);
   res.status(500).json({ error: "Internal server error" });
 });

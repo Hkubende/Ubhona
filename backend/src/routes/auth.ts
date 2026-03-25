@@ -1,12 +1,25 @@
 import { Router } from "express";
 import { z } from "zod";
 import { requireAuth } from "../middleware/auth.js";
+import { createRateLimiter } from "../middleware/rate-limit.js";
 import type { AuthRequest } from "../types.js";
 import { login, me, signup } from "../services/auth.service.js";
 
 export const authRouter = Router();
+const signupLimiter = createRateLimiter({
+  keyPrefix: "auth-signup",
+  windowMs: 10 * 60 * 1000,
+  max: 5,
+  message: "Too many signup attempts. Please try again later.",
+});
+const loginLimiter = createRateLimiter({
+  keyPrefix: "auth-login",
+  windowMs: 10 * 60 * 1000,
+  max: 12,
+  message: "Too many login attempts. Please try again shortly.",
+});
 
-authRouter.post("/signup", async (req, res) => {
+authRouter.post("/signup", signupLimiter, async (req, res) => {
   try {
     const body = z
       .object({
@@ -22,7 +35,7 @@ authRouter.post("/signup", async (req, res) => {
   }
 });
 
-authRouter.post("/login", async (req, res) => {
+authRouter.post("/login", loginLimiter, async (req, res) => {
   try {
     const body = z
       .object({

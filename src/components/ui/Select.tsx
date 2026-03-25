@@ -1,5 +1,5 @@
 import * as React from "react";
-import { UbhonaSelect, UbhonaSelectItem } from "./ubhona-select";
+import { UbhonaSelect } from "./ubhona-select";
 
 export type SelectProps = React.SelectHTMLAttributes<HTMLSelectElement>;
 

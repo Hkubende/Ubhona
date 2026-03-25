@@ -93,8 +93,8 @@ export default function RestaurantsAdmin() {
           >
             <UbhonaSelectItem value={ALL_PLANS}>All plans</UbhonaSelectItem>
             <UbhonaSelectItem value="starter">Starter</UbhonaSelectItem>
+            <UbhonaSelectItem value="growth">Growth</UbhonaSelectItem>
             <UbhonaSelectItem value="pro">Pro</UbhonaSelectItem>
-            <UbhonaSelectItem value="enterprise">Enterprise</UbhonaSelectItem>
           </UbhonaSelect>
           <UbhonaSelect
             name="restaurantStatusFilter"

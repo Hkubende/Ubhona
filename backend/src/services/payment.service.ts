@@ -1,4 +1,8 @@
 import { prisma } from "../prisma.js";
+import { Prisma } from "@prisma/client";
+import { applyBillingEvent } from "./billing.service.js";
+import { handleOrderStatusWhatsAppNotifications } from "./whatsapp.service.js";
+import { recordActivityEvent } from "./activity.service.js";
 
 type MpesaConfig = {
   env: "sandbox" | "production";
@@ -7,6 +11,19 @@ type MpesaConfig = {
   shortcode: string;
   passkey: string;
   callbackUrl: string;
+};
+
+export type StkCallbackPayload = {
+  Body?: {
+    stkCallback?: {
+      CheckoutRequestID?: string;
+      ResultCode?: number | string;
+      ResultDesc?: string;
+      CallbackMetadata?: {
+        Item?: Array<{ Name?: string; Value?: unknown }>;
+      };
+    };
+  };
 };
 
 function getMpesaConfig(): MpesaConfig {
@@ -144,6 +161,29 @@ export async function initiateStkPushForOrder(input: {
       paymentReference: stkBody?.CheckoutRequestID || payment.id,
     },
   });
+  const restaurant = await prisma.restaurant.findUnique({
+    where: { id: order.restaurantId },
+    select: { id: true, ownerUserId: true },
+  });
+  if (restaurant) {
+    await recordActivityEvent({
+      actorUserId: restaurant.ownerUserId,
+      actorRole: "restaurant_owner",
+      action: "payment_status_changed",
+      entityType: "order",
+      entityId: order.id,
+      organizationId: restaurant.id,
+      restaurantId: restaurant.id,
+      source: "mpesa_stk_initiate",
+      before: { paymentStatus: order.paymentStatus },
+      after: { paymentStatus: accepted ? "processing" : "failed" },
+      metadata: {
+        method: "stk_push",
+        checkoutRequestId: stkBody?.CheckoutRequestID || null,
+        paymentId: payment.id,
+      },
+    });
+  }
 
   if (!accepted) {
     await prisma.analyticsEvent.create({
@@ -158,6 +198,15 @@ export async function initiateStkPushForOrder(input: {
         },
       },
     });
+    const restaurant = await prisma.restaurant.findUnique({ where: { id: order.restaurantId } });
+    if (restaurant) {
+      await applyBillingEvent({
+        restaurant,
+        provider: "mpesa",
+        eventType: "payment_failed",
+        payload: { source: "stk_request", orderId: order.id },
+      });
+    }
   }
 
   return {
@@ -168,7 +217,7 @@ export async function initiateStkPushForOrder(input: {
   };
 }
 
-export async function handleStkCallback(callback: any) {
+export async function handleStkCallback(callback: StkCallbackPayload) {
   const stkCallback = callback?.Body?.stkCallback;
   if (!stkCallback) {
     throw new Error("Invalid callback payload.");
@@ -200,18 +249,51 @@ export async function handleStkCallback(callback: any) {
       resultCode,
       resultDesc,
       receiptNumber: receipt || null,
-      callbackPayload: callback,
+      callbackPayload: callback as unknown as Prisma.InputJsonValue,
     },
   });
 
+  const nextStatus = isSuccess && payment.order.status === "pending" ? "confirmed" : payment.order.status;
   await prisma.order.update({
     where: { id: payment.orderId },
     data: {
       paymentStatus: isSuccess ? "paid" : "failed",
       paymentReference: receipt || checkoutRequestId,
-      status: isSuccess && payment.order.status === "pending" ? "confirmed" : payment.order.status,
+      status: nextStatus,
     },
   });
+  const restaurant = await prisma.restaurant.findUnique({
+    where: { id: payment.order.restaurantId },
+    select: { id: true, ownerUserId: true },
+  });
+  if (restaurant) {
+    await recordActivityEvent({
+      actorUserId: restaurant.ownerUserId,
+      actorRole: "restaurant_owner",
+      action: "payment_status_changed",
+      entityType: "order",
+      entityId: payment.orderId,
+      organizationId: restaurant.id,
+      restaurantId: restaurant.id,
+      source: "mpesa_callback",
+      before: { paymentStatus: "processing" },
+      after: { paymentStatus: isSuccess ? "paid" : "failed" },
+      metadata: {
+        method: "stk_push",
+        checkoutRequestId,
+        receiptNumber: receipt || null,
+        resultCode,
+        resultDesc,
+      },
+    });
+  }
+  if (nextStatus !== payment.order.status) {
+    await handleOrderStatusWhatsAppNotifications({
+      orderId: payment.orderId,
+      restaurantId: payment.order.restaurantId,
+      status: nextStatus,
+    });
+  }
 
   if (isSuccess) {
     await prisma.analyticsEvent.create({
@@ -226,6 +308,15 @@ export async function handleStkCallback(callback: any) {
         },
       },
     });
+    const billingRestaurant = await prisma.restaurant.findUnique({ where: { id: payment.order.restaurantId } });
+    if (billingRestaurant) {
+      await applyBillingEvent({
+        restaurant: billingRestaurant,
+        provider: "mpesa",
+        eventType: "payment_succeeded",
+        payload: { orderId: payment.orderId, checkoutRequestId, receiptNumber: receipt || null },
+      });
+    }
   } else {
     await prisma.analyticsEvent.create({
       data: {
@@ -240,6 +331,15 @@ export async function handleStkCallback(callback: any) {
         },
       },
     });
+    const billingRestaurant = await prisma.restaurant.findUnique({ where: { id: payment.order.restaurantId } });
+    if (billingRestaurant) {
+      await applyBillingEvent({
+        restaurant: billingRestaurant,
+        provider: "mpesa",
+        eventType: "payment_failed",
+        payload: { orderId: payment.orderId, checkoutRequestId, resultCode, resultDesc },
+      });
+    }
   }
   return { ignored: false };
 }
