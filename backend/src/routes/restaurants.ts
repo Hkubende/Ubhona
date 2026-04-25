@@ -59,21 +59,35 @@ function toLooseRecord(value: unknown): Record<string, unknown> {
 }
 
 async function withSubscription(restaurant: OwnedRestaurant) {
-  const billing = await getRestaurantBillingSnapshot(restaurant);
-  return {
-    ...restaurant,
-    subscription: {
-      ...mapSubscriptionSummary(restaurant),
-      ...billing.subscription,
-    },
-    plan: billing.plan,
-    entitlements: billing.entitlements,
-    usage: {
-      dishes: billing.entitlements.find((item) => item.featureKey === "dishes")?.currentUsage ?? 0,
-      ordersPerMonth:
-        billing.entitlements.find((item) => item.featureKey === "ordersPerMonth")?.currentUsage ?? 0,
-    },
-  };
+  try {
+    const billing = await getRestaurantBillingSnapshot(restaurant);
+    return {
+      ...restaurant,
+      subscription: {
+        ...mapSubscriptionSummary(restaurant),
+        ...billing.subscription,
+      },
+      plan: billing.plan,
+      entitlements: billing.entitlements,
+      usage: {
+        dishes: billing.entitlements.find((item) => item.featureKey === "dishes")?.currentUsage ?? 0,
+        ordersPerMonth:
+          billing.entitlements.find((item) => item.featureKey === "ordersPerMonth")?.currentUsage ?? 0,
+      },
+    };
+  } catch (error) {
+    console.warn("[restaurants] billing snapshot unavailable; returning base restaurant payload", error);
+    return {
+      ...restaurant,
+      subscription: mapSubscriptionSummary(restaurant),
+      plan: null,
+      entitlements: [],
+      usage: {
+        dishes: 0,
+        ordersPerMonth: 0,
+      },
+    };
+  }
 }
 
 restaurantRouter.post("/", requireAuth, async (req: AuthRequest, res) => {
