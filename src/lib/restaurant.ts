@@ -1,5 +1,5 @@
 import { ApiError, api, isApiReachable } from "./api";
-import { isApiConfigured } from "./config";
+import { allowOfflineDemoFallback, isApiConfigured } from "./config";
 
 export type RestaurantProfile = {
   id: string;
@@ -416,6 +416,9 @@ export async function saveRestaurantProfile(
   ensureLocalSlugAvailable(localProfile.slug, existing?.id);
 
   if (!isApiConfigured) {
+    if (!allowOfflineDemoFallback) {
+      throw new Error("API is not configured. Running in static/demo mode.");
+    }
     writeCache(localProfile);
     upsertProfileRegistry(localProfile);
     return localProfile;
@@ -447,7 +450,7 @@ export async function saveRestaurantProfile(
     upsertProfileRegistry(mapped);
     return mapped;
   } catch (error) {
-    if (!isApiUnavailable(error)) throw error;
+    if (!isApiUnavailable(error) || !allowOfflineDemoFallback) throw error;
     writeCache(localProfile);
     upsertProfileRegistry(localProfile);
     return localProfile;

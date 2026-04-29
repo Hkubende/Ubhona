@@ -1,4 +1,5 @@
 import { ApiError, api, AUTH_TOKEN_KEY } from "./api";
+import { allowOfflineDemoFallback } from "./config";
 import { clearRestaurantProfile, getRestaurantProfile, type RestaurantProfile } from "./restaurant";
 
 export type AuthUser = {
@@ -399,7 +400,7 @@ export async function signupUser(
     createRemoteSession(response.user, response.token);
     return { ok: true, user: response.user };
   } catch (error) {
-    if (!isApiUnavailable(error)) {
+    if (!isApiUnavailable(error) || !allowOfflineDemoFallback) {
       return { ok: false, error: error instanceof Error ? error.message : "Signup failed." };
     }
 
@@ -467,7 +468,7 @@ export async function loginUser(
     createRemoteSession(response.user, response.token);
     return { ok: true, user: response.user };
   } catch (error) {
-    if (!isApiUnavailable(error)) {
+    if (!isApiUnavailable(error) || !allowOfflineDemoFallback) {
       return { ok: false, error: error instanceof Error ? error.message : "Login failed." };
     }
 

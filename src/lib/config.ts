@@ -20,3 +20,5 @@ export const appConfig = {
 export const isApiConfigured = Boolean(appConfig.apiUrl.trim());
 export const isStkApiConfigured = Boolean(appConfig.stkApiUrl.trim());
 export const isDemoMode = !isApiConfigured;
+export const allowOfflineDemoFallback =
+  import.meta.env.DEV && parseBoolean(import.meta.env.VITE_ALLOW_OFFLINE_DEMO_FALLBACK, true);
