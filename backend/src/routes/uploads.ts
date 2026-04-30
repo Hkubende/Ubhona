@@ -7,6 +7,7 @@ import type { NextFunction, Response } from "express";
 import { getOwnedRestaurant } from "../services/restaurant.service.js";
 import { completeUpload, prepareUpload, uploadAssetServerManaged } from "../services/upload.service.js";
 import { authAwareRateLimitKey, createRateLimiter } from "../middleware/rate-limit.js";
+import { runWithRestaurantDbSession } from "../services/db-session.service.js";
 
 const uploadsRouter = Router();
 const LOG_UPLOAD_DEBUG =
@@ -48,13 +49,21 @@ async function handleRequestUpload(req: AuthRequest, res: Response) {
         fileSize: z.number().int().positive().max(50 * 1024 * 1024).optional(),
       })
       .parse(req.body);
-    const prepared = await prepareUpload({
-      restaurantId: restaurant.id,
-      fileName: body.fileName,
-      fileType: body.fileType,
-      assetType: body.assetType,
-      fileSize: body.fileSize,
-    });
+    const prepared = await runWithRestaurantDbSession(
+      {
+        userId: req.user!.id,
+        restaurantId: restaurant.id,
+        isAdmin: req.user!.role === "platform_admin",
+      },
+      () =>
+        prepareUpload({
+          restaurantId: restaurant.id,
+          fileName: body.fileName,
+          fileType: body.fileType,
+          assetType: body.assetType,
+          fileSize: body.fileSize,
+        })
+    );
     res.json(prepared);
   } catch (error) {
     res.status(400).json({ error: error instanceof Error ? error.message : "Failed to prepare upload." });
@@ -79,11 +88,19 @@ async function handleCompleteUpload(req: AuthRequest, res: Response) {
       res.status(400).json({ error: "uploadId is required." });
       return;
     }
-    const result = await completeUpload({
-      restaurantId: restaurant.id,
-      uploadId,
-      status: body.status,
-    });
+    const result = await runWithRestaurantDbSession(
+      {
+        userId: req.user!.id,
+        restaurantId: restaurant.id,
+        isAdmin: req.user!.role === "platform_admin",
+      },
+      () =>
+        completeUpload({
+          restaurantId: restaurant.id,
+          uploadId,
+          status: body.status,
+        })
+    );
     res.json(result);
   } catch (error) {
     const message = error instanceof Error ? error.message : "Failed to complete upload.";
@@ -132,14 +149,22 @@ async function handleServerManagedUpload(req: AuthRequest, res: Response, assetT
       bufferBytes: file.buffer.byteLength,
     });
 
-    const uploaded = await uploadAssetServerManaged({
-      restaurantId: req.user.restaurantId,
-      dishId: body.dishId,
-      fileName: file.originalname,
-      fileType: file.mimetype || "application/octet-stream",
-      bytes: file.buffer,
-      assetType,
-    });
+    const uploaded = await runWithRestaurantDbSession(
+      {
+        userId: req.user.id,
+        restaurantId: req.user.restaurantId,
+        isAdmin: req.user.role === "platform_admin",
+      },
+      () =>
+        uploadAssetServerManaged({
+          restaurantId: req.user!.restaurantId!,
+          dishId: body.dishId,
+          fileName: file.originalname,
+          fileType: file.mimetype || "application/octet-stream",
+          bytes: file.buffer,
+          assetType,
+        })
+    );
 
     const payload: Record<string, unknown> = {
       ok: true,

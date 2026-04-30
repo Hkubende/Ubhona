@@ -10,10 +10,10 @@ import {
   getConversionMetrics,
   getTopDishes,
   recordAnalyticsEvent,
-  type AnalyticsEventType,
 } from "../services/analytics.service.js";
 import { isRestaurantFeatureEnabled } from "../services/billing.service.js";
 import { authAwareRateLimitKey, createRateLimiter } from "../middleware/rate-limit.js";
+import { runWithRestaurantDbSession } from "../services/db-session.service.js";
 
 const eventSchema = z.object({
   restaurantId: z.string().min(1),
@@ -43,22 +43,22 @@ const analyticsReadLimiter = createRateLimiter({
 async function ingestEvent(req: Request, res: Response) {
   try {
     const body = eventSchema.parse(req.body);
-    const analyticsAllowedEvents = new Set<AnalyticsEventType>(["order_created", "payment_success", "payment_failed"]);
-    if (!analyticsAllowedEvents.has(body.eventType as AnalyticsEventType)) {
-      const restaurant = await prisma.restaurant.findUnique({
-        where: { id: body.restaurantId },
-      });
-      if (!restaurant) {
-        res.status(404).json({ error: "Restaurant not found." });
-        return;
-      }
-      const enabled = await isRestaurantFeatureEnabled(restaurant, "analytics");
-      if (!enabled) {
-        res.status(403).json({ error: "Analytics is available on Growth and Pro plans." });
-        return;
-      }
+    const restaurant = await prisma.restaurant.findUnique({
+      where: { id: body.restaurantId },
+      select: { id: true, ownerUserId: true },
+    });
+    if (!restaurant) {
+      res.status(404).json({ error: "Restaurant not found." });
+      return;
     }
-    const event = await recordAnalyticsEvent(body);
+    const event = await runWithRestaurantDbSession(
+      {
+        userId: restaurant.ownerUserId,
+        restaurantId: restaurant.id,
+        isAdmin: false,
+      },
+      (tx) => recordAnalyticsEvent(body, tx)
+    );
     res.status(201).json({ ok: true, event });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Failed to save analytics event.";

@@ -14,6 +14,7 @@ import { billingRouter } from "./routes/billing.js";
 import { inventoryRouter } from "./routes/inventory.js";
 import { floorRouter } from "./routes/floor.js";
 import { createRateLimiter } from "./middleware/rate-limit.js";
+import { prisma } from "./prisma.js";
 
 const app = express();
 const port = Number(process.env.PORT || 4000);
@@ -36,6 +37,22 @@ app.use(
 
 app.get("/health", (_req, res) => {
   res.json({ ok: true, service: "ubhona-backend" });
+});
+
+app.get("/health/db", async (_req, res) => {
+  try {
+    await prisma.$queryRaw`SELECT 1`;
+    res.json({ ok: true, service: "ubhona-backend", checks: { dbReachable: true } });
+  } catch (error) {
+    res.status(500).json({
+      ok: false,
+      service: "ubhona-backend",
+      checks: {
+        dbReachable: false,
+        message: error instanceof Error ? error.message : "Database health probe failed.",
+      },
+    });
+  }
 });
 
 app.use("/auth", authRouter);

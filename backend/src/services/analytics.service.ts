@@ -13,6 +13,7 @@ export const ANALYTICS_EVENT_TYPES = [
 ] as const;
 
 export type AnalyticsEventType = (typeof ANALYTICS_EVENT_TYPES)[number];
+type AnalyticsDbClient = typeof prisma | Prisma.TransactionClient;
 
 function getSince(days: number) {
   const safeDays = Number.isFinite(days) ? Math.min(365, Math.max(1, Math.floor(days))) : 30;
@@ -27,29 +28,29 @@ export async function recordAnalyticsEvent(input: {
   source?: string;
   sessionId?: string;
   metadata?: Record<string, unknown>;
-}) {
-  const restaurant = await prisma.restaurant.findUnique({
+}, client: AnalyticsDbClient = prisma) {
+  const restaurant = await client.restaurant.findUnique({
     where: { id: input.restaurantId },
     select: { id: true },
   });
   if (!restaurant) throw new Error("Restaurant not found.");
 
   if (input.dishId) {
-    const dish = await prisma.dish.findFirst({
+    const dish = await client.dish.findFirst({
       where: { id: input.dishId, restaurantId: input.restaurantId },
       select: { id: true },
     });
     if (!dish) throw new Error("Dish does not belong to this restaurant.");
   }
   if (input.orderId) {
-    const order = await prisma.order.findFirst({
+    const order = await client.order.findFirst({
       where: { id: input.orderId, restaurantId: input.restaurantId },
       select: { id: true },
     });
     if (!order) throw new Error("Order does not belong to this restaurant.");
   }
 
-  return prisma.analyticsEvent.create({
+  return client.analyticsEvent.create({
     data: {
       restaurantId: input.restaurantId,
       eventType: input.eventType,
