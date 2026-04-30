@@ -1,3 +1,4 @@
+import type { Prisma } from "@prisma/client";
 import { prisma } from "../prisma.js";
 import { getBillingProvider } from "./billing-provider.service.js";
 import type {
@@ -26,6 +27,7 @@ type RestaurantRecord = {
   renewalDate: Date | null;
 };
 export type BillingRestaurantRecord = RestaurantRecord;
+type BillingDbClient = typeof prisma | Prisma.TransactionClient;
 
 const PLAN_DEFINITIONS: Record<string, PlanDefinition> = {
   starter: {
@@ -148,23 +150,23 @@ function parseBillingState(value: unknown): RestaurantBillingState | null {
   return row as RestaurantBillingState;
 }
 
-async function loadBillingState(restaurantId: string) {
-  const doc = await prisma.platformTrackerDocument.findUnique({ where: { key: billingKey(restaurantId) } });
+async function loadBillingState(restaurantId: string, client: BillingDbClient = prisma) {
+  const doc = await client.platformTrackerDocument.findUnique({ where: { key: billingKey(restaurantId) } });
   return doc ? parseBillingState(doc.payload) : null;
 }
 
-async function saveBillingState(state: RestaurantBillingState) {
-  await prisma.platformTrackerDocument.upsert({
+async function saveBillingState(state: RestaurantBillingState, client: BillingDbClient = prisma) {
+  await client.platformTrackerDocument.upsert({
     where: { key: billingKey(state.restaurantId) },
     create: { key: billingKey(state.restaurantId), payload: state as unknown as object },
     update: { payload: state as unknown as object },
   });
 }
 
-async function computeUsage(restaurantId: string) {
+async function computeUsage(restaurantId: string, client: BillingDbClient = prisma) {
   const [dishes, ordersThisMonth] = await Promise.all([
-    prisma.dish.count({ where: { restaurantId } }),
-    prisma.order.count({
+    client.dish.count({ where: { restaurantId } }),
+    client.order.count({
       where: {
         restaurantId,
         createdAt: {
@@ -290,17 +292,17 @@ export function getPlanDefinition(planId: string) {
   return PLAN_DEFINITIONS[normalizePlanId(planId)];
 }
 
-export async function ensureBillingStateForRestaurant(restaurant: RestaurantRecord) {
-  const existing = await loadBillingState(restaurant.id);
+export async function ensureBillingStateForRestaurant(restaurant: RestaurantRecord, client: BillingDbClient = prisma) {
+  const existing = await loadBillingState(restaurant.id, client);
   if (existing) {
-    const usage = await computeUsage(restaurant.id);
+    const usage = await computeUsage(restaurant.id, client);
     existing.entitlements = buildEntitlements(restaurant.id, existing.subscription.planId, usage);
-    await saveBillingState(existing);
+    await saveBillingState(existing, client);
     return existing;
   }
 
   const planId = normalizePlanId(restaurant.subscriptionPlan);
-  const usage = await computeUsage(restaurant.id);
+  const usage = await computeUsage(restaurant.id, client);
   const state: RestaurantBillingState = {
     restaurantId: restaurant.id,
     subscription: {
@@ -321,7 +323,7 @@ export async function ensureBillingStateForRestaurant(restaurant: RestaurantReco
     payments: [],
     events: [],
   };
-  await saveBillingState(state);
+  await saveBillingState(state, client);
   return state;
 }
 
@@ -410,8 +412,8 @@ export async function getUsageStatus(restaurantId: string, key: PlanLimitKey) {
   };
 }
 
-export async function getRestaurantLimitStatus(restaurant: RestaurantRecord, key: PlanLimitKey) {
-  const state = await ensureBillingStateForRestaurant(restaurant);
+export async function getRestaurantLimitStatus(restaurant: RestaurantRecord, key: PlanLimitKey, client: BillingDbClient = prisma) {
+  const state = await ensureBillingStateForRestaurant(restaurant, client);
   const limit = state.entitlements.find((item) => item.featureKey === key);
   const usageLimit = limit?.usageLimit ?? null;
   const currentUsage = limit?.currentUsage ?? 0;
@@ -449,14 +451,19 @@ export async function revokePlanEntitlements(restaurantId: string) {
   return applyPlanEntitlements("starter", restaurantId);
 }
 
-export async function incrementRestaurantUsage(restaurant: RestaurantRecord, key: PlanLimitKey, amount = 1) {
-  if (!Number.isFinite(amount) || amount <= 0) return getRestaurantLimitStatus(restaurant, key);
-  const state = await ensureBillingStateForRestaurant(restaurant);
+export async function incrementRestaurantUsage(
+  restaurant: RestaurantRecord,
+  key: PlanLimitKey,
+  amount = 1,
+  client: BillingDbClient = prisma
+) {
+  if (!Number.isFinite(amount) || amount <= 0) return getRestaurantLimitStatus(restaurant, key, client);
+  const state = await ensureBillingStateForRestaurant(restaurant, client);
   state.entitlements = state.entitlements.map((item) =>
     item.featureKey === key ? { ...item, currentUsage: Math.max(0, item.currentUsage + amount) } : item
   );
-  await saveBillingState(state);
-  return getRestaurantLimitStatus(restaurant, key);
+  await saveBillingState(state, client);
+  return getRestaurantLimitStatus(restaurant, key, client);
 }
 
 export async function decrementRestaurantUsage(restaurant: RestaurantRecord, key: PlanLimitKey, amount = 1) {

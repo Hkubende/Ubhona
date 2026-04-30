@@ -4,6 +4,7 @@ import { requireAuth } from "../middleware/auth.js";
 import type { AuthRequest } from "../types.js";
 import { prisma } from "../prisma.js";
 import { getOwnedRestaurant } from "../services/restaurant.service.js";
+import { runWithRestaurantDbSession } from "../services/db-session.service.js";
 import {
   decrementRestaurantUsage,
   getRestaurantLimitStatus,
@@ -91,19 +92,29 @@ dishesRouter.post("/", async (req: AuthRequest, res) => {
       res.status(400).json({ error: "thumbnailUrl is required." });
       return;
     }
-    const dish = await prisma.dish.create({
-      data: {
+    const dish = await runWithRestaurantDbSession(
+      {
+        userId: req.user!.id,
         restaurantId: restaurant.id,
-        categoryId: body.categoryId,
-        name: body.name.trim(),
-        description: body.description.trim(),
-        price: body.price,
-        thumbUrl: resolvedThumbUrl,
-        modelUrl: body.model_url?.trim() || body.modelUrl?.trim() || "",
-        isAvailable: body.isAvailable ?? true,
+        isAdmin: req.user!.role === "platform_admin",
       },
-    });
-    await incrementRestaurantUsage(restaurant, "dishes", 1);
+      async (tx) => {
+        const created = await tx.dish.create({
+          data: {
+            restaurantId: restaurant.id,
+            categoryId: body.categoryId,
+            name: body.name.trim(),
+            description: body.description.trim(),
+            price: body.price,
+            thumbUrl: resolvedThumbUrl,
+            modelUrl: body.model_url?.trim() || body.modelUrl?.trim() || "",
+            isAvailable: body.isAvailable ?? true,
+          },
+        });
+        await incrementRestaurantUsage(restaurant, "dishes", 1, tx);
+        return created;
+      }
+    );
     await recordActivityEvent({
       actorUserId: req.user!.id,
       actorRole: req.user!.role,

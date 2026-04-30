@@ -1,25 +1,13 @@
 import { Router } from "express";
 import { z } from "zod";
-import type { Prisma } from "@prisma/client";
 import { requireAuth } from "../middleware/auth.js";
 import type { AuthRequest } from "../types.js";
 import { prisma } from "../prisma.js";
 import { getOwnedRestaurant } from "../services/restaurant.service.js";
+import { runWithRestaurantDbSession } from "../services/db-session.service.js";
 
 export const categoriesRouter = Router();
 categoriesRouter.use(requireAuth);
-
-async function runWithCategoryRlsContext<T>(
-  input: { userId: string; restaurantId: string; isAdmin: boolean },
-  callback: (tx: Prisma.TransactionClient) => Promise<T>
-) {
-  return prisma.$transaction(async (tx: Prisma.TransactionClient) => {
-    await tx.$executeRaw`SELECT set_config('app.user_id', ${input.userId}, true)`;
-    await tx.$executeRaw`SELECT set_config('app.restaurant_id', ${input.restaurantId}, true)`;
-    await tx.$executeRaw`SELECT set_config('app.is_admin', ${input.isAdmin ? "true" : "false"}, true)`;
-    return callback(tx);
-  });
-}
 
 categoriesRouter.get("/", async (req: AuthRequest, res) => {
   const restaurant = await getOwnedRestaurant(req.user!.id);
@@ -47,7 +35,7 @@ categoriesRouter.post("/", async (req: AuthRequest, res) => {
         sortOrder: z.number().optional(),
       })
       .parse(req.body);
-    const category = await runWithCategoryRlsContext(
+    const category = await runWithRestaurantDbSession(
       {
         userId: req.user!.id,
         restaurantId: restaurant.id,
