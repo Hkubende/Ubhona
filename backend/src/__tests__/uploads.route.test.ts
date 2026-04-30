@@ -93,7 +93,7 @@ describe("uploadsRouter", () => {
       fileType: "image/png",
       bytes: expect.any(Buffer),
       assetType: "thumb",
-    });
+    }, { tx: true });
     expect(response.body).toMatchObject({
       ok: true,
       url: "https://storage.example.com/thumb.png",

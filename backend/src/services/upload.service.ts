@@ -1,5 +1,6 @@
 import { prisma } from "../prisma.js";
 import { supabaseAdmin } from "../lib/supabaseAdmin.js";
+import type { Prisma } from "@prisma/client";
 
 export type UploadAssetType = "logo" | "cover" | "thumb" | "model";
 
@@ -18,6 +19,7 @@ export type ServerManagedUploadInput = {
   bytes: Buffer;
   assetType: "thumb" | "model";
 };
+type UploadDbClient = typeof prisma | Prisma.TransactionClient;
 
 function safeName(input: string) {
   return input
@@ -182,7 +184,7 @@ async function ensureBucketExists(bucket: string) {
   uploadDebug("ensureBucketExists.ok", { bucket });
 }
 
-export async function prepareUpload(input: PrepareUploadInput) {
+export async function prepareUpload(input: PrepareUploadInput, client: UploadDbClient = prisma) {
   const rawExt = extensionFromName(input.fileName);
   const defaultExt = input.assetType === "model" ? "glb" : "png";
   const ext = guessExtension(input.fileType, rawExt || defaultExt);
@@ -200,7 +202,7 @@ export async function prepareUpload(input: PrepareUploadInput) {
     `${supabaseUrl}/storage/v1/object/public`;
   const publicUrl = `${publicBase}/${bucket}/${objectKey}`;
 
-  const asset = await prisma.uploadAsset.create({
+  const asset = await client.uploadAsset.create({
     data: {
       restaurantId: input.restaurantId,
       assetType: input.assetType,
@@ -238,7 +240,7 @@ export async function prepareUpload(input: PrepareUploadInput) {
   };
 }
 
-export async function uploadAssetServerManaged(input: ServerManagedUploadInput) {
+export async function uploadAssetServerManaged(input: ServerManagedUploadInput, client: UploadDbClient = prisma) {
   const restaurantId = safePathSegment(input.restaurantId, "restaurantId");
   const dishId = safePathSegment(input.dishId, "dishId");
   const rawExt = extensionFromName(input.fileName);
@@ -269,7 +271,7 @@ export async function uploadAssetServerManaged(input: ServerManagedUploadInput) 
     `${supabaseUrl}/storage/v1/object/public`;
   const publicUrl = `${publicBase}/${bucket}/${objectKey}`;
 
-  const asset = await prisma.uploadAsset.create({
+  const asset = await client.uploadAsset.create({
     data: {
       restaurantId,
       assetType: input.assetType,
@@ -313,15 +315,15 @@ export async function completeUpload(input: {
   restaurantId: string;
   uploadId: string;
   status: "uploaded" | "failed";
-}) {
-  const existing = await prisma.uploadAsset.findFirst({
+}, client: UploadDbClient = prisma) {
+  const existing = await client.uploadAsset.findFirst({
     where: { id: input.uploadId, restaurantId: input.restaurantId },
     select: { id: true },
   });
   if (!existing) {
     throw new Error("Upload asset not found.");
   }
-  const updated = await prisma.uploadAsset.update({
+  const updated = await client.uploadAsset.update({
     where: { id: existing.id },
     data: { status: input.status },
     select: {

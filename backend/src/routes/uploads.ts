@@ -55,14 +55,14 @@ async function handleRequestUpload(req: AuthRequest, res: Response) {
         restaurantId: restaurant.id,
         isAdmin: req.user!.role === "platform_admin",
       },
-      () =>
+      (tx) =>
         prepareUpload({
           restaurantId: restaurant.id,
           fileName: body.fileName,
           fileType: body.fileType,
           assetType: body.assetType,
           fileSize: body.fileSize,
-        })
+        }, tx)
     );
     res.json(prepared);
   } catch (error) {
@@ -94,12 +94,12 @@ async function handleCompleteUpload(req: AuthRequest, res: Response) {
         restaurantId: restaurant.id,
         isAdmin: req.user!.role === "platform_admin",
       },
-      () =>
+      (tx) =>
         completeUpload({
           restaurantId: restaurant.id,
           uploadId,
           status: body.status,
-        })
+        }, tx)
     );
     res.json(result);
   } catch (error) {
@@ -155,7 +155,7 @@ async function handleServerManagedUpload(req: AuthRequest, res: Response, assetT
         restaurantId: req.user.restaurantId,
         isAdmin: req.user.role === "platform_admin",
       },
-      () =>
+      (tx) =>
         uploadAssetServerManaged({
           restaurantId: req.user!.restaurantId!,
           dishId: body.dishId,
@@ -163,7 +163,7 @@ async function handleServerManagedUpload(req: AuthRequest, res: Response, assetT
           fileType: file.mimetype || "application/octet-stream",
           bytes: file.buffer,
           assetType,
-        })
+        }, tx)
     );
 
     const payload: Record<string, unknown> = {
