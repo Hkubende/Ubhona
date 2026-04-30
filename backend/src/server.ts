@@ -35,7 +35,7 @@ app.use(
 );
 
 app.get("/health", (_req, res) => {
-  res.json({ ok: true, service: "menuvista-backend" });
+  res.json({ ok: true, service: "ubhona-backend" });
 });
 
 app.use("/auth", authRouter);
