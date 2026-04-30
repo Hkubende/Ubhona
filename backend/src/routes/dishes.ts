@@ -66,13 +66,6 @@ dishesRouter.post("/", async (req: AuthRequest, res) => {
     return;
   }
   try {
-    const dishLimit = await getRestaurantLimitStatus(restaurant, "dishes");
-    if (dishLimit.reached) {
-      res.status(403).json({
-        error: `Your current plan allows up to ${dishLimit.usageLimit} dishes. Upgrade to continue.`,
-      });
-      return;
-    }
     const body = z
       .object({
         categoryId: z.string().min(1),
@@ -92,13 +85,21 @@ dishesRouter.post("/", async (req: AuthRequest, res) => {
       res.status(400).json({ error: "thumbnailUrl is required." });
       return;
     }
-    const dish = await runWithRestaurantDbSession(
+    const result = await runWithRestaurantDbSession(
       {
         userId: req.user!.id,
         restaurantId: restaurant.id,
         isAdmin: req.user!.role === "platform_admin",
       },
       async (tx) => {
+        const dishLimit = await getRestaurantLimitStatus(restaurant, "dishes", tx);
+        if (dishLimit.reached) {
+          return {
+            ok: false as const,
+            status: 403,
+            error: `Your current plan allows up to ${dishLimit.usageLimit} dishes. Upgrade to continue.`,
+          };
+        }
         const created = await tx.dish.create({
           data: {
             restaurantId: restaurant.id,
@@ -112,9 +113,14 @@ dishesRouter.post("/", async (req: AuthRequest, res) => {
           },
         });
         await incrementRestaurantUsage(restaurant, "dishes", 1, tx);
-        return created;
+        return { ok: true as const, dish: created };
       }
     );
+    if (!result.ok) {
+      res.status(result.status).json({ error: result.error });
+      return;
+    }
+    const dish = result.dish;
     await recordActivityEvent({
       actorUserId: req.user!.id,
       actorRole: req.user!.role,
