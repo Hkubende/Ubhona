@@ -10,6 +10,7 @@ import {
 import { getQrCodeImageUrl, getStorefrontMenuUrl } from "../lib/qr";
 
 const LOGO_SRC = `${import.meta.env.BASE_URL}ubhona-logo.jpeg`;
+const ONBOARDING_DEFAULT_DISH_THUMB = `${import.meta.env.BASE_URL}thumbs/burger.png`;
 const ONBOARDING_DRAFT_KEY = "mv_onboarding_draft_v2";
 
 type OnboardingStep = 1 | 2 | 3 | 4;
@@ -280,7 +281,7 @@ export default function Onboarding() {
           name: dish.name,
           desc: "Added during onboarding.",
           price: dish.price,
-          thumb: "",
+          thumb: ONBOARDING_DEFAULT_DISH_THUMB,
           model: "",
           isAvailable: true,
         });
