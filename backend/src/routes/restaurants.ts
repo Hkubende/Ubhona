@@ -122,6 +122,15 @@ restaurantRouter.get("/me", requireAuth, async (req: AuthRequest, res) => {
   res.json(await withSubscription(restaurant));
 });
 
+restaurantRouter.get("/me/status", requireAuth, async (req: AuthRequest, res) => {
+  const restaurant = await getOwnedRestaurant(req.user!.id);
+  if (!restaurant) {
+    res.json({ exists: false, restaurant: null });
+    return;
+  }
+  res.json({ exists: true, restaurant: await withSubscription(restaurant) });
+});
+
 restaurantRouter.patch("/me", requireAuth, async (req: AuthRequest, res) => {
   try {
     const existing = await getOwnedRestaurant(req.user!.id);

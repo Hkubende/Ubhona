@@ -384,8 +384,12 @@ export async function syncRestaurantProfile() {
   if (!(await isApiReachable())) return readCache();
 
   try {
-    const response = await api.get<unknown>("/restaurants/me");
-    const mapped = mapApiProfile(response);
+    const status = toRecord(await api.get<unknown>("/restaurants/me/status"));
+    if (!status.exists || !status.restaurant) {
+      writeCache(null);
+      return null;
+    }
+    const mapped = mapApiProfile(status.restaurant);
     writeCache(mapped);
     return mapped;
   } catch {

@@ -84,5 +84,5 @@ app.use((err: unknown, _req: express.Request, res: express.Response) => {
 });
 
 app.listen(port, () => {
-  console.log(`MenuVista backend running on http://localhost:${port}`);
+  console.log(`Ubhona backend running on http://localhost:${port}`);
 });
