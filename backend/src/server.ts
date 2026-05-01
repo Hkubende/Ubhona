@@ -69,7 +69,11 @@ app.use("/billing", billingRouter);
 app.use("/inventory", inventoryRouter);
 app.use("/floor", floorRouter);
 
-app.use((err: unknown, _req: express.Request, res: express.Response) => {
+app.use((req, res) => {
+  res.status(404).json({ error: `Route not found: ${req.method} ${req.path}` });
+});
+
+app.use((err: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
   if (
     typeof err === "object" &&
     err !== null &&
