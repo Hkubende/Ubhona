@@ -1,12 +1,115 @@
 services:
   - type: web
-    name: ubhona
+    name: Ubhona-api
+    runtime: node
+    plan: free
+    branch: main
+    rootDir: backend
+    buildCommand: npm ci --include=dev && npm run prisma:generate && npm run build
+    startCommand: npm run start
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: CORS_ORIGIN
+        value: https://ubhona.onrender.com
+      - key: APP_BASE_URL
+        value: https://ubhona-api.onrender.com
+      - key: FRONTEND_URL
+        value: https://ubhona.onrender.com
+      - key: APP_PUBLIC_BASE_URL
+        value: https://ubhona.onrender.com
+      - key: QR_BASE_URL
+        value: https://ubhona.onrender.com
+      - key: PUBLIC_APP_URL
+        value: https://ubhona.onrender.com
+      - key: DATABASE_URL
+        sync: false
+      - key: JWT_SECRET
+        sync: false
+      - key: ORDER_TRACKING_SECRET
+        sync: false
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: SUPABASE_ANON_KEY
+        sync: false
+      - key: SUPABASE_STORAGE_BUCKET_THUMBNAILS
+        value: dish-thumbnails
+      - key: SUPABASE_STORAGE_BUCKET_MODELS
+        value: dish-models
+      - key: SUPABASE_STORAGE_BUCKET_BRANDING
+        value: restaurant-branding
+      - key: SUPABASE_STORAGE_PUBLIC_URL
+        sync: false
+      - key: MPESA_ENV
+        value: sandbox
+      - key: MPESA_CONSUMER_KEY
+        sync: false
+      - key: MPESA_CONSUMER_SECRET
+        sync: false
+      - key: MPESA_SHORTCODE
+        sync: false
+      - key: MPESA_PASSKEY
+        sync: false
+      - key: MPESA_CALLBACK_URL
+        value: https://ubhona-api.onrender.com/payments/callback
+      - key: MPESA_CALLBACK_SECRET
+        sync: false
+      - key: MPESA_TIMEOUT_URL
+        value: https://ubhona-api.onrender.com/payments/timeout
+      - key: MPESA_TRANSACTION_TYPE
+        value: CustomerPayBillOnline
+      - key: BILLING_WEBHOOK_SECRET
+        sync: false
+      - key: BILLING_DEFAULT_PROVIDER
+        value: manual
+      - key: BILLING_MPESA_MODE
+        value: mock
+      - key: WHATSAPP_PROVIDER
+        value: mock
+      - key: WHATSAPP_ACCESS_TOKEN
+        sync: false
+      - key: WHATSAPP_PHONE_NUMBER_ID
+        sync: false
+      - key: WHATSAPP_VERIFY_TOKEN
+        sync: false
+      - key: WHATSAPP_WEBHOOK_SECRET
+        sync: false
+      - key: WHATSAPP_BUSINESS_ACCOUNT_ID
+        sync: false
+
+  - type: web
+    name: Ubhona
     runtime: static
+    plan: free
+    branch: main
     buildCommand: npm install && npm run build
     staticPublishPath: dist
+    autoDeploy: true
     envVars:
       - key: VITE_BASE_PATH
         value: /
+      - key: VITE_API_BASE
+        value: https://ubhona-api.onrender.com
+      - key: VITE_STK_API_BASE
+        value: https://ubhona-api.onrender.com
+      - key: VITE_PUBLIC_APP_URL
+        value: https://ubhona.onrender.com
+      - key: VITE_UPLOAD_PROVIDER
+        value: api
+      - key: VITE_LOG_API_INFO
+        value: false
+      - key: VITE_APP_NAME
+        value: Ubhona
+      - key: VITE_APP_SLOGAN
+        value: Visualize
+      - key: VITE_ENABLE_ANALYTICS
+        value: false
+      - key: VITE_ENABLE_ORDERS
+        value: false
     routes:
       - type: rewrite
         source: /*

@@ -93,17 +93,25 @@ Backward-compatible aliases (if already used): `WHATSAPP_META_ACCESS_TOKEN`, `WH
 
 ## 5) Dashboard Setup (where to set vars)
 
-### Vercel (Frontend project)
+### Render static site (`Ubhona`)
+- Set only `VITE_*` vars.
+- Production currently uses:
+  - `VITE_API_BASE=https://ubhona-api.onrender.com`
+  - `VITE_STK_API_BASE=https://ubhona-api.onrender.com`
+  - `VITE_PUBLIC_APP_URL=https://ubhona.onrender.com`
+  - `VITE_UPLOAD_PROVIDER=api`
+
+### Render backend web service (`Ubhona-api`)
+- Set all non-`VITE_*` backend vars.
+- Keep `SUPABASE_SERVICE_ROLE_KEY`, `JWT_SECRET`, `DATABASE_URL`, payment tokens, and WhatsApp tokens secret.
+- Ensure callback URLs are reachable over HTTPS.
+
+### Vercel (legacy or alternate frontend project)
 - Set only `VITE_*` vars.
 - Use Environment scopes:
   - Development: local-connected preview if needed
   - Preview: staging values
   - Production: production values
-
-### Backend host (Render/Railway/Fly/etc)
-- Set all non-`VITE_*` backend vars.
-- Keep `SUPABASE_SERVICE_ROLE_KEY`, `JWT_SECRET`, payment tokens, and WhatsApp tokens secret.
-- Ensure callback URLs are reachable over HTTPS.
 
 ## 6) Validation Checklist (before go-live)
 
