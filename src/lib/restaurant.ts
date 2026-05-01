@@ -1,4 +1,4 @@
-import { ApiError, api, isApiReachable } from "./api";
+import { ApiError, api, AUTH_TOKEN_KEY, isApiReachable } from "./api";
 import { allowOfflineDemoFallback, isApiConfigured } from "./config";
 
 export type RestaurantProfile = {
@@ -85,10 +85,12 @@ export type RestaurantWhatsAppSettings = {
 
 const PROFILE_KEY = "mv_restaurant_profile_v1";
 const PROFILE_REGISTRY_KEY = "mv_restaurant_profiles_registry_v1";
+const LOCAL_TOKEN_PREFIX = "local:";
 const DEFAULT_PRIMARY = "#FF6A1A";
 const DEFAULT_SECONDARY = "#E8D8C3";
 const DEFAULT_SHORT_DESCRIPTION = "Visualize";
 const DEFAULT_LOGO = `${import.meta.env.BASE_URL}ubhona-logo.jpeg`;
+let syncRestaurantProfileRequest: Promise<RestaurantProfile | null> | null = null;
 const RESERVED_SLUGS = new Set([
   "demo",
   "ubhona",
@@ -263,6 +265,11 @@ function isApiUnavailable(error: unknown) {
   return code === "API_NOT_CONFIGURED" || code === "API_UNREACHABLE";
 }
 
+function hasRemoteAuthSession() {
+  const token = localStorage.getItem(AUTH_TOKEN_KEY) || "";
+  return Boolean(token) && !token.startsWith(LOCAL_TOKEN_PREFIX);
+}
+
 function toLocalProfile(
   input: Omit<
     RestaurantProfile,
@@ -381,20 +388,24 @@ export function validateRestaurantSlug(slug: string) {
 
 export async function syncRestaurantProfile() {
   if (!isApiConfigured) return readCache();
+  if (!hasRemoteAuthSession()) return readCache();
   if (!(await isApiReachable())) return readCache();
+  if (syncRestaurantProfileRequest) return syncRestaurantProfileRequest;
 
-  try {
-    const status = toRecord(await api.get<unknown>("/restaurants/me/status"));
-    if (!status.exists || !status.restaurant) {
-      writeCache(null);
-      return null;
+  syncRestaurantProfileRequest = (async () => {
+    try {
+      const response = await api.get<unknown>("/restaurants/me");
+      const mapped = mapApiProfile(response);
+      writeCache(mapped);
+      return mapped;
+    } catch {
+      return readCache();
+    } finally {
+      syncRestaurantProfileRequest = null;
     }
-    const mapped = mapApiProfile(status.restaurant);
-    writeCache(mapped);
-    return mapped;
-  } catch {
-    return readCache();
-  }
+  })();
+
+  return syncRestaurantProfileRequest;
 }
 
 export function hasRestaurantProfile() {
@@ -420,9 +431,6 @@ export async function saveRestaurantProfile(
   ensureLocalSlugAvailable(localProfile.slug, existing?.id);
 
   if (!isApiConfigured) {
-    if (!allowOfflineDemoFallback) {
-      throw new Error("API is not configured. Running in static/demo mode.");
-    }
     writeCache(localProfile);
     upsertProfileRegistry(localProfile);
     return localProfile;

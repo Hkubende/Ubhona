@@ -1,6 +1,7 @@
 import * as React from "react";
 import { ArrowRight } from "lucide-react";
 import { cn } from "../../lib/utils";
+import { buttonVariants } from "./Button";
 
 type MotionButtonProps = {
   label: string;
@@ -37,8 +38,10 @@ function MotionButtonContent({
   );
 }
 
-const baseClass =
-  "group relative inline-flex min-h-11 items-center justify-center overflow-hidden rounded-full border border-[#E8D8C3]/75 bg-[#F7F1E8] px-6 py-3 text-sm font-bold text-[#2B1E17] shadow-[0_14px_30px_rgba(78,33,18,0.28),inset_0_1px_0_rgba(255,255,255,0.35)] transition-all duration-300 ease-out hover:-translate-y-[1px] hover:border-[#FF6A1A]/72 hover:bg-[#FAF3EA] hover:shadow-[0_18px_34px_rgba(88,37,20,0.3),0_0_0_1px_rgba(255,106,26,0.14)] focus-visible:border-[#FF6A1A]/75 focus-visible:bg-[#FAF3EA] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#FF6A1A]/55 disabled:cursor-not-allowed disabled:opacity-50";
+const baseClass = cn(
+  buttonVariants({ variant: "primary", size: "lg" }),
+  "group relative overflow-hidden rounded-[20px] font-semibold"
+);
 
 export function MotionButton({
   label,

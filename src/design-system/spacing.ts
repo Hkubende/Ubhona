@@ -1,4 +1,5 @@
 export const spacingScale = {
+  xxs: "4px",
   xs: "8px",
   sm: "12px",
   md: "16px",
@@ -8,20 +9,23 @@ export const spacingScale = {
 } as const;
 
 export const spacing = {
+  stack2xs: "space-y-1",
   stackXs: "space-y-2",
   stackSm: "space-y-3",
   stackMd: "space-y-4",
   stackLg: "space-y-6",
   stackXl: "space-y-8",
   stack2xl: "space-y-12",
+  gap2xs: "gap-1",
   gapXs: "gap-2",
   gapSm: "gap-3",
   gapMd: "gap-4",
   gapLg: "gap-6",
   gapXl: "gap-8",
   gap2xl: "gap-12",
-  pagePadding: "px-4 py-6 lg:px-6",
-  panelPadding: "p-4 sm:p-6",
+  pagePadding: "px-4 py-6 lg:px-6 lg:py-7",
+  panelPadding: "p-4 sm:p-5 lg:p-6",
   compactPanelPadding: "p-4",
   sectionInset: "px-4 py-3",
+  controlPadding: "px-3.5 py-2.5",
 } as const;

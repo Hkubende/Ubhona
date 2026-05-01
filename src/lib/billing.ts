@@ -1,4 +1,5 @@
 import { ApiError, api } from "./api";
+import { hasRemoteAuthSession } from "./auth";
 import {
   getCurrentPlan,
   getRestaurantProfile,
@@ -61,6 +62,29 @@ export type BillingSnapshot = {
 };
 
 export async function getBillingSnapshot(): Promise<BillingSnapshot | null> {
+  if (!hasRemoteAuthSession()) {
+    const profile = getRestaurantProfile();
+    const current = getCurrentPlan(profile);
+    return {
+      subscription: {
+        planId: current.plan,
+        status: current.status,
+        trialEndsAt: current.trialEndsAt || null,
+        currentPeriodEnd: current.renewalDate || null,
+        paymentProvider: "manual",
+      },
+      plan: {
+        id: current.plan,
+        name: current.label,
+        price: 0,
+        currency: "KES",
+        billingCycle: "monthly",
+      },
+      entitlements: [],
+      invoices: [],
+      payments: [],
+    };
+  }
   try {
     return await api.get<BillingSnapshot>("/billing/me");
   } catch (error) {

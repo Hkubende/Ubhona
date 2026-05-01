@@ -109,9 +109,7 @@ export async function updateOrderStatusWorkflow(input: {
   status: OrderStatus;
   role: "owner" | "admin" | "manager" | "waiter" | "kitchen" | "cashier";
 }) {
-  let previousStatus = "";
-  const existing = await platformApi.orders.getStorefrontOrder(input.orderId, input.restaurantId).catch(() => null);
-  if (existing) previousStatus = existing.status;
+  const previousStatus = platformStore.getState().orderStatusById[input.orderId] || "";
   await platformApi.orders.setStatus(input.restaurantId, input.orderId, input.status);
   platformStore.setSessionContext({ restaurantId: input.restaurantId, role: input.role });
   platformStore.upsertOrderStatus(input.orderId, input.status);
@@ -122,37 +120,39 @@ export async function updateOrderStatusWorkflow(input: {
     stage: input.status === "completed" ? "order_completed" : input.status === "cancelled" ? "order_cancelled" : "order_assigned",
     message: `Order moved to ${input.status}.`,
   });
-  const updated = await platformApi.orders.getStorefrontOrder(input.orderId, input.restaurantId).catch(() => null);
-  if (updated) {
-    await emitAutomationEvent({
-      type: "ORDER_STATUS_CHANGED",
-      context: {
-        restaurantId: input.restaurantId,
-        branchId: getCurrentBranchId(),
-        role: input.role,
-        order: {
-          id: updated.id,
-          createdAt: updated.createdAt,
-          customerName: updated.customerName,
-          customerPhone: updated.customerPhone,
-          tableNumber: updated.tableNumber,
-          customerNotes: updated.customerNotes,
-          paymentStatus: updated.paymentStatus,
-          paymentMethod: updated.paymentMethod,
-          paymentReference: updated.paymentReference,
-          subtotal: updated.subtotal,
-          total: updated.total,
-          status: updated.status,
-          items: updated.items.map((item) => ({
-            name: item.name,
-            quantity: item.quantity,
-            unitPrice: item.unitPrice,
-            totalPrice: item.subtotal,
-          })),
+  void platformApi.orders
+    .getStorefrontOrder(input.orderId, input.restaurantId)
+    .then((updated) =>
+      emitAutomationEvent({
+        type: "ORDER_STATUS_CHANGED",
+        context: {
+          restaurantId: input.restaurantId,
+          branchId: getCurrentBranchId(),
+          role: input.role,
+          order: {
+            id: updated.id,
+            createdAt: updated.createdAt,
+            customerName: updated.customerName,
+            customerPhone: updated.customerPhone,
+            tableNumber: updated.tableNumber,
+            customerNotes: updated.customerNotes,
+            paymentStatus: updated.paymentStatus,
+            paymentMethod: updated.paymentMethod,
+            paymentReference: updated.paymentReference,
+            subtotal: updated.subtotal,
+            total: updated.total,
+            status: updated.status,
+            items: updated.items.map((item) => ({
+              name: item.name,
+              quantity: item.quantity,
+              unitPrice: item.unitPrice,
+              totalPrice: item.subtotal,
+            })),
+          },
+          before: { status: previousStatus || undefined },
+          after: { status: updated.status },
         },
-        before: { status: previousStatus || undefined },
-        after: { status: updated.status },
-      },
-    });
-  }
+      })
+    )
+    .catch(() => undefined);
 }

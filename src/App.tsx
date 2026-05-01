@@ -1,5 +1,5 @@
 import * as React from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { Menu } from "lucide-react";
 import { Card } from "./components/ui/Card";
 import { Hero } from "./components/landing/Hero";
@@ -7,6 +7,11 @@ import { InteractiveImageAccordion, type FeatureItem } from "./components/ui/int
 import { MotionButton } from "./components/ui/motion-button";
 import { SecondaryButton } from "./components/ui/secondary-button";
 import { UbhonaLogo } from "./components/ui/ubhona-logo";
+import { useGsapScrollReveal } from "./hooks/use-gsap-scroll-reveal";
+import { trackLaunchFunnelEvent } from "./lib/analytics";
+import { useSeoMetadata } from "./lib/seo";
+import { cn } from "./lib/utils";
+import { tokens, typography } from "./design-system";
 
 const PREVIEW_ITEMS = [
   {
@@ -71,6 +76,26 @@ const FEATURE_HIGHLIGHTS: FeatureItem[] = [
 
 export default function App() {
   const navigate = useNavigate();
+  const featureHighlightsRef = React.useRef<HTMLElement | null>(null);
+  const contactSectionRef = React.useRef<HTMLElement | null>(null);
+  const landingVisitTrackedRef = React.useRef(false);
+
+  useGsapScrollReveal(featureHighlightsRef, {
+    selectors: ["[data-gsap-feature='copy']", "[data-gsap-feature='accordion']"],
+    start: "top 76%",
+    y: 32,
+    duration: 0.82,
+    stagger: 0.12,
+  });
+
+  useGsapScrollReveal(contactSectionRef, {
+    selectors: ["[data-gsap-contact='heading']", "[data-gsap-contact='body']", "[data-gsap-contact='actions']"],
+    start: "top 82%",
+    y: 24,
+    duration: 0.72,
+    stagger: 0.1,
+  });
+
   const scrollToSection = React.useCallback((id: string) => {
     if (id === "home") {
       window.scrollTo({ top: 0, behavior: "smooth" });
@@ -79,6 +104,27 @@ export default function App() {
     const target = document.getElementById(id);
     if (target) target.scrollIntoView({ behavior: "smooth", block: "start" });
   }, []);
+
+  React.useEffect(() => {
+    if (landingVisitTrackedRef.current) return;
+    landingVisitTrackedRef.current = true;
+    void trackLaunchFunnelEvent("landing_visit", { page: "home" });
+  }, []);
+
+  useSeoMetadata({
+    title: "AR Menus and Restaurant Storefronts",
+    description:
+      "Ubhona helps restaurants launch AR menus, branded storefronts, smarter ordering, and operational visibility from one premium platform.",
+    path: "/",
+  });
+
+  const handleGetStarted = React.useCallback((placement: string) => {
+    void trackLaunchFunnelEvent("cta_click", {
+      placement,
+      target: "signup",
+    });
+    navigate("/signup");
+  }, [navigate]);
 
   return (
     <div className="ubhona-landing-shell">
@@ -110,26 +156,26 @@ export default function App() {
             <button type="button" onClick={() => navigate("/pricing")} className="ubhona-landing-nav-link">
               Pricing
             </button>
-            <button type="button" onClick={() => scrollToSection("contact")} className="ubhona-landing-nav-link">
-              Contact
+            <button type="button" onClick={() => navigate("/contact")} className="ubhona-landing-nav-link">
+              Support
             </button>
           </nav>
           <div className="flex shrink-0 items-center gap-2 sm:gap-3">
             <button
               type="button"
               onClick={() => navigate("/login")}
-              className="hidden min-h-10 rounded-xl px-4 text-sm font-medium text-white/72 transition-colors duration-200 hover:text-white md:inline-flex md:items-center"
+              className="hidden min-h-10 rounded-xl px-4 text-sm font-medium text-text-secondary/78 transition-colors duration-200 hover:text-text-primary md:inline-flex md:items-center"
             >
               Sign In
             </button>
             <MotionButton
-              onClick={() => navigate("/signup")}
+              onClick={() => handleGetStarted("header")}
               label="Get Started"
               className="ubhona-landing-cta min-h-10 px-4 text-xs sm:px-5 sm:text-sm"
             />
             <button
               type="button"
-              className="inline-flex h-10 w-10 items-center justify-center rounded-xl text-white/78 transition-colors duration-200 hover:text-white lg:hidden"
+              className="inline-flex h-10 w-10 items-center justify-center rounded-xl text-text-secondary/78 transition-colors duration-200 hover:text-text-primary lg:hidden"
               aria-label="Open menu"
             >
               <Menu className="h-5 w-5" />
@@ -141,7 +187,7 @@ export default function App() {
       <div className="mx-auto max-w-6xl px-4 py-6 sm:px-6 lg:px-8">
         <main>
           <Hero
-            onGetStarted={() => navigate("/signup")}
+            onGetStarted={() => handleGetStarted("hero")}
             onViewDemo={(event) => {
               event.preventDefault();
               navigate("/r/demo");
@@ -150,20 +196,24 @@ export default function App() {
 
           <section
             id="feature-highlights"
-            className="mb-10 rounded-3xl border border-[#FF6A1A]/20 bg-gradient-to-br from-[#2B1E17]/55 via-black/70 to-[#2B1E17]/35 p-5 sm:p-6"
+            ref={featureHighlightsRef}
+            className={cn(tokens.classes.surfaceElevated, "mb-10 p-5 sm:p-6")}
           >
             <div className="mt-1 grid gap-5 lg:grid-cols-[minmax(260px,320px)_minmax(0,1fr)] lg:items-stretch">
-              <div className="min-w-0 p-1 lg:flex lg:h-full lg:flex-col lg:justify-center lg:pr-5">
-                <div className="mb-2 text-sm font-black uppercase tracking-wide text-[#E8D8C3]/90">
+              <div
+                data-gsap-feature="copy"
+                className="min-w-0 p-1 lg:flex lg:h-full lg:flex-col lg:justify-center lg:pr-5"
+              >
+                <div className={cn("mb-2 text-text-secondary/68", typography.label)}>
                   Feature Highlights
                 </div>
-                <h2 className="text-2xl font-black text-[#FBF6EE] sm:text-[2rem]">Bring restaurant menus to life</h2>
-                <p className="mt-2 max-w-md text-sm leading-7 text-[#E8D8C3]/92">
+                <h2 className={cn("text-text-primary sm:text-[2rem]", typography.sectionTitle)}>Bring restaurant menus to life</h2>
+                <p className={cn("mt-2 max-w-md text-text-secondary/84", typography.body)}>
                   Ubhona helps restaurants turn static menus into interactive experiences with AR
                   previews, digital storefronts, smarter ordering, and clear operational insights.
                 </p>
               </div>
-              <div className="min-w-0">
+              <div data-gsap-feature="accordion" className="min-w-0">
                 <InteractiveImageAccordion
                   items={FEATURE_HIGHLIGHTS}
                   className="w-full max-w-[656px]"
@@ -174,17 +224,17 @@ export default function App() {
 
           <section className="mb-10 grid gap-4 lg:grid-cols-2">
             <Card className="p-5">
-              <div className="text-xs font-black uppercase tracking-wide text-text-secondary/85">Problem</div>
-              <h2 className="mt-2 text-2xl font-black text-text-primary">Static menus are limiting</h2>
-              <p className="mt-3 text-sm leading-7 text-text-secondary/90">
+              <div className={cn("text-text-secondary/68", typography.label)}>Problem</div>
+              <h2 className={cn("mt-2", typography.sectionTitle)}>Static menus are limiting</h2>
+              <p className={cn("mt-3 text-text-secondary/82", typography.body)}>
                 Customers decide quickly, and flat menu images do not capture texture, size, or
                 presentation. Restaurants lose attention before intent turns into orders.
               </p>
             </Card>
             <div className="ubhona-landing-section p-5">
-              <div className="text-xs font-black uppercase tracking-wide text-[#F2BA8E]">Solution</div>
-              <h2 className="mt-2 text-2xl font-black text-[#FBF6EE]">Ubhona makes menus visual</h2>
-              <p className="mt-3 text-sm leading-7 text-[#E8D8C3]/92">
+              <div className={cn("text-primary/78", typography.label)}>Solution</div>
+              <h2 className={cn("mt-2 text-text-primary", typography.sectionTitle)}>Ubhona makes menus visual</h2>
+              <p className={cn("mt-3 text-text-secondary/84", typography.body)}>
                 Give diners a richer way to explore meals with 3D/AR experiences, branded storefronts,
                 and a path into smarter ordering and operational insights.
               </p>
@@ -194,8 +244,8 @@ export default function App() {
           <section className="ubhona-landing-section mb-10 p-5">
             <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
               <div>
-                <div className="text-sm font-black uppercase tracking-wide text-text-secondary/86">Product Preview</div>
-                <p className="mt-1 text-sm text-text-secondary/88">Explore the MVP journey from storefront to checkout.</p>
+                <div className={cn("text-text-secondary/68", typography.label)}>Product Preview</div>
+                <p className={cn("mt-1 text-text-secondary/78", typography.body)}>Explore the MVP journey from storefront to checkout.</p>
               </div>
             </div>
             <div className="grid gap-4 md:grid-cols-3">
@@ -203,31 +253,52 @@ export default function App() {
                 <button
                   key={item.title}
                   onClick={() => navigate(item.route)}
-                  className="rounded-2xl border border-border bg-[linear-gradient(180deg,rgba(16,13,13,0.84),rgba(11,10,10,0.84))] p-4 text-left transition duration-300 ease-out hover:-translate-y-0.5 hover:border-primary/35 hover:bg-[linear-gradient(180deg,rgba(18,14,14,0.9),rgba(13,11,11,0.9))]"
+                  className="ui-panel-inset rounded-[22px] p-4 text-left transition duration-300 ease-out hover:-translate-y-0.5 hover:border-primary/35 hover:bg-[linear-gradient(180deg,rgba(18,14,14,0.9),rgba(13,11,11,0.9))]"
                 >
-                  <div className="text-sm font-bold text-[#F2BA8E]">{item.title}</div>
-                  <div className="mt-2 text-xs text-text-secondary/85">{item.description}</div>
+                  <div className="text-sm font-semibold text-[#F2BA8E]">{item.title}</div>
+                  <div className="mt-2 text-sm leading-6 text-text-secondary/74">{item.description}</div>
                 </button>
               ))}
             </div>
           </section>
 
-          <section id="contact" className="ubhona-landing-section bg-[linear-gradient(112deg,rgba(255,106,26,0.2),rgba(13,11,11,0.95)_46%,rgba(8,7,7,0.96)_100%)] p-6 text-center">
-            <h2 className="text-2xl font-black text-[#FBF6EE]">Build your next menu experience with Ubhona</h2>
-            <p className="mx-auto mt-3 max-w-2xl text-sm text-[#E8D8C3]/88">
+          <section
+            id="contact"
+            ref={contactSectionRef}
+            className="ubhona-landing-section bg-[linear-gradient(112deg,rgba(255,106,26,0.2),rgba(13,11,11,0.95)_46%,rgba(8,7,7,0.96)_100%)] p-6 text-center"
+          >
+            <h2 data-gsap-contact="heading" className={cn("text-[#FBF6EE]", typography.sectionTitle)}>
+              Build your next menu experience with Ubhona
+            </h2>
+            <p data-gsap-contact="body" className={cn("mx-auto mt-3 max-w-2xl text-[#E8D8C3]/84", typography.body)}>
               Show food better, increase confidence before checkout, and move faster from menu to order.
+              Need help before launch? Reach support in one click.
             </p>
-            <div className="mt-5 flex justify-center gap-3">
+            <div data-gsap-contact="actions" className="mt-5 flex justify-center gap-3">
               <MotionButton
-                onClick={() => navigate("/signup")}
+                onClick={() => handleGetStarted("contact")}
                 label="Get Started"
                 className="min-h-11 px-6"
               />
               <SecondaryButton
-                onClick={() => navigate("/r/demo")}
-                label="View Demo"
+                onClick={() => navigate("/contact")}
+                label="Email Support"
                 className="min-h-11 px-6"
               />
+            </div>
+            <div className="mt-5 flex flex-wrap items-center justify-center gap-4 text-sm text-[#E8D8C3]/78">
+              <Link to="/privacy" className="transition-colors hover:text-[#FBF6EE]">
+                Privacy Policy
+              </Link>
+              <Link to="/terms" className="transition-colors hover:text-[#FBF6EE]">
+                Terms of Service
+              </Link>
+              <Link to="/contact" className="transition-colors hover:text-[#FBF6EE]">
+                Support
+              </Link>
+              <a href="mailto:support@ubhona.com?subject=Ubhona%20Support%20Request" className="transition-colors hover:text-[#FBF6EE]">
+                support@ubhona.com
+              </a>
             </div>
           </section>
         </main>

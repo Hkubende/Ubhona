@@ -7,29 +7,12 @@ import { Input } from "../ui/Input";
 import { cn } from "../../lib/utils";
 import { tokens, typography } from "../../design-system";
 import type { PublicDish, PublicRestaurant } from "../../lib/storefront";
+import { applyDishImageFallback, getDishImageVariantUrl } from "../../lib/image-variants";
 
 export type MediaMode = "photo" | "model" | "ar";
 
 function formatKsh(value: number) {
   return `KSh ${value.toLocaleString("en-KE")}`;
-}
-
-function resolveDishImageSrc(url: string) {
-  const fallback = `${import.meta.env.BASE_URL}ubhona-logo.jpeg`;
-  const value = String(url || "").trim();
-  if (!value) return fallback;
-  if (/^(blob:|data:)/i.test(value)) return value;
-  if (/^\//.test(value)) return value;
-  if (/^https?:\/\//i.test(value)) {
-    try {
-      const parsed = new URL(value);
-      if (parsed.hostname === "localhost" || parsed.hostname.includes(".")) return value;
-      return fallback;
-    } catch {
-      return fallback;
-    }
-  }
-  return fallback;
 }
 
 export function DishTopBar({
@@ -45,13 +28,13 @@ export function DishTopBar({
     <div className={cn(tokens.classes.storefrontFloating, "mb-4 flex items-center justify-between gap-3 px-3 py-2 sm:px-4 sm:py-3")}>
       <Link
         to={`/r/${restaurantSlug}/menu`}
-        className="inline-flex min-h-10 items-center gap-2 rounded-xl border border-white/12 bg-black/25 px-3 text-sm font-semibold text-text-primary transition hover:border-white/24"
+        className="ubhona-storefront-control inline-flex min-h-10 items-center gap-2 rounded-xl px-3 text-sm font-semibold text-text-primary transition"
       >
         <ArrowLeft className="h-4 w-4" />
         Back to Menu
       </Link>
       <div className="flex items-center gap-2">
-        <div className="inline-flex items-center gap-2 rounded-full border border-white/12 bg-black/30 px-3 py-1.5 text-xs text-text-secondary/88">
+        <div className="ubhona-storefront-chip inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-xs text-text-secondary/88">
           <span className="h-1.5 w-1.5 rounded-full bg-primary" />
           {restaurant.name}
         </div>
@@ -88,7 +71,7 @@ export function MediaModeTabs({
           tabClass,
           mode === "photo"
             ? "border-primary/45 bg-primary/15 text-text-primary"
-            : "border-white/12 bg-black/25 text-text-secondary hover:border-white/24"
+            : "ubhona-storefront-control text-text-secondary"
         )}
       >
         <Box className="h-4 w-4" />
@@ -102,7 +85,7 @@ export function MediaModeTabs({
           tabClass,
           mode === "model"
             ? "border-primary/45 bg-primary/15 text-text-primary"
-            : "border-white/12 bg-black/25 text-text-secondary hover:border-white/24 disabled:cursor-not-allowed disabled:opacity-45"
+            : "ubhona-storefront-control text-text-secondary disabled:cursor-not-allowed disabled:opacity-45"
         )}
       >
         <Scan className="h-4 w-4" />
@@ -116,7 +99,7 @@ export function MediaModeTabs({
           tabClass,
           mode === "ar"
             ? "border-primary/45 bg-primary/15 text-text-primary"
-            : "border-white/12 bg-black/25 text-text-secondary hover:border-white/24 disabled:cursor-not-allowed disabled:opacity-45"
+            : "ubhona-storefront-control text-text-secondary disabled:cursor-not-allowed disabled:opacity-45"
         )}
       >
         <QrCode className="h-4 w-4" />
@@ -148,10 +131,16 @@ export function DishMediaStage({
   return (
     <div className={cn(tokens.classes.storefrontPanel, "overflow-hidden p-3 sm:p-4")}>
       <MediaModeTabs mode={mode} onModeChange={onModeChange} hasModel={Boolean(dish.modelUrl)} supportsAr={supportsAr} />
-      <div className="relative overflow-hidden rounded-2xl border border-white/10 bg-black/35">
+      <div className="ubhona-storefront-inline-surface-strong relative overflow-hidden rounded-2xl">
         <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_35%_18%,rgba(255,106,26,0.24),rgba(255,106,26,0)_58%)]" />
         {mode === "photo" ? (
-          <img src={resolveDishImageSrc(dish.thumbUrl)} alt={dish.name} className="h-[320px] w-full object-cover sm:h-[460px]" />
+          <img
+            src={getDishImageVariantUrl(dish.thumbUrl, "large")}
+            alt={dish.name}
+            decoding="async"
+            onError={(event) => applyDishImageFallback(event, dish.thumbUrl)}
+            className="h-[320px] w-full object-cover sm:h-[460px]"
+          />
         ) : null}
 
         {mode === "model" && dish.modelUrl ? (
@@ -167,13 +156,20 @@ export function DishMediaStage({
             />
             {!isModelLoaded && !hasModelError ? (
               <div className="pointer-events-none absolute inset-0">
-                <img src={resolveDishImageSrc(dish.thumbUrl)} alt={dish.name} className="h-full w-full object-cover blur-xl" />
-                <div className="absolute inset-0 bg-black/45" />
+                <img
+                  src={getDishImageVariantUrl(dish.thumbUrl, "medium")}
+                  alt={dish.name}
+                  loading="lazy"
+                  decoding="async"
+                  onError={(event) => applyDishImageFallback(event, dish.thumbUrl)}
+                  className="h-full w-full object-cover blur-xl"
+                />
+                <div className="ubhona-storefront-overlay-backdrop absolute inset-0" />
               </div>
             ) : null}
             {hasModelError ? (
-              <div className="absolute inset-0 grid place-items-center bg-black/50">
-                <div className="rounded-xl border border-orange-300/35 bg-black/70 px-3 py-2 text-center text-sm text-orange-200">
+              <div className="ubhona-storefront-overlay-alert-layer absolute inset-0 grid place-items-center">
+                <div className="ubhona-storefront-overlay-card ubhona-storefront-text-accent rounded-xl px-3 py-2 text-center text-sm">
                   Could not load 3D model. Switch back to photo.
                 </div>
               </div>
@@ -228,7 +224,7 @@ export function QuantitySelector({
 }) {
   const inputId = React.useId();
   return (
-    <div className="inline-flex items-center overflow-hidden rounded-xl border border-white/12 bg-black/30">
+    <div className="ubhona-storefront-control inline-flex items-center overflow-hidden rounded-xl">
       <button
         type="button"
         onClick={() => onChange(Math.max(1, quantity - 1))}
@@ -248,7 +244,7 @@ export function QuantitySelector({
         type="number"
         min="1"
         step="1"
-        className="h-10 w-16 rounded-none border-x border-y-0 border-white/12 bg-transparent px-1 text-center text-sm"
+        className="h-10 w-16 rounded-none border-x border-y-0 border-border/70 bg-transparent px-1 text-center text-sm"
       />
       <button
         type="button"
@@ -289,7 +285,7 @@ export function DishInfoPanel({
     <div className={cn(tokens.classes.storefrontPanel, "space-y-4 p-4 sm:p-5")}>
       <div className="space-y-2">
         <div className="flex flex-wrap items-center gap-2">
-          <span className="inline-flex rounded-full border border-white/12 bg-black/25 px-2.5 py-1 text-[11px] uppercase tracking-[0.1em] text-text-secondary/82">
+          <span className="ubhona-storefront-chip inline-flex rounded-full px-2.5 py-1 text-[11px] uppercase tracking-[0.1em] text-text-secondary/82">
             {restaurantName} / {categoryLabel}
           </span>
         </div>
@@ -328,7 +324,7 @@ export function DishInfoPanel({
         </Button>
       </div>
 
-      <div className="rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-xs text-text-secondary/78">
+      <div className="ubhona-storefront-inline-surface rounded-xl px-3 py-2 text-xs text-text-secondary/78">
         Fresh prep. Updated availability. Secure checkout.
       </div>
     </div>
@@ -352,9 +348,16 @@ export function RelatedDishesSection({
           <Link
             key={dish.id}
             to={`/r/${restaurantSlug}/dish/${dish.id}`}
-            className="rounded-2xl border border-white/10 bg-black/25 p-3 transition hover:-translate-y-0.5 hover:border-primary/30"
+            className="ubhona-storefront-inline-surface-strong rounded-2xl p-3 transition hover:-translate-y-0.5 hover:border-primary/30"
           >
-            <img src={resolveDishImageSrc(dish.thumbUrl)} alt={dish.name} className="h-32 w-full rounded-xl object-cover" />
+            <img
+              src={getDishImageVariantUrl(dish.thumbUrl, "small")}
+              alt={dish.name}
+              loading="lazy"
+              decoding="async"
+              onError={(event) => applyDishImageFallback(event, dish.thumbUrl)}
+              className="h-32 w-full rounded-xl object-cover"
+            />
             <div className="mt-2 font-semibold text-text-primary">{dish.name}</div>
             <div className="text-xs text-text-secondary/74 line-clamp-2">{dish.description}</div>
             <div className="mt-1 text-sm font-semibold text-primary">{formatKsh(dish.price)}</div>

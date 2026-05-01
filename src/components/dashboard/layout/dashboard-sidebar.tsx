@@ -13,7 +13,7 @@ export function DashboardSidebar({
   return (
     <Sidebar
       className={cn(
-        collapsed ? "lg:w-[78px] lg:px-2.5" : "lg:w-[286px] lg:px-4",
+        collapsed ? "lg:w-[82px] lg:px-2.5" : "lg:w-[294px] lg:px-3.5",
         `overflow-hidden ${motion.width}`
       )}
     >

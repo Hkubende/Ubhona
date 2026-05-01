@@ -3,7 +3,7 @@ import { z } from "zod";
 import { requireAuth } from "../middleware/auth.js";
 import { createRateLimiter } from "../middleware/rate-limit.js";
 import type { AuthRequest } from "../types.js";
-import { login, me, signup } from "../services/auth.service.js";
+import { login, me, requestPasswordReset, resetPassword, signup } from "../services/auth.service.js";
 
 export const authRouter = Router();
 const signupLimiter = createRateLimiter({
@@ -17,6 +17,18 @@ const loginLimiter = createRateLimiter({
   windowMs: 10 * 60 * 1000,
   max: 12,
   message: "Too many login attempts. Please try again shortly.",
+});
+const forgotPasswordLimiter = createRateLimiter({
+  keyPrefix: "auth-forgot-password",
+  windowMs: 10 * 60 * 1000,
+  max: 6,
+  message: "Too many password reset requests. Please try again shortly.",
+});
+const resetPasswordLimiter = createRateLimiter({
+  keyPrefix: "auth-reset-password",
+  windowMs: 10 * 60 * 1000,
+  max: 10,
+  message: "Too many password reset attempts. Please try again shortly.",
 });
 
 authRouter.post("/signup", signupLimiter, async (req, res) => {
@@ -47,6 +59,35 @@ authRouter.post("/login", loginLimiter, async (req, res) => {
     res.json(response);
   } catch (error) {
     res.status(400).json({ error: error instanceof Error ? error.message : "Login failed." });
+  }
+});
+
+authRouter.post("/forgot-password", forgotPasswordLimiter, async (req, res) => {
+  try {
+    const body = z
+      .object({
+        email: z.string().email(),
+      })
+      .parse(req.body);
+    const response = await requestPasswordReset(body);
+    res.json(response);
+  } catch (error) {
+    res.status(400).json({ error: error instanceof Error ? error.message : "Password reset request failed." });
+  }
+});
+
+authRouter.post("/reset-password", resetPasswordLimiter, async (req, res) => {
+  try {
+    const body = z
+      .object({
+        token: z.string().min(1),
+        password: z.string().min(6),
+      })
+      .parse(req.body);
+    const response = await resetPassword(body);
+    res.json(response);
+  } catch (error) {
+    res.status(400).json({ error: error instanceof Error ? error.message : "Password reset failed." });
   }
 });
 

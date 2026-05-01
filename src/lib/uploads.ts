@@ -5,6 +5,28 @@ import { getRestaurantProfile } from "./restaurant";
 import { supabaseConfigStatus } from "./supabase";
 
 export type UploadAssetType = "logo" | "cover" | "thumb" | "model";
+export type MediaAssetType = "thumbnail" | "dish-image" | "model";
+export type UploadedMediaAsset = {
+  id: string;
+  restaurantId: string;
+  dishId?: string;
+  assetType: MediaAssetType;
+  bucket: string;
+  path: string;
+  publicUrl: string;
+  mimeType: string;
+  originalFilename: string;
+  sizeBytes: number;
+  width?: number;
+  height?: number;
+  createdAt: string;
+  uploadedBy?: string;
+  variants?: {
+    small?: string;
+    medium?: string;
+    original: string;
+  };
+};
 
 export type PreparedUpload = {
   id: string;
@@ -115,7 +137,7 @@ async function uploadViaApi(
     restaurantId: string;
     dishId: string;
   }
-) {
+): Promise<{ url: string; asset?: UploadedMediaAsset; bucket?: string; path?: string }> {
   if (!isApiConfigured) {
     throw new Error("Upload API is not configured.");
   }
@@ -126,6 +148,9 @@ async function uploadViaApi(
   const token = localStorage.getItem(AUTH_TOKEN_KEY);
   if (!token) {
     throw new Error("Missing auth token for API upload.");
+  }
+  if (token.startsWith("local:")) {
+    throw new Error("Demo/local auth token cannot call backend uploads. Sign in with backend auth.");
   }
 
   const route = input.assetType === "thumb" ? "thumbnail" : "model";
@@ -143,12 +168,17 @@ async function uploadViaApi(
     body: formData,
   });
   const body = (await response.json().catch(() => null)) as
-    | { error?: string; url?: string; ok?: boolean; bucket?: string; path?: string }
+    | { error?: string; url?: string; ok?: boolean; bucket?: string; path?: string; asset?: UploadedMediaAsset }
     | null;
   if (!response.ok || !body?.url) {
     throw new Error(body?.error || `API upload failed (${response.status}).`);
   }
-  return body.url;
+  return {
+    url: body.url,
+    bucket: body.bucket,
+    path: body.path,
+    asset: body.asset,
+  };
 }
 
 export async function requestUploadUrl(file: File, assetType: UploadAssetType) {
@@ -203,6 +233,28 @@ export async function uploadFileAsset(file: File, assetType: UploadAssetType) {
 export async function uploadThumbnail(file: File, restaurantId?: string, dishId?: string) {
   validateThumbnail(file);
   const { restaurantId: rid, dishId: did } = getUploadContext(restaurantId, dishId);
+  const result = await uploadViaApi(file, {
+    assetType: "thumb",
+    restaurantId: rid,
+    dishId: did,
+  });
+  return result.url;
+}
+
+export async function uploadDishModel(file: File, restaurantId?: string, dishId?: string) {
+  validateModel(file);
+  const { restaurantId: rid, dishId: did } = getUploadContext(restaurantId, dishId);
+  const result = await uploadViaApi(file, {
+    assetType: "model",
+    restaurantId: rid,
+    dishId: did,
+  });
+  return result.url;
+}
+
+export async function uploadThumbnailAsset(file: File, restaurantId?: string, dishId?: string) {
+  validateThumbnail(file);
+  const { restaurantId: rid, dishId: did } = getUploadContext(restaurantId, dishId);
   return uploadViaApi(file, {
     assetType: "thumb",
     restaurantId: rid,
@@ -210,7 +262,7 @@ export async function uploadThumbnail(file: File, restaurantId?: string, dishId?
   });
 }
 
-export async function uploadDishModel(file: File, restaurantId?: string, dishId?: string) {
+export async function uploadDishModelAsset(file: File, restaurantId?: string, dishId?: string) {
   validateModel(file);
   const { restaurantId: rid, dishId: did } = getUploadContext(restaurantId, dishId);
   return uploadViaApi(file, {
@@ -274,6 +326,9 @@ export function explainUploadFailure(error: unknown, assetType: UploadAssetType)
   }
   if (lower.includes("missing auth token for api upload")) {
     return "Upload API requires an authenticated app session. Sign in again and retry.";
+  }
+  if (lower.includes("demo/local auth token cannot call backend uploads")) {
+    return "Upload blocked: local demo login is active. Sign in through backend auth to get a real JWT.";
   }
   if (lower.includes("upload api base url is missing")) {
     return "Upload API base URL is missing. Set VITE_API_BASE.";

@@ -30,6 +30,18 @@ const trackerBoardSchema = z.object({
 });
 const PLATFORM_TRACKER_KEY = "menuvista-platform-roadmap";
 
+type PlatformConfigDelegate = {
+  findUnique: (args: Prisma.PlatformConfigFindUniqueArgs) => Promise<{ payload: Prisma.JsonValue } | null>;
+  create: (args: Prisma.PlatformConfigCreateArgs) => Promise<{ payload: Prisma.JsonValue }>;
+  update: (args: Prisma.PlatformConfigUpdateArgs) => Promise<{ payload: Prisma.JsonValue }>;
+  upsert: (args: Prisma.PlatformConfigUpsertArgs) => Promise<{ payload: Prisma.JsonValue }>;
+};
+
+// Prisma client generation is schema-correct, but the local route compile path
+// can lag delegate inference during active schema churn. Keep the cast narrow so
+// the admin-only config path stays explicit without weakening model typing.
+const platformConfig = (prisma as unknown as { platformConfig: PlatformConfigDelegate }).platformConfig;
+
 function nowIso() {
   return new Date().toISOString();
 }
@@ -441,13 +453,13 @@ adminRouter.get("/support", async (_req, res) => {
 });
 
 adminRouter.get("/platform-tracker", async (_req, res) => {
-  const existing = await prisma.platformTrackerDocument.findUnique({
+  const existing = await platformConfig.findUnique({
     where: { key: PLATFORM_TRACKER_KEY },
     select: { payload: true },
   });
   if (!existing) {
     const seeded = getDefaultPlatformTrackerBoard();
-    const created = await prisma.platformTrackerDocument.create({
+    const created = await platformConfig.create({
       data: {
         key: PLATFORM_TRACKER_KEY,
         payload: seeded as Prisma.InputJsonValue,
@@ -460,7 +472,7 @@ adminRouter.get("/platform-tracker", async (_req, res) => {
   const parsed = trackerBoardSchema.safeParse(existing.payload);
   if (!parsed.success) {
     const resetBoard = getDefaultPlatformTrackerBoard();
-    const updated = await prisma.platformTrackerDocument.update({
+    const updated = await platformConfig.update({
       where: { key: PLATFORM_TRACKER_KEY },
       data: { payload: resetBoard as Prisma.InputJsonValue },
       select: { payload: true },
@@ -481,7 +493,7 @@ adminRouter.put("/platform-tracker", async (req, res) => {
     ...body.data,
     updatedAt: nowIso(),
   };
-  const saved = await prisma.platformTrackerDocument.upsert({
+  const saved = await platformConfig.upsert({
     where: { key: PLATFORM_TRACKER_KEY },
     update: { payload: nextBoard as Prisma.InputJsonValue },
     create: {
@@ -495,7 +507,7 @@ adminRouter.put("/platform-tracker", async (req, res) => {
 
 adminRouter.post("/platform-tracker/reset", async (_req, res) => {
   const board = getDefaultPlatformTrackerBoard();
-  const saved = await prisma.platformTrackerDocument.upsert({
+  const saved = await platformConfig.upsert({
     where: { key: PLATFORM_TRACKER_KEY },
     update: { payload: board as Prisma.InputJsonValue },
     create: {

@@ -6,6 +6,7 @@ import { tokens } from "../../design-system";
 import { getPublicOrderTracking, type PublicOrderTracking } from "../../lib/orders";
 import { getSharedStatusLabel, normalizeOrderStatus } from "../../lib/order-status";
 import { cn } from "../../lib/utils";
+import { UbhonaLoader } from "../../components/ui/ubhona-loader";
 
 const TRACKING_STEPS = [
   { key: "placed", label: "Order Received" },
@@ -69,7 +70,7 @@ export default function OrderTrackingPage() {
   }, [orderId, trackingToken]);
 
   if (loading) {
-    return <div className={cn(tokens.classes.storefrontShell, "min-h-screen p-6 text-text-secondary/80")}>Loading order...</div>;
+    return <UbhonaLoader fullScreen label="Loading order tracking" shellClassName={tokens.classes.storefrontShell} />;
   }
 
   if (error || !order) {
@@ -110,7 +111,7 @@ export default function OrderTrackingPage() {
                         ? "border-emerald-300/50 bg-emerald-400"
                         : current
                           ? "border-primary/50 bg-primary"
-                          : "border-white/18 bg-white/6"
+                          : "ubhona-storefront-step-idle"
                     )}
                   />
                   <div
@@ -125,7 +126,7 @@ export default function OrderTrackingPage() {
               );
             })}
           </div>
-          <div className="mt-4 rounded-xl border border-white/10 bg-black/20 p-3 text-sm text-text-secondary/84">
+          <div className="ubhona-storefront-inline-surface mt-4 rounded-xl p-3 text-sm text-text-secondary/84">
             {getStatusMessage(order.status)}
           </div>
           {typeof order.estimatedMinutes === "number" ? (
@@ -151,7 +152,7 @@ export default function OrderTrackingPage() {
               </div>
             ))}
           </div>
-          <div className="mt-3 border-t border-white/10 pt-3 text-right text-xl font-semibold text-primary">
+          <div className="mt-3 border-t border-border/70 pt-3 text-right text-xl font-semibold text-primary">
             {formatKsh(order.totalAmount)}
           </div>
         </section>

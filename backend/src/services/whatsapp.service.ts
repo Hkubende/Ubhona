@@ -1,7 +1,14 @@
+import { runWithPublicStorefrontDbContext } from "../db-rls.js";
 import { prisma } from "../prisma.js";
 import { normalizePhone } from "./payment.service.js";
 import { sendWhatsAppTemplateMessage } from "./whatsapp-provider.service.js";
 import { issueOrderTrackingToken } from "./order-tracking-token.service.js";
+import {
+  createRestaurantDocument,
+  findRestaurantDocumentByKey,
+  listRestaurantDocuments,
+  upsertRestaurantDocument,
+} from "./tenant-document.service.js";
 import type {
   OrderWhatsAppPreference,
   RestaurantWhatsAppSettings,
@@ -26,16 +33,16 @@ function settingsKey(restaurantId: string) {
   return `${SETTINGS_KEY_PREFIX}${restaurantId}`;
 }
 
-function prefKey(orderId: string) {
-  return `${PREF_KEY_PREFIX}${orderId}`;
+function prefKey(restaurantId: string, orderId: string) {
+  return `${PREF_KEY_PREFIX}${restaurantId}:${orderId}`;
 }
 
-function dispatchKey(orderId: string, messageType: WhatsAppMessageType) {
-  return `${DISPATCH_KEY_PREFIX}${orderId}:${messageType}`;
+function dispatchKey(restaurantId: string, orderId: string, messageType: WhatsAppMessageType) {
+  return `${DISPATCH_KEY_PREFIX}${restaurantId}:${orderId}:${messageType}`;
 }
 
-function logKey(orderId: string, messageType: WhatsAppMessageType) {
-  return `${LOG_KEY_PREFIX}${orderId}:${messageType}:${Date.now()}`;
+function logKey(restaurantId: string, orderId: string, messageType: WhatsAppMessageType) {
+  return `${LOG_KEY_PREFIX}${restaurantId}:${orderId}:${messageType}:${Date.now()}`;
 }
 
 function automationSettingsKey(restaurantId: string) {
@@ -43,8 +50,9 @@ function automationSettingsKey(restaurantId: string) {
 }
 
 async function getAutomationWhatsAppFlags(restaurantId: string) {
-  const row = await prisma.platformTrackerDocument.findUnique({
-    where: { key: automationSettingsKey(restaurantId) },
+  const row = await findRestaurantDocumentByKey({
+    restaurantId,
+    key: automationSettingsKey(restaurantId),
     select: { payload: true },
   });
   const payload = ((row?.payload as Record<string, unknown> | null) || {}) as Record<string, unknown>;
@@ -67,28 +75,28 @@ async function writeLog(input: {
   failureReason?: string;
   payload?: unknown;
 }) {
-  await prisma.platformTrackerDocument.create({
-    data: {
-      key: logKey(input.orderId, input.messageType),
-      payload: {
-        orderId: input.orderId,
-        restaurantId: input.restaurantId,
-        messageType: input.messageType,
-        phoneNumber: input.phoneNumber,
-        sendStatus: input.sendStatus,
-        provider: input.provider,
-        providerReference: input.providerReference || null,
-        failureReason: input.failureReason || null,
-        payload: input.payload || null,
-        createdAt: new Date().toISOString(),
-      },
+  await createRestaurantDocument({
+    restaurantId: input.restaurantId,
+    key: logKey(input.restaurantId, input.orderId, input.messageType),
+    payload: {
+      orderId: input.orderId,
+      restaurantId: input.restaurantId,
+      messageType: input.messageType,
+      phoneNumber: input.phoneNumber,
+      sendStatus: input.sendStatus,
+      provider: input.provider,
+      providerReference: input.providerReference || null,
+      failureReason: input.failureReason || null,
+      payload: input.payload || null,
+      createdAt: new Date().toISOString(),
     },
   });
 }
 
 export async function getRestaurantWhatsAppSettings(restaurantId: string): Promise<RestaurantWhatsAppSettings> {
-  const row = await prisma.platformTrackerDocument.findUnique({
-    where: { key: settingsKey(restaurantId) },
+  const row = await findRestaurantDocumentByKey({
+    restaurantId,
+    key: settingsKey(restaurantId),
     select: { payload: true },
   });
   const payload = ((row?.payload as Record<string, unknown> | null) || {}) as Record<string, unknown>;
@@ -115,15 +123,10 @@ export async function updateRestaurantWhatsAppSettings(
     provider: input.provider || existing.provider || "mock",
     updatedAt: new Date().toISOString(),
   };
-  await prisma.platformTrackerDocument.upsert({
-    where: { key: settingsKey(restaurantId) },
-    create: {
-      key: settingsKey(restaurantId),
-      payload: next,
-    },
-    update: {
-      payload: next,
-    },
+  await upsertRestaurantDocument({
+    restaurantId,
+    key: settingsKey(restaurantId),
+    payload: next,
   });
   return next;
 }
@@ -144,22 +147,18 @@ export async function registerOrderWhatsAppPreference(input: {
     source: input.source || "checkout",
     updatedAt: new Date().toISOString(),
   };
-  await prisma.platformTrackerDocument.upsert({
-    where: { key: prefKey(input.orderId) },
-    create: {
-      key: prefKey(input.orderId),
-      payload,
-    },
-    update: {
-      payload,
-    },
+  await upsertRestaurantDocument({
+    restaurantId: input.restaurantId,
+    key: prefKey(input.restaurantId, input.orderId),
+    payload,
   });
   return payload;
 }
 
-export async function getOrderWhatsAppPreference(orderId: string): Promise<OrderWhatsAppPreference | null> {
-  const row = await prisma.platformTrackerDocument.findUnique({
-    where: { key: prefKey(orderId) },
+export async function getOrderWhatsAppPreference(orderId: string, restaurantId: string): Promise<OrderWhatsAppPreference | null> {
+  const row = await findRestaurantDocumentByKey({
+    restaurantId,
+    key: prefKey(restaurantId, orderId),
     select: { payload: true },
   });
   if (!row) return null;
@@ -199,21 +198,27 @@ async function sendOrderMessage(input: {
   status?: string;
   paymentStatus?: string;
 }) {
+  // WhatsApp delivery can run from callbacks and background side effects where
+  // no authenticated app actor is present. The tenant is still proven by
+  // restaurantId, so use the synthetic public tenant context for protected
+  // order reads instead of bypassing RLS entirely.
   const [settings, preference, order, restaurant] = await Promise.all([
     getRestaurantWhatsAppSettings(input.restaurantId),
-    getOrderWhatsAppPreference(input.orderId),
-    prisma.order.findUnique({
-      where: { id: input.orderId },
-      select: {
-        id: true,
-        restaurantId: true,
-        customerName: true,
-        customerPhone: true,
-        totalAmount: true,
-        status: true,
-        paymentStatus: true,
-      },
-    }),
+    getOrderWhatsAppPreference(input.orderId, input.restaurantId),
+    runWithPublicStorefrontDbContext(input.restaurantId, () =>
+      prisma.order.findUnique({
+        where: { id: input.orderId },
+        select: {
+          id: true,
+          restaurantId: true,
+          customerName: true,
+          customerPhone: true,
+          totalAmount: true,
+          status: true,
+          paymentStatus: true,
+        },
+      })
+    ),
     prisma.restaurant.findUnique({
       where: { id: input.restaurantId },
       select: { id: true, name: true },
@@ -260,9 +265,10 @@ async function sendOrderMessage(input: {
     return;
   }
 
-  const dedupeKey = dispatchKey(input.orderId, input.messageType);
-  const existingDispatch = await prisma.platformTrackerDocument.findUnique({
-    where: { key: dedupeKey },
+  const dedupeKey = dispatchKey(input.restaurantId, input.orderId, input.messageType);
+  const existingDispatch = await findRestaurantDocumentByKey({
+    restaurantId: input.restaurantId,
+    key: dedupeKey,
     select: { id: true },
   });
   if (existingDispatch) return;
@@ -289,32 +295,18 @@ async function sendOrderMessage(input: {
     },
   });
 
-  await prisma.platformTrackerDocument.upsert({
-    where: { key: dedupeKey },
-    create: {
-      key: dedupeKey,
-      payload: {
-        orderId: input.orderId,
-        restaurantId: input.restaurantId,
-        messageType: input.messageType,
-        sentAt: new Date().toISOString(),
-        sendStatus: sendResult.ok ? "sent" : "failed",
-        provider: sendResult.provider,
-        providerReference: sendResult.providerMessageId || null,
-        failureReason: sendResult.failureReason || null,
-      },
-    },
-    update: {
-      payload: {
-        orderId: input.orderId,
-        restaurantId: input.restaurantId,
-        messageType: input.messageType,
-        sentAt: new Date().toISOString(),
-        sendStatus: sendResult.ok ? "sent" : "failed",
-        provider: sendResult.provider,
-        providerReference: sendResult.providerMessageId || null,
-        failureReason: sendResult.failureReason || null,
-      },
+  await upsertRestaurantDocument({
+    restaurantId: input.restaurantId,
+    key: dedupeKey,
+    payload: {
+      orderId: input.orderId,
+      restaurantId: input.restaurantId,
+      messageType: input.messageType,
+      sentAt: new Date().toISOString(),
+      sendStatus: sendResult.ok ? "sent" : "failed",
+      provider: sendResult.provider,
+      providerReference: sendResult.providerMessageId || null,
+      failureReason: sendResult.failureReason || null,
     },
   });
 
@@ -384,14 +376,9 @@ export async function handleOrderStatusWhatsAppNotifications(input: {
 }
 
 export async function getWhatsAppLogsForRestaurant(restaurantId: string, limit = 100) {
-  const rows = await prisma.platformTrackerDocument.findMany({
-    where: {
-      key: { startsWith: LOG_KEY_PREFIX },
-      payload: {
-        path: ["restaurantId"],
-        equals: restaurantId,
-      },
-    },
+  const rows = await listRestaurantDocuments({
+    restaurantId,
+    keyPrefix: `${LOG_KEY_PREFIX}`,
     take: Math.max(1, Math.min(200, Math.floor(limit))),
     orderBy: { updatedAt: "desc" },
   });

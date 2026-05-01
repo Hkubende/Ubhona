@@ -19,6 +19,7 @@ import {
 import { trackAnalyticsEvent } from "../../lib/analytics";
 import { getStorefrontPaymentMethods, type StorefrontPaymentMethod } from "../../lib/storefront-payments";
 import { Button } from "../../components/ui/Button";
+import { UbhonaLoader } from "../../components/ui/ubhona-loader";
 import {
   CartCheckoutTopBar,
   CartItemsCard,
@@ -250,12 +251,12 @@ export default function CheckoutPage() {
   if (loadError) {
     const notFound = /not found/i.test(loadError);
     return (
-      <div className="min-h-screen bg-[#0b0b10] p-8 text-white">
+      <div className={cn(tokens.classes.storefrontShell, "p-8")}>
         <div className="ubhona-storefront-panel mx-auto max-w-4xl p-8 text-center">
-          <div className="text-2xl font-semibold tracking-[-0.03em] text-orange-300">
+          <div className="ubhona-storefront-text-accent text-2xl font-semibold tracking-[-0.03em]">
             {notFound ? "Restaurant not found" : "Checkout unavailable"}
           </div>
-          <p className="mt-2 text-sm text-white/65">
+          <p className="ubhona-storefront-text-secondary mt-2 text-sm">
             {notFound ? "Check the storefront link and try again." : loadError}
           </p>
         </div>
@@ -264,7 +265,7 @@ export default function CheckoutPage() {
   }
 
   if (!restaurant) {
-    return <div className="ubhona-storefront-shell min-h-screen p-8 text-white/70">Loading checkout...</div>;
+    return <UbhonaLoader fullScreen label="Loading checkout" shellClassName={tokens.classes.storefrontShell} />;
   }
 
   return (
@@ -334,7 +335,7 @@ export default function CheckoutPage() {
             ) : null}
           </div>
         </div>
-        <div className="mt-5 text-center text-xs font-semibold uppercase tracking-[0.14em] text-[#B8AEA3]/75">
+        <div className="ubhona-storefront-text-muted mt-5 text-center text-xs font-semibold uppercase tracking-[0.14em]">
           Powered by Ubhona
         </div>
       </div>

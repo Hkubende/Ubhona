@@ -2,6 +2,7 @@ import * as React from "react";
 import { ImageOff } from "lucide-react";
 import { cn } from "../../lib/utils";
 import { radius } from "../../design-system";
+import { applyDishImageFallback, getDishImageVariantUrl, resolveDishImageSrc } from "../../lib/image-variants";
 
 export function ImageThumbnail({
   src,
@@ -13,15 +14,21 @@ export function ImageThumbnail({
   className?: string;
 }) {
   const [broken, setBroken] = React.useState(false);
-  const showImage = Boolean(src) && !broken;
+  const variantSrc = getDishImageVariantUrl(resolveDishImageSrc(src || ""), "small");
+  const showImage = Boolean(variantSrc) && !broken;
 
   if (showImage) {
     return (
       <img
-        src={src}
+        src={variantSrc}
         alt={name}
-        onError={() => setBroken(true)}
-        className={cn("h-14 w-14 border border-white/10 object-cover shadow-subtle", radius.panel, className)}
+        loading="lazy"
+        decoding="async"
+        onError={(event) => {
+          applyDishImageFallback(event, src || "");
+          setBroken(true);
+        }}
+        className={cn("h-14 w-14 border border-border object-cover shadow-subtle", radius.panel, className)}
       />
     );
   }
@@ -29,7 +36,7 @@ export function ImageThumbnail({
   return (
     <div
       className={cn(
-        "flex h-14 w-14 items-center justify-center border border-dashed border-white/10 bg-white/[0.03] text-white/45",
+        "flex h-14 w-14 items-center justify-center border border-dashed border-border bg-[color:var(--ui-note-icon-bg)] text-text-secondary/55",
         radius.panel,
         className
       )}

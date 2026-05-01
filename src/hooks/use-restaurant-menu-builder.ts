@@ -48,6 +48,7 @@ function mapCategory(row: RestaurantCategory): Category {
     restaurantId: row.restaurantId,
     name: row.name,
     sortOrder: row.sortOrder,
+    menuControl: row.menuControl || null,
   };
 }
 
@@ -63,6 +64,7 @@ function mapDish(row: RestaurantDish): Dish {
     modelUrl: row.model || undefined,
     available: row.isAvailable,
     stock: row.stock || null,
+    menuControl: row.menuControl || null,
   };
 }
 
@@ -127,7 +129,7 @@ export function useRestaurantMenuBuilder(): UseRestaurantMenuBuilderState {
       setSaving(true);
       setError("");
       try {
-        await updateCategory(id, { name, sortOrder: input.sortOrder });
+        await updateCategory(id, { name, sortOrder: input.sortOrder, isActive: input.isActive });
         await refresh();
       } catch (err) {
         setError(err instanceof Error ? err.message : "Failed to update category.");

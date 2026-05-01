@@ -27,18 +27,30 @@ export function useHeaderScrollBehavior(
       return;
     }
 
-    const isMobile = window.matchMedia("(max-width: 768px)").matches;
+    const isMobile = window.matchMedia("(max-width: 1023px)").matches;
+    if (isMobile) {
+      setIsVisible(true);
+      setIsAtTop(true);
+      previousYRef.current = 0;
+      downDeltaRef.current = 0;
+      upDeltaRef.current = 0;
+      tickingRef.current = false;
+      return;
+    }
+
     const noiseThreshold = isMobile ? 5 : 3;
     const hideThreshold = isMobile ? 56 : 42;
     const showThreshold = isMobile ? 28 : 20;
     const hideStart = isMobile ? 92 : 72;
     const topRevealZone = 20;
 
-    previousYRef.current = window.scrollY;
+    const readScrollY = () => Math.max(document.scrollingElement?.scrollTop ?? window.scrollY, 0);
+
+    previousYRef.current = readScrollY();
 
     const apply = () => {
       tickingRef.current = false;
-      const currentY = Math.max(window.scrollY, 0);
+      const currentY = readScrollY();
       const previousY = previousYRef.current;
       const delta = currentY - previousY;
 
@@ -89,4 +101,3 @@ export function useHeaderScrollBehavior(
 
   return { isVisible, isAtTop };
 }
-

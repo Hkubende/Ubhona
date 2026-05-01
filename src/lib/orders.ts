@@ -1,6 +1,7 @@
 import { buildCartLines, type Cart } from "./cart";
 import type { Dish } from "./dishes";
 import { api } from "./api";
+import { hasRemoteAuthSession } from "./auth";
 import { canCreateOrderWithPlan, recordOrderCreated, recordPaymentUpdate } from "./growth";
 import { emitOrderRealtimeEvent } from "./orders-realtime";
 
@@ -286,6 +287,14 @@ export function createOrderId() {
 }
 
 export async function loadOrders(params?: { restaurantId?: string; status?: OrderStatus }): Promise<Order[]> {
+  if (!hasRemoteAuthSession()) {
+    const cached = readCache();
+    return cached.filter((order) => {
+      if (params?.restaurantId && order.restaurantId !== params.restaurantId) return false;
+      if (params?.status && order.status !== params.status) return false;
+      return true;
+    });
+  }
   try {
     const query = new URLSearchParams();
     if (params?.restaurantId) query.set("restaurantId", params.restaurantId);

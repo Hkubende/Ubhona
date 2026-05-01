@@ -17,8 +17,11 @@ import { trackAnalyticsEvent } from "../../lib/analytics";
 import { Badge } from "../../components/ui/Badge";
 import { Button } from "../../components/ui/Button";
 import { Input } from "../../components/ui/Input";
+import { UbhonaLoader } from "../../components/ui/ubhona-loader";
 import { cn } from "../../lib/utils";
 import { tokens, typography } from "../../design-system";
+import { applyDishImageFallback, getDishImageVariantUrl } from "../../lib/image-variants";
+import { getStorefrontBrandColors } from "../../lib/storefront-theme";
 
 function formatKsh(value: number) {
   return `KSh ${value.toLocaleString("en-KE")}`;
@@ -156,8 +159,6 @@ export default function MenuPage() {
   }, [displayCategories, filteredGrouped]);
 
   const totalItems = storefrontCartCount(cart);
-  const primary = restaurant?.themePrimary || "#FF6A1A";
-
   const addToCart = React.useCallback(
     (dish: PublicDish) => {
       if (!isDishOrderable(dish) || !restaurant) return;
@@ -176,12 +177,12 @@ export default function MenuPage() {
   if (error) {
     const notFound = /not found/i.test(error);
     return (
-      <div className="min-h-screen bg-[#0b0b10] p-8 text-white">
+      <div className={cn(tokens.classes.storefrontShell, "p-8")}>
         <div className="ubhona-storefront-panel mx-auto max-w-4xl p-8 text-center">
-          <div className="text-2xl font-semibold tracking-[-0.03em] text-orange-300">
+          <div className="ubhona-storefront-text-accent text-2xl font-semibold tracking-[-0.03em]">
             {notFound ? "Restaurant not found" : "Menu unavailable"}
           </div>
-          <p className="mt-2 text-sm text-white/65">
+          <p className="ubhona-storefront-text-secondary mt-2 text-sm">
             {notFound ? "Check the storefront link and try again." : error}
           </p>
         </div>
@@ -189,8 +190,10 @@ export default function MenuPage() {
     );
   }
   if (!restaurant) {
-    return <div className="ubhona-storefront-shell min-h-screen p-8 text-white/70">Loading menu...</div>;
+    return <UbhonaLoader fullScreen label="Loading menu" shellClassName={tokens.classes.storefrontShell} />;
   }
+
+  const { heroAccent } = getStorefrontBrandColors(restaurant);
 
   return (
     <div className={cn(tokens.classes.storefrontShell, "pb-24 md:pb-8")}>
@@ -201,14 +204,14 @@ export default function MenuPage() {
               <img
                 src={restaurant.logoUrl || LOGO_SRC}
                 alt={restaurant.name}
-                className="h-12 w-12 rounded-xl border border-white/15 object-cover shadow-[0_10px_22px_rgba(0,0,0,0.18)]"
+                className="ubhona-storefront-media-frame h-12 w-12 rounded-xl object-cover"
               />
               <div>
-                <div className="text-xs uppercase tracking-[0.16em] text-white/58">Storefront</div>
-                <div className="text-2xl font-semibold tracking-[-0.04em]" style={{ color: primary }}>
+                <div className="ubhona-storefront-text-muted text-xs uppercase tracking-[0.16em]">Storefront</div>
+                <div className="text-2xl font-semibold tracking-[-0.04em]" style={{ color: heroAccent }}>
                   {restaurant.name}
                 </div>
-                <div className="text-sm text-white/62">{restaurant.shortDescription || "Visualize"}</div>
+                <div className="ubhona-storefront-text-secondary text-sm">{restaurant.shortDescription || "Visualize"}</div>
               </div>
             </div>
             <div className="flex gap-2">
@@ -221,21 +224,20 @@ export default function MenuPage() {
               <Button
                 onClick={() => navigate(`/r/${slug}/checkout?branch=${encodeURIComponent(branchId)}`)}
                 variant="primary"
-                style={{ backgroundColor: primary }}
               >
                 Checkout ({totalItems})
               </Button>
             </div>
           </div>
-          <div className="mt-3 flex flex-wrap items-center gap-2 text-sm text-white/70">
+          <div className="ubhona-storefront-text-secondary mt-3 flex flex-wrap items-center gap-2 text-sm">
             <span className={tokens.classes.metricChip}>{displayCategories.length} categories</span>
             <span className={tokens.classes.metricChip}>{visibleDishCount} visible dishes</span>
             <span className={tokens.classes.metricChip}>{totalItems} in cart</span>
           </div>
         </div>
 
-        <div className={cn(tokens.classes.storefrontFloating, "sticky top-0 z-20 mb-4 p-3")}>
-          <label htmlFor="storefront-menu-search" className={cn("mb-1.5 block", typography.label)}>
+        <div className={cn("ubhona-storefront-filter-shell sticky top-0 z-20 mb-5")}>
+          <label htmlFor="storefront-menu-search" className={cn("ubhona-storefront-filter-label", typography.label)}>
             Search Menu
           </label>
           <Input
@@ -244,18 +246,19 @@ export default function MenuPage() {
             value={searchQuery}
             onChange={(event) => setSearchQuery(event.target.value)}
             placeholder="Search dishes..."
-            className="mb-3"
+            className="ubhona-storefront-filter-input"
           />
-          <div className="flex gap-2 overflow-x-auto pb-1">
+          <div className="ubhona-storefront-filter-row">
             <Button
               onClick={() => setActiveCategoryId("all")}
               size="sm"
-              variant={activeCategoryId === "all" ? "primary" : "secondary"}
-              className={`shrink-0 rounded-full ${
+              variant="ghost"
+              className={cn(
+                "ubhona-storefront-filter-chip",
                 activeCategoryId === "all"
-                  ? "text-[#FBF6EE]"
-                  : "text-white/70"
-              }`}
+                  ? "ubhona-storefront-filter-chip-active"
+                  : "ubhona-storefront-filter-chip-idle"
+              )}
             >
               All
             </Button>
@@ -270,12 +273,13 @@ export default function MenuPage() {
                   }
                 }}
                 size="sm"
-                variant={activeCategoryId === category.id ? "primary" : "secondary"}
-                className={`shrink-0 rounded-full ${
+                variant="ghost"
+                className={cn(
+                  "ubhona-storefront-filter-chip",
                   activeCategoryId === category.id
-                    ? "text-[#FBF6EE]"
-                    : "text-white/70"
-                }`}
+                    ? "ubhona-storefront-filter-chip-active"
+                    : "ubhona-storefront-filter-chip-idle"
+                )}
               >
                 {category.name}
               </Button>
@@ -288,18 +292,25 @@ export default function MenuPage() {
           if (!items.length) return null;
           return (
             <section key={category.id} id={`menu-category-${category.id}`} className="mb-6 scroll-mt-28">
-              <h2 className="mb-3 text-xl font-semibold tracking-[-0.03em]">{category.name}</h2>
+              <h2 className={cn("mb-3", typography.sectionTitle)}>{category.name}</h2>
               <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
                 {items.map((dish) => (
                   <article
                     key={dish.id}
-                    className={cn(tokens.classes.storefrontPanel, "p-4 transition duration-300 ease-out hover:-translate-y-0.5 hover:border-primary/20")}
+                    className={cn(tokens.classes.storefrontPanel, "p-4 sm:p-5 transition duration-300 ease-out hover:-translate-y-0.5 hover:border-primary/20")}
                   >
-                    <img src={dish.thumbUrl} alt={dish.name} className="h-40 w-full rounded-2xl object-cover" />
+                    <img
+                      src={getDishImageVariantUrl(dish.thumbUrl, "small")}
+                      alt={dish.name}
+                      loading="lazy"
+                      decoding="async"
+                      onError={(event) => applyDishImageFallback(event, dish.thumbUrl)}
+                      className="h-40 w-full rounded-2xl object-cover"
+                    />
                     <div className="mt-3 flex items-start justify-between gap-2">
                       <div>
-                        <h3 className="text-lg font-semibold tracking-[-0.02em]">{dish.name}</h3>
-                        <p className="text-sm text-white/65">{dish.description}</p>
+                        <h3 className={cn("ubhona-storefront-text-primary", typography.subSectionTitle)}>{dish.name}</h3>
+                        <p className={cn("ubhona-storefront-text-secondary", typography.body)}>{dish.description}</p>
                       </div>
                       <Badge
                         variant={
@@ -318,7 +329,7 @@ export default function MenuPage() {
                             : "Available"}
                       </Badge>
                     </div>
-                    <div className="mt-2 font-semibold text-orange-300">{formatKsh(dish.price)}</div>
+                    <div className="ubhona-storefront-text-accent mt-2 font-semibold">{formatKsh(dish.price)}</div>
                     <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
                       <Button
                         onClick={() => addToCart(dish)}
@@ -326,7 +337,6 @@ export default function MenuPage() {
                         variant="primary"
                         size="sm"
                         className="w-full"
-                        style={{ backgroundColor: primary }}
                       >
                         Add to Cart
                       </Button>
@@ -347,22 +357,28 @@ export default function MenuPage() {
         })}
 
         {!visibleDishCount ? (
-          <div className={cn(tokens.classes.storefrontPanel, "p-6 text-center text-sm text-white/65")}>
+          <div className={cn(tokens.classes.storefrontPanel, "ubhona-storefront-text-secondary p-6 text-center text-sm")}>
             No dishes match your current search/filter.
           </div>
         ) : null}
       </div>
 
       {selectedDish ? (
-        <div className="fixed inset-0 z-40 flex items-end justify-center bg-black/65 p-4 sm:items-center">
-          <div className={cn(tokens.classes.storefrontPanel, "w-full max-w-lg p-4 shadow-2xl shadow-black/50")}>
-            <img src={selectedDish.thumbUrl} alt={selectedDish.name} className="h-52 w-full rounded-2xl object-cover" />
+        <div className="ubhona-storefront-overlay-scrim fixed inset-0 z-40 flex items-end justify-center p-4 sm:items-center">
+          <div className={cn(tokens.classes.storefrontPanel, "ubhona-storefront-panel-elevated w-full max-w-lg p-4")}>
+            <img
+              src={getDishImageVariantUrl(selectedDish.thumbUrl, "medium")}
+              alt={selectedDish.name}
+              decoding="async"
+              onError={(event) => applyDishImageFallback(event, selectedDish.thumbUrl)}
+              className="h-52 w-full rounded-2xl object-cover"
+            />
             <div className="mt-3 flex items-start justify-between gap-2">
               <div>
-                <h3 className="text-xl font-semibold tracking-[-0.03em] text-[#FBF6EE]">{selectedDish.name}</h3>
-                <p className="mt-1 text-sm text-white/70">{selectedDish.description}</p>
+                <h3 className="ubhona-storefront-text-primary text-xl font-semibold tracking-[-0.03em]">{selectedDish.name}</h3>
+                <p className="ubhona-storefront-text-secondary mt-1 text-sm">{selectedDish.description}</p>
               </div>
-              <div className="text-sm font-semibold text-orange-300">{formatKsh(selectedDish.price)}</div>
+              <div className="ubhona-storefront-text-accent text-sm font-semibold">{formatKsh(selectedDish.price)}</div>
             </div>
             <div className="mt-4 flex flex-wrap gap-2">
               <Button
@@ -370,7 +386,6 @@ export default function MenuPage() {
                 disabled={!isDishOrderable(selectedDish)}
                 variant="primary"
                 className="min-w-[124px]"
-                style={{ backgroundColor: primary }}
               >
                 Add to Cart
               </Button>
@@ -401,20 +416,19 @@ export default function MenuPage() {
         </div>
       ) : null}
 
-      <div className="pb-20 text-center text-xs font-semibold uppercase tracking-[0.14em] text-[#B8AEA3]/75 md:pb-0">
+      <div className="ubhona-storefront-text-muted pb-20 text-center text-xs font-semibold uppercase tracking-[0.14em] md:pb-0">
         Powered by Ubhona
       </div>
 
-      <div className="ubhona-storefront-floating fixed inset-x-4 bottom-4 z-30 p-3 shadow-xl md:hidden">
+      <div className="ubhona-storefront-floating ubhona-storefront-floating-elevated fixed inset-x-4 bottom-4 z-30 p-3 md:hidden">
         <div className="flex items-center justify-between gap-3">
           <div>
             <div className={typography.label}>Cart</div>
-            <div className="text-sm font-semibold text-[#FBF6EE]">{totalItems} {totalItems === 1 ? "item" : "items"}</div>
+            <div className="ubhona-storefront-text-primary text-sm font-semibold">{totalItems} {totalItems === 1 ? "item" : "items"}</div>
           </div>
           <Button
             onClick={() => navigate(`/r/${slug}/checkout?branch=${encodeURIComponent(branchId)}`)}
             variant="primary"
-            style={{ backgroundColor: primary }}
           >
             Checkout
           </Button>

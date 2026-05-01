@@ -1,6 +1,6 @@
 # Ubhona Environment Variable Matrix
 
-Last updated: 2026-03-21
+Last updated: 2026-04-18
 
 This matrix defines strict env values for local, staging/preview, and production.
 
@@ -16,17 +16,21 @@ This matrix defines strict env values for local, staging/preview, and production
 | Variable | Local | Staging / Preview | Production | Required |
 |---|---|---|---|---|
 | `VITE_BASE_PATH` | `/` | `/` | `/` | Yes |
-| `VITE_API_BASE` | `http://localhost:4000` | `https://api-staging.ubhona.com` | `https://api.ubhona.com` | Yes (for real backend mode) |
-| `VITE_STK_API_BASE` | `http://localhost:4000` | `https://api-staging.ubhona.com` | `https://api.ubhona.com` | Optional |
+| `VITE_API_BASE` | `http://localhost:4000` | `<preview-api-url>` | `https://ubhona-api.onrender.com` | Yes (for real backend mode) |
+| `VITE_STK_API_BASE` | `http://localhost:4000` | `<preview-api-url>` | `https://ubhona-api.onrender.com` | Optional |
 | `VITE_SUPABASE_URL` | `https://<project>.supabase.co` | `https://<staging-project>.supabase.co` | `https://<prod-project>.supabase.co` | Yes (uploads) |
 | `VITE_SUPABASE_ANON_KEY` | `<anon-key>` | `<anon-key>` | `<anon-key>` | Yes (uploads) |
 | `VITE_LOG_API_INFO` | `true` or `false` | `false` | `false` | Optional |
-| `VITE_PUBLIC_APP_URL` | `http://localhost:5173` | `https://app-staging.ubhona.com` | `https://app.ubhona.com` | Recommended |
+| `VITE_PUBLIC_APP_URL` | `http://localhost:5173` | `<preview-app-url>` | `https://ubhona.onrender.com` | Recommended |
+| `VITE_SITE_URL` | `http://localhost:5173` | `<preview-app-url>` | `https://ubhona.onrender.com` | Recommended |
+| `VITE_UPLOAD_PROVIDER` | `api` | `api` | `api` | Recommended |
 | `VITE_APP_NAME` | `Ubhona` | `Ubhona` | `Ubhona` | Optional |
 | `VITE_APP_SLOGAN` | `Visualize` | `Visualize` | `Visualize` | Optional |
 
 Notes:
 - `VITE_PUBLIC_APP_URL` is used for QR/share URL generation fallback safety.
+- `VITE_SITE_URL` is used for SEO canonical tags and social metadata.
+- `VITE_UPLOAD_PROVIDER=api` keeps uploads on the backend-controlled path in production.
 - If `VITE_API_BASE` is empty, frontend runs in demo/static mode by design.
 
 ## 2) Backend
@@ -35,12 +39,15 @@ Notes:
 |---|---|---|---|---|
 | `NODE_ENV` | `development` | `production` | `production` | Yes |
 | `PORT` | `4000` or `8787` | host-assigned or `4000` | host-assigned or `4000` | Yes |
-| `APP_BASE_URL` | `http://localhost:4000` | `https://api-staging.ubhona.com` | `https://api.ubhona.com` | Recommended |
-| `FRONTEND_URL` | `http://localhost:5173` | `https://app-staging.ubhona.com` | `https://app.ubhona.com` | Recommended |
-| `APP_PUBLIC_BASE_URL` | `http://localhost:5173` | `https://app-staging.ubhona.com` | `https://app.ubhona.com` | Yes (order links) |
-| `QR_BASE_URL` | `http://localhost:5173` | `https://app-staging.ubhona.com` | `https://app.ubhona.com` | Optional |
-| `PUBLIC_APP_URL` | `http://localhost:5173` | `https://app-staging.ubhona.com` | `https://app.ubhona.com` | Optional |
-| `DATABASE_URL` | `<local-postgres-url>` | `<staging-postgres-url>` | `<prod-postgres-url>` | Yes |
+| `APP_BASE_URL` | `http://localhost:4000` | `<preview-api-url>` | `https://ubhona-api.onrender.com` | Recommended |
+| `FRONTEND_URL` | `http://localhost:5173` | `<preview-app-url>` | `https://ubhona.onrender.com` | Recommended |
+| `APP_PUBLIC_BASE_URL` | `http://localhost:5173` | `<preview-app-url>` | `https://ubhona.onrender.com` | Yes (order links) |
+| `QR_BASE_URL` | `http://localhost:5173` | `<preview-app-url>` | `https://ubhona.onrender.com` | Optional |
+| `PUBLIC_APP_URL` | `http://localhost:5173` | `<preview-app-url>` | `https://ubhona.onrender.com` | Optional |
+| `APP_RUNTIME_DATABASE_URL` | `<local-app-runtime-postgres-url>` | `<staging-app-runtime-postgres-url>` | `<prod-app-runtime-postgres-url>` | Required for runtime-equivalent RLS validation |
+| `DATABASE_URL` | `<local-postgres-url>` | optional apply/migration URL | optional apply/migration URL | Apply/migration path |
+| `RLS_VALIDATE_DATABASE_URL` | leave empty unless doing controlled diagnostics | leave empty unless doing controlled diagnostics | leave empty unless doing controlled diagnostics | Legacy diagnostic override only; ignored by standard validation commands |
+| `RLS_APPLY_DATABASE_URL` | optional apply role URL | optional apply role URL | optional apply role URL | Required when apply role differs |
 | `JWT_SECRET` | `<dev-secret>` | `<strong-secret>` | `<strong-secret>` | Yes |
 | `ORDER_TRACKING_SECRET` | `<dev-strong-secret>` | `<strong-secret>` | `<strong-secret>` | Yes (public tracking links) |
 | `SUPABASE_URL` | `https://<project>.supabase.co` | `https://<staging-project>.supabase.co` | `https://<prod-project>.supabase.co` | Yes |
@@ -49,7 +56,7 @@ Notes:
 | `SUPABASE_STORAGE_BUCKET_THUMBNAILS` | `dish-thumbnails` | `dish-thumbnails` | `dish-thumbnails` | Yes |
 | `SUPABASE_STORAGE_BUCKET_MODELS` | `dish-models` | `dish-models` | `dish-models` | Yes |
 | `SUPABASE_STORAGE_BUCKET_BRANDING` | `restaurant-branding` | `restaurant-branding` | `restaurant-branding` | Optional |
-| `CORS_ORIGIN` | `http://localhost:5173` | `https://app-staging.ubhona.com` | `https://app.ubhona.com` | Yes |
+| `CORS_ORIGIN` | `http://localhost:5173` | `<preview-app-url>` | `https://ubhona.onrender.com` | Yes |
 
 ## 3) M-Pesa (Kenya-first)
 
@@ -99,12 +106,19 @@ Backward-compatible aliases (if already used): `WHATSAPP_META_ACCESS_TOKEN`, `WH
   - `VITE_API_BASE=https://ubhona-api.onrender.com`
   - `VITE_STK_API_BASE=https://ubhona-api.onrender.com`
   - `VITE_PUBLIC_APP_URL=https://ubhona.onrender.com`
+  - `VITE_SITE_URL=https://ubhona.onrender.com`
   - `VITE_UPLOAD_PROVIDER=api`
 
 ### Render backend web service (`Ubhona-api`)
 - Set all non-`VITE_*` backend vars.
-- Keep `SUPABASE_SERVICE_ROLE_KEY`, `JWT_SECRET`, `DATABASE_URL`, payment tokens, and WhatsApp tokens secret.
+- Keep `SUPABASE_SERVICE_ROLE_KEY`, `JWT_SECRET`, `DATABASE_URL`, `APP_RUNTIME_DATABASE_URL`, payment tokens, and WhatsApp tokens secret.
 - Ensure callback URLs are reachable over HTTPS.
+- For staging and production, set `APP_RUNTIME_DATABASE_URL` to the non-privileged runtime-equivalent Postgres role.
+- Standard runtime-equivalent rollout checks must use `APP_RUNTIME_DATABASE_URL`.
+- Do not rely on plain `DATABASE_URL` for RLS validation or runtime-equivalent rollout checks.
+- `rls:audit:validate` must report `usesRequiredRuntimeEnv=true`, `rolsuper=false`, `rolbypassrls=false`, and `appSafeForValidation=true`.
+- If rollout apply uses a stronger DB identity, set `RLS_APPLY_DATABASE_URL` separately.
+- Leave `RLS_VALIDATE_DATABASE_URL` unset for normal rollout validation unless you are doing controlled diagnostics outside the standard commands.
 
 ### Vercel (legacy or alternate frontend project)
 - Set only `VITE_*` vars.

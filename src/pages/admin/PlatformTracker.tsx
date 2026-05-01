@@ -1,6 +1,7 @@
 import * as React from "react";
 import { ArrowLeft, FolderKanban, RefreshCw } from "lucide-react";
 import { useNavigate } from "react-router-dom";
+import { UbhonaLoader } from "../../components/ui/ubhona-loader";
 import {
   getPlatformTrackerProgress,
   getDefaultPlatformTracker,
@@ -21,11 +22,11 @@ const STATUS_OPTIONS: Array<{ value: PlatformTrackerStatus; label: string }> = [
 ];
 
 function statusClasses(status: PlatformTrackerStatus) {
-  if (status === "done") return "border-primary/30 bg-primary/15 text-[#F2BA8E]";
-  if (status === "in_progress") return "border-primary/25 bg-primary/12 text-[#E8D8C3]";
-  if (status === "planned") return "border-amber-400/30 bg-amber-500/15 text-amber-200";
-  if (status === "blocked") return "border-rose-400/30 bg-rose-500/15 text-rose-200";
-  return "border-border bg-white/[0.04] text-text-secondary/80";
+  if (status === "done") return "border-primary/30 bg-primary/12 text-primary";
+  if (status === "in_progress") return "border-primary/25 bg-primary/10 text-text-primary";
+  if (status === "planned") return "border-amber-400/30 bg-amber-500/12 text-amber-700 dark:text-amber-200";
+  if (status === "blocked") return "border-rose-400/30 bg-rose-500/12 text-rose-700 dark:text-rose-200";
+  return "border-border bg-[color:var(--ui-note-icon-bg)] text-text-secondary/80";
 }
 
 export default function PlatformTracker() {
@@ -96,7 +97,7 @@ export default function PlatformTracker() {
         <div className="mb-6 ui-surface p-5 backdrop-blur-xl">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
             <div className="flex items-center gap-3">
-              <div className="rounded-2xl border border-primary/25 bg-primary/12 p-3 text-[#F2BA8E]">
+              <div className="ui-note-icon rounded-2xl p-3 text-primary">
                 <FolderKanban className="h-6 w-6" />
               </div>
               <div>
@@ -115,7 +116,7 @@ export default function PlatformTracker() {
             <div className="flex flex-wrap gap-3">
               <button
                 onClick={() => navigate("/admin")}
-                className="inline-flex items-center gap-2 rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3 text-sm font-bold text-white hover:bg-white/[0.08]"
+                className="ui-button-secondary inline-flex items-center gap-2 rounded-2xl px-4 py-3 text-sm font-bold"
               >
                 <ArrowLeft className="h-4 w-4" />
                 Back to Admin
@@ -132,31 +133,27 @@ export default function PlatformTracker() {
         </div>
 
         {error ? (
-          <div className="mb-4 rounded-2xl border border-rose-400/20 bg-rose-500/10 px-4 py-3 text-sm text-rose-100">
+          <div className="mb-4 rounded-2xl border border-rose-400/20 bg-rose-500/10 px-4 py-3 text-sm text-rose-700 dark:text-rose-100">
             {error}
           </div>
         ) : null}
 
         {notice ? (
-          <div className="mb-4 rounded-2xl border border-primary/20 bg-primary/12 px-4 py-3 text-sm text-[#F2BA8E]">
+          <div className="mb-4 rounded-2xl border border-primary/20 bg-primary/10 px-4 py-3 text-sm text-primary">
             {notice}
           </div>
         ) : null}
 
-        {loading ? (
-          <div className="mb-4 rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3 text-sm text-text-secondary/80">
-            Loading shared tracker...
-          </div>
-        ) : null}
+        {loading ? <UbhonaLoader variant="inline" label="Loading shared tracker" className="mb-4" /> : null}
 
         <div className="mb-6 grid gap-4 md:grid-cols-4">
           {board.sections.map((section) => (
-            <div key={section.id} className="rounded-3xl border border-white/10 bg-white/[0.03] p-4">
+            <div key={section.id} className="ui-panel-inset rounded-3xl p-4">
               <div className="text-xs uppercase tracking-[0.22em] text-text-secondary/65">Progress</div>
               <div className="mt-2 text-lg font-black text-text-primary">{section.title}</div>
-              <div className="mt-3 h-2 overflow-hidden rounded-full bg-white/10">
+              <div className="mt-3 h-2 overflow-hidden rounded-full bg-[color:var(--ui-hover-surface)]">
                 <div
-                  className="h-full rounded-full bg-gradient-to-r from-primary to-[#F2BA8E]"
+                  className="h-full rounded-full bg-gradient-to-r from-primary to-primary/55"
                   style={{ width: `${getPlatformTrackerProgress(section)}%` }}
                 />
               </div>
@@ -167,7 +164,7 @@ export default function PlatformTracker() {
 
         <div className="space-y-5">
           {board.sections.map((section) => (
-            <section key={section.id} className="rounded-[30px] border border-white/10 bg-white/[0.03] p-5 backdrop-blur-xl">
+            <section key={section.id} className="ui-surface rounded-[30px] p-5 backdrop-blur-xl">
               <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
                 <div>
                   <div className="text-xs font-black uppercase tracking-[0.24em] text-text-secondary/65">
@@ -176,14 +173,14 @@ export default function PlatformTracker() {
                   <h2 className="mt-1 text-2xl font-black text-text-primary">{section.title}</h2>
                   <p className="mt-1 text-sm text-text-secondary/75">{section.description}</p>
                 </div>
-                <div className="rounded-full border border-white/10 bg-white/[0.03] px-3 py-1 text-xs font-bold text-text-secondary/80">
+                <div className="rounded-full border border-border bg-[color:var(--ui-note-icon-bg)] px-3 py-1 text-xs font-bold text-text-secondary/80">
                   {section.items.length} items
                 </div>
               </div>
 
               <div className="grid gap-4 lg:grid-cols-2">
                 {section.items.map((item) => (
-                  <div key={item.id} className="rounded-3xl border border-white/10 bg-black/20 p-4">
+                  <div key={item.id} className="ui-panel-inset rounded-3xl p-4">
                     <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                       <div>
                         <div className="text-lg font-bold text-text-primary">{item.label}</div>
@@ -204,7 +201,7 @@ export default function PlatformTracker() {
                           className={`rounded-xl border px-3 py-1.5 text-xs font-semibold transition ${
                             item.status === statusOption.value
                               ? statusClasses(statusOption.value)
-                              : "border-white/10 bg-white/[0.03] text-text-secondary/80 hover:bg-white/[0.06]"
+                              : "border-border bg-[color:var(--ui-note-icon-bg)] text-text-secondary/80 hover:bg-[color:var(--ui-hover-surface)]"
                           }`}
                         >
                           {statusOption.label}
@@ -217,7 +214,7 @@ export default function PlatformTracker() {
                       onChange={(event) => setItemNotes(section.id, item.id, event.target.value)}
                       placeholder="Add implementation notes, blockers, decisions, or next steps..."
                       rows={4}
-                      className="mt-3 w-full rounded-2xl border border-white/10 bg-white/[0.03] px-3 py-2 text-sm text-text-primary outline-none placeholder:text-text-secondary/55"
+                      className="ui-input-control mt-3 w-full rounded-2xl px-3 py-2 text-sm text-text-primary outline-none placeholder:text-text-secondary/55"
                     />
                   </div>
                 ))}

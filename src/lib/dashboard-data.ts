@@ -1,4 +1,4 @@
-import { getAnalyticsSummary as fetchAnalyticsSummary, getAnalyticsTopDishes } from "./analytics";
+import { getAnalyticsSummary as loadAnalyticsSummary, getAnalyticsTopDishes } from "./analytics";
 import { getCategories as fetchCategories, type RestaurantCategory } from "./categories";
 import {
   loadOrders,
@@ -11,6 +11,7 @@ import {
   type RestaurantDish,
 } from "./restaurant-dishes";
 import {
+  canUseFeature,
   getRestaurantBranding,
   getRestaurantProfile,
   syncRestaurantProfile,
@@ -29,6 +30,11 @@ import type {
 } from "../types/dashboard";
 
 const DEFAULT_RESTAURANT_ID = "local_default_restaurant";
+const dashboardDataRequests = new Map<string, Promise<RestaurantDashboardData>>();
+const CATEGORIES_CACHE_KEY = "mv_restaurant_categories_v1";
+const DISHES_CACHE_KEY = "mv_restaurant_dishes_v1";
+const ORDERS_CACHE_KEY = "mv_orders_v1";
+const LEGACY_BUCKET = "__legacy__";
 
 const MOCK_RESTAURANT: Restaurant = {
   id: DEFAULT_RESTAURANT_ID,
@@ -198,6 +204,73 @@ function safeRestaurantId(restaurantId?: string | null) {
   return String(restaurantId || "").trim() || DEFAULT_RESTAURANT_ID;
 }
 
+function readScopedArrayCache<T extends { restaurantId?: string }>(storageKey: string, restaurantId: string): T[] {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(storageKey) || "null");
+    if (Array.isArray(parsed)) {
+      return parsed
+        .filter((row): row is T => !!row && typeof row === "object")
+        .filter((row) => safeRestaurantId(row.restaurantId) === restaurantId);
+    }
+    if (!parsed || typeof parsed !== "object") return [];
+    const record = parsed as Record<string, unknown>;
+    const direct = record[restaurantId];
+    if (Array.isArray(direct)) {
+      return direct.filter((row): row is T => !!row && typeof row === "object");
+    }
+    const legacy = record[LEGACY_BUCKET];
+    if (Array.isArray(legacy)) {
+      return legacy
+        .filter((row): row is T => !!row && typeof row === "object")
+        .filter((row) => safeRestaurantId(row.restaurantId) === restaurantId);
+    }
+    return [];
+  } catch {
+    return [];
+  }
+}
+
+function readScopedOrdersCache(restaurantId: string): SourceOrder[] {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(ORDERS_CACHE_KEY) || "[]");
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .filter((row): row is SourceOrder => !!row && typeof row === "object")
+      .filter((row) => safeRestaurantId(row.restaurantId) === restaurantId);
+  } catch {
+    return [];
+  }
+}
+
+function buildCachedPopularDishes(dishes: Dish[], orders: Order[]): PopularDish[] {
+  const counts = new Map<string, { dishId: string; name: string; count: number; revenue?: number }>();
+  for (const order of orders) {
+    for (const item of order.items) {
+      const current = counts.get(item.dishId) || {
+        dishId: item.dishId,
+        name: item.name,
+        count: 0,
+        revenue: 0,
+      };
+      current.count += item.quantity;
+      current.revenue = (current.revenue || 0) + item.totalPrice;
+      counts.set(item.dishId, current);
+    }
+  }
+  if (counts.size) {
+    return [...counts.values()].sort((a, b) => b.count - a.count).slice(0, 5);
+  }
+  return dishes
+    .filter((dish) => typeof dish.popularityCount === "number")
+    .map((dish) => ({
+      dishId: dish.id,
+      name: dish.name,
+      count: dish.popularityCount || 0,
+    }))
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 5);
+}
+
 export async function getActiveRestaurantId() {
   const synced = await syncRestaurantProfile();
   return safeRestaurantId(synced?.id || getRestaurantProfile()?.id);
@@ -288,7 +361,7 @@ export async function getAnalyticsSummary(restaurantId: string): Promise<Analyti
   const [dishes, orders, analytics, popularDishes, recentOrders] = await Promise.all([
     getDishes(scopedRestaurantId),
     getOrders(scopedRestaurantId),
-    fetchAnalyticsSummary(30, scopedRestaurantId),
+    loadAnalyticsSummary(30, scopedRestaurantId),
     getPopularDishes(scopedRestaurantId, 5),
     getRecentOrders(scopedRestaurantId, 5),
   ]);
@@ -310,25 +383,172 @@ export async function getAnalyticsSummary(restaurantId: string): Promise<Analyti
   };
 }
 
-export async function getRestaurantDashboardData(restaurantId: string): Promise<RestaurantDashboardData> {
+export function getCachedRestaurantDashboardData(restaurantId: string): RestaurantDashboardData | null {
   const scopedRestaurantId = safeRestaurantId(restaurantId);
-  const [restaurant, categories, dishes, orders, analyticsSummary, brandingSettings] = await Promise.all([
-    getDashboardRestaurant(scopedRestaurantId),
-    getCategories(scopedRestaurantId),
-    getDishes(scopedRestaurantId),
-    getOrders(scopedRestaurantId),
-    getAnalyticsSummary(scopedRestaurantId),
-    getBrandingSettings(scopedRestaurantId),
-  ]);
+  const resolvedProfile = getRestaurantProfile();
+  const restaurant = toDashboardRestaurant(resolvedProfile);
+  const branding = getRestaurantBranding(resolvedProfile);
+  const categoryRows = readScopedArrayCache<RestaurantCategory>(CATEGORIES_CACHE_KEY, scopedRestaurantId);
+  const dishRows = readScopedArrayCache<RestaurantDish>(DISHES_CACHE_KEY, scopedRestaurantId);
+  const orderRows = readScopedOrdersCache(scopedRestaurantId);
+
+  const categories = categoryRows.map(toDashboardCategory);
+  const dishes = dishRows.map(toDashboardDish);
+  const orders = orderRows.map((order) => toDashboardOrder(order, scopedRestaurantId));
+  const recentOrders = orders
+    .slice()
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+    .slice(0, 5);
+  const revenue = orders.reduce((sum, order) => sum + order.total, 0);
+  const fallbackRestaurant =
+    scopedRestaurantId === DEFAULT_RESTAURANT_ID
+      ? MOCK_RESTAURANT
+      : {
+          ...MOCK_RESTAURANT,
+          id: scopedRestaurantId,
+          slug: `${MOCK_RESTAURANT.slug}-${scopedRestaurantId.slice(0, 6)}`,
+        };
+
+  if (!resolvedProfile && !categories.length && !dishes.length && !orders.length && scopedRestaurantId !== DEFAULT_RESTAURANT_ID) {
+    return null;
+  }
 
   return {
-    restaurant,
-    categories,
-    dishes,
-    orders,
-    analyticsSummary,
-    brandingSettings,
+    restaurant: restaurant.id === scopedRestaurantId ? restaurant : fallbackRestaurant,
+    categories: categories.length ? categories : scopedRestaurantId === DEFAULT_RESTAURANT_ID ? MOCK_CATEGORIES : [],
+    dishes: dishes.length ? dishes : scopedRestaurantId === DEFAULT_RESTAURANT_ID ? MOCK_DISHES : [],
+    orders: orders.length ? orders : scopedRestaurantId === DEFAULT_RESTAURANT_ID ? MOCK_ORDERS : [],
+    analyticsSummary: {
+      totalDishes: dishes.length,
+      totalDishViews: 0,
+      totalAddToCart: 0,
+      totalOrdersPlaced: orders.length,
+      ordersToday: orders.filter((order) => isTodayIso(order.createdAt)).length,
+      arOpens: 0,
+      revenue,
+      popularDishes: buildCachedPopularDishes(dishes, orders),
+      recentOrders,
+    },
+    brandingSettings: {
+      logoUrl: restaurant.logoUrl || branding.logoUrl,
+      coverImageUrl: restaurant.coverImageUrl || branding.coverImageUrl || "",
+      primaryColor: restaurant.primaryColor || branding.primary,
+      description: restaurant.description || branding.shortDescription,
+    },
   };
+}
+
+export async function getRestaurantDashboardData(restaurantId: string): Promise<RestaurantDashboardData> {
+  const scopedRestaurantId = safeRestaurantId(restaurantId);
+  const existingRequest = dashboardDataRequests.get(scopedRestaurantId);
+  if (existingRequest) return existingRequest;
+
+  const request = (async () => {
+    const syncedProfile = await syncRestaurantProfile();
+    const resolvedProfile = syncedProfile || getRestaurantProfile();
+    const restaurant = toDashboardRestaurant(resolvedProfile);
+    const branding = getRestaurantBranding(resolvedProfile);
+    const analyticsEnabled = canUseFeature("analytics", resolvedProfile);
+    const [categoryRows, dishRows, orderRows, analytics, topDishes] = await Promise.all([
+      fetchCategories(),
+      fetchRestaurantDishes(),
+      loadOrders({ restaurantId: scopedRestaurantId }),
+      analyticsEnabled
+        ? loadAnalyticsSummary(30, scopedRestaurantId)
+        : Promise.resolve({
+            periodDays: 30,
+            totals: {
+              pageViewCount: 0,
+              dishViewCount: 0,
+              arOpenCount: 0,
+              addToCartCount: 0,
+              checkoutStartCount: 0,
+              orderPlacedCount: 0,
+            },
+            rates: {
+              arEngagementRate: 0,
+              addToCartRate: 0,
+              checkoutStartRate: 0,
+              orderConversionRate: 0,
+            },
+            mostViewedDishes: [],
+            mostOrderedDishes: [],
+          }),
+      analyticsEnabled
+        ? getAnalyticsTopDishes(30, scopedRestaurantId)
+        : Promise.resolve({
+            periodDays: 30,
+            mostViewedDishes: [],
+            mostOrderedDishes: [],
+          }),
+    ]);
+    const categories = categoryRows
+      .filter((item) => item.restaurantId === scopedRestaurantId)
+      .map(toDashboardCategory);
+    const dishes = dishRows.filter((item) => item.restaurantId === scopedRestaurantId).map(toDashboardDish);
+    const orders = orderRows.map((order) => toDashboardOrder(order, scopedRestaurantId));
+    const popularDishes = topDishes.mostOrderedDishes
+      .map((dish) => ({
+        dishId: dish.dishId,
+        name: dish.name,
+        count: dish.quantity,
+        revenue: dish.revenue,
+      }))
+      .filter((dish) => dish.dishId)
+      .slice(0, 5);
+    const recentOrders = orders
+      .slice()
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+      .slice(0, 5);
+
+    return {
+      restaurant:
+        restaurant.id === scopedRestaurantId
+          ? restaurant
+          : scopedRestaurantId === DEFAULT_RESTAURANT_ID
+            ? MOCK_RESTAURANT
+            : {
+                ...MOCK_RESTAURANT,
+                id: scopedRestaurantId,
+                slug: `${MOCK_RESTAURANT.slug}-${scopedRestaurantId.slice(0, 6)}`,
+              },
+      categories: categories.length ? categories : scopedRestaurantId === DEFAULT_RESTAURANT_ID ? MOCK_CATEGORIES : [],
+      dishes: dishes.length ? dishes : scopedRestaurantId === DEFAULT_RESTAURANT_ID ? MOCK_DISHES : [],
+      orders: orders.length ? orders : scopedRestaurantId === DEFAULT_RESTAURANT_ID ? MOCK_ORDERS : [],
+      analyticsSummary: {
+        totalDishes: dishes.length,
+        totalDishViews: analytics.totals.dishViewCount,
+        totalAddToCart: analytics.totals.addToCartCount,
+        totalOrdersPlaced: Math.max(analytics.totals.orderPlacedCount, orders.length),
+        ordersToday: orders.filter((order) => isTodayIso(order.createdAt)).length,
+        arOpens: analytics.totals.arOpenCount,
+        revenue: orders.reduce((sum, order) => sum + order.total, 0),
+        popularDishes: popularDishes.length
+          ? popularDishes
+          : dishes
+              .filter((dish) => typeof dish.popularityCount === "number")
+              .map((dish) => ({
+                dishId: dish.id,
+                name: dish.name,
+                count: dish.popularityCount || 0,
+              }))
+              .sort((a, b) => b.count - a.count)
+              .slice(0, 5),
+        recentOrders,
+      },
+      brandingSettings: {
+        logoUrl: restaurant.logoUrl || branding.logoUrl,
+        coverImageUrl: restaurant.coverImageUrl || branding.coverImageUrl || "",
+        primaryColor: restaurant.primaryColor || branding.primary,
+        description: restaurant.description || branding.shortDescription,
+      },
+    };
+  })().finally(() => {
+    dashboardDataRequests.delete(scopedRestaurantId);
+  });
+
+  dashboardDataRequests.set(scopedRestaurantId, request);
+  return request;
 }
 
 export async function setOrderStatus(restaurantId: string, orderId: string, status: OrderStatus) {

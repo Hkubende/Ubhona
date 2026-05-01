@@ -24,9 +24,13 @@ services:
         value: https://ubhona.onrender.com
       - key: PUBLIC_APP_URL
         value: https://ubhona.onrender.com
+      - key: APP_RUNTIME_DATABASE_URL
+        sync: false
       - key: DATABASE_URL
         sync: false
       - key: JWT_SECRET
+        sync: false
+      - key: PAYMENT_PROFILE_ENCRYPTION_KEY
         sync: false
       - key: ORDER_TRACKING_SECRET
         sync: false
@@ -62,6 +66,8 @@ services:
         value: https://ubhona-api.onrender.com/payments/timeout
       - key: MPESA_TRANSACTION_TYPE
         value: CustomerPayBillOnline
+      - key: MPESA_PARTY_B
+        sync: false
       - key: BILLING_WEBHOOK_SECRET
         sync: false
       - key: BILLING_DEFAULT_PROVIDER
@@ -97,6 +103,8 @@ services:
       - key: VITE_STK_API_BASE
         value: https://ubhona-api.onrender.com
       - key: VITE_PUBLIC_APP_URL
+        value: https://ubhona.onrender.com
+      - key: VITE_SITE_URL
         value: https://ubhona.onrender.com
       - key: VITE_UPLOAD_PROVIDER
         value: api

@@ -193,6 +193,14 @@ export default function Settings() {
   const fieldRowClass = tokens.classes.mutedPanelRow;
   const toggleRowClass = cn(tokens.classes.mutedPanelRow, "text-sm");
   const selectFieldClass = cn(tokens.classes.panelInset, "text-sm");
+  const cleanRowClass = "rounded-2xl border border-border bg-card px-3 py-3";
+  const cleanSplitRowClass = `${cleanRowClass} flex flex-wrap items-center justify-between gap-3 text-sm`;
+  const cleanFieldClass = "space-y-1.5 text-sm";
+  const cleanCheckboxClass = "h-4 w-4 rounded border border-border bg-background accent-[var(--color-primary)]";
+  const cleanInputClass = "!bg-background !shadow-none";
+  const cleanSelectTriggerClass =
+    "!min-h-11 !bg-card !shadow-none hover:!bg-card focus-visible:!ring-primary/45";
+  const cleanSelectContentClass = "!bg-card !shadow-none backdrop-blur-none";
 
   React.useEffect(() => {
     let mounted = true;
@@ -202,7 +210,7 @@ export default function Settings() {
       })
       .catch(() => {
         if (!mounted) return;
-        setWhatsAppSettingsError("Could not load WhatsApp settings.");
+        setWhatsAppSettingsError("WhatsApp setup is not available in this environment yet. Finish the rest of restaurant setup now, then return when live messaging credentials are ready.");
       });
     return () => {
       mounted = false;
@@ -322,14 +330,15 @@ export default function Settings() {
           <SectionHeader title="Operating Hours" subtitle="Configure storefront visibility windows by day." />
           <div className={cn(spacing.stackSm, "text-sm")}>
             {operatingHours.map((row, index) => (
-              <div key={row.day} className={cn(tokens.classes.panelInset, "grid gap-2 p-3 md:grid-cols-[120px_1fr_1fr_auto]")}>
-                <div className="self-center text-xs font-semibold uppercase tracking-wide text-text-secondary/72">
+              <div key={row.day} className={cn(cleanRowClass, "grid gap-3 md:grid-cols-[120px_minmax(0,1fr)_minmax(0,1fr)_auto] md:items-center")}>
+                <div className="self-center text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                   {row.day}
                 </div>
                 <Input
                   id={`hours-open-${row.day}`}
                   name={`hoursOpen${row.day}`}
                   type="time"
+                  className={cleanInputClass}
                   value={row.open}
                   onChange={(event) =>
                     setOperatingHours((current) =>
@@ -344,6 +353,7 @@ export default function Settings() {
                   id={`hours-close-${row.day}`}
                   name={`hoursClose${row.day}`}
                   type="time"
+                  className={cleanInputClass}
                   value={row.close}
                   onChange={(event) =>
                     setOperatingHours((current) =>
@@ -354,12 +364,13 @@ export default function Settings() {
                   }
                   disabled={!row.enabled}
                 />
-                <label className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/[0.06] px-3 py-2 text-xs font-semibold text-text-secondary/82">
+                <label className="inline-flex items-center gap-2 px-1 py-2 text-xs font-semibold text-muted-foreground">
                   Open
                   <input
                     id={`hours-enabled-${row.day}`}
                     name={`hoursEnabled${row.day}`}
                     type="checkbox"
+                    className={cleanCheckboxClass}
                     checked={row.enabled}
                     onChange={(event) =>
                       setOperatingHours((current) =>
@@ -377,31 +388,36 @@ export default function Settings() {
         <DashboardPanel>
           <SectionHeader title="Notifications" subtitle="Order, payment, and activity alerts." />
           <div className={cn(spacing.stackSm, "text-sm")}>
-            <label className={toggleRowClass}>
-              <span>Email notifications</span>
-              <input id="settings-email-notifications" name="emailNotifications" type="checkbox" defaultChecked />
+            <div className="rounded-xl border border-border bg-card px-3 py-3 text-xs text-text-secondary/78">
+              WhatsApp alerts are setup-dependent. Orders can still run normally without them. Messaging becomes live only after a supported provider is connected and approved for this restaurant.
+            </div>
+            <label className={cleanSplitRowClass}>
+              <span className="text-foreground">Email notifications</span>
+              <input className={cleanCheckboxClass} id="settings-email-notifications" name="emailNotifications" type="checkbox" defaultChecked />
             </label>
-            <label className={toggleRowClass}>
-              <span>SMS order alerts</span>
-              <input id="settings-sms-alerts" name="smsOrderAlerts" type="checkbox" defaultChecked />
+            <label className={cleanSplitRowClass}>
+              <span className="text-foreground">SMS order alerts</span>
+              <input className={cleanCheckboxClass} id="settings-sms-alerts" name="smsOrderAlerts" type="checkbox" defaultChecked />
             </label>
-            <label className={toggleRowClass}>
-              <span>WhatsApp order notifications</span>
+            <label className={cleanSplitRowClass}>
+              <span className="text-foreground">WhatsApp order notifications</span>
               <input
                 id="settings-whatsapp-enabled"
                 name="whatsappEnabled"
                 type="checkbox"
+                className={cleanCheckboxClass}
                 checked={whatsAppSettings.enabled}
                 onChange={(event) => {
                   void patchWhatsAppSettings({ enabled: event.target.checked });
                 }}
               />
             </label>
-            <label className={selectFieldClass}>
-              <div className={cn("mb-1", typography.label)}>Director Name</div>
+            <label className={cleanFieldClass}>
+              <div className={typography.label}>Director Name</div>
               <Input
                 id="settings-whatsapp-director-name"
                 name="whatsappDirectorName"
+                className={cleanInputClass}
                 value={whatsAppSettings.directorName}
                 onChange={(event) => setWhatsAppSettings((prev) => ({ ...prev, directorName: event.target.value }))}
                 onBlur={() => {
@@ -410,11 +426,13 @@ export default function Settings() {
                 placeholder="Restaurant Director"
               />
             </label>
-            <label className={selectFieldClass}>
-              <div className={cn("mb-1", typography.label)}>Sender Behavior</div>
+            <label className={cleanFieldClass}>
+              <div className={typography.label}>Sender Behavior</div>
               <UbhonaSelect
                 name="whatsappSenderBehavior"
                 value={whatsAppSettings.senderBehavior}
+                triggerClassName={cleanSelectTriggerClass}
+                contentClassName={cleanSelectContentClass}
                 onValueChange={(value) => {
                   void patchWhatsAppSettings({ senderBehavior: value as "default" | "restaurant" });
                 }}
@@ -423,11 +441,13 @@ export default function Settings() {
                 <UbhonaSelectItem value="restaurant">Restaurant Branded Sender</UbhonaSelectItem>
               </UbhonaSelect>
             </label>
-            <label className={selectFieldClass}>
-              <div className={cn("mb-1", typography.label)}>Provider</div>
+            <label className={cleanFieldClass}>
+              <div className={typography.label}>Provider</div>
               <UbhonaSelect
                 name="whatsappProvider"
                 value={whatsAppSettings.provider}
+                triggerClassName={cleanSelectTriggerClass}
+                contentClassName={cleanSelectContentClass}
                 onValueChange={(value) => {
                   void patchWhatsAppSettings({ provider: value as "mock" | "meta_cloud" | "twilio" });
                 }}
@@ -444,7 +464,7 @@ export default function Settings() {
             ) : null}
             {whatsAppSettingsState === "saved" ? (
               <div className="rounded-xl border border-emerald-300/30 bg-emerald-500/10 px-3 py-2 text-xs text-emerald-100">
-                WhatsApp settings saved.
+                WhatsApp configuration saved. Messaging remains inactive until live provider credentials and approval are in place.
               </div>
             ) : null}
             {whatsAppSettingsError ? (

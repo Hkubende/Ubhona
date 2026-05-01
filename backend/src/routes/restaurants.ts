@@ -5,7 +5,6 @@ import { requireAuth } from "../middleware/auth.js";
 import type { AuthRequest } from "../types.js";
 import {
   createRestaurant,
-  getRestaurantBySlug,
   getOwnedRestaurant,
   updateRestaurant,
 } from "../services/restaurant.service.js";
@@ -30,7 +29,8 @@ import {
   reviewApprovalRequest,
   type ApprovalStatus,
 } from "../services/activity.service.js";
-import { listBranchDishStockOverrides } from "../services/stock.service.js";
+import { findRestaurantDocumentByKey, upsertRestaurantDocument } from "../services/tenant-document.service.js";
+import { getPublicRestaurantBySlug, getPublicStorefrontPayload } from "../services/public-storefront.service.js";
 
 export const restaurantRouter = Router();
 type OwnedRestaurant = NonNullable<Awaited<ReturnType<typeof getOwnedRestaurant>>>;
@@ -128,6 +128,7 @@ restaurantRouter.get("/me/status", requireAuth, async (req: AuthRequest, res) =>
     res.json({ exists: false, restaurant: null });
     return;
   }
+
   res.json({ exists: true, restaurant: await withSubscription(restaurant) });
 });
 
@@ -255,78 +256,55 @@ restaurantRouter.patch("/me/plan", requireAuth, async (req: AuthRequest, res) =>
 });
 
 restaurantRouter.get("/:slug/categories", async (req, res) => {
-  const restaurant = await getRestaurantBySlug(req.params.slug);
-  if (!restaurant) {
+  const branchId = String(req.query.branchId || "").trim() || "main";
+  const storefront = await getPublicStorefrontPayload({
+    slug: req.params.slug,
+    branchId,
+  });
+  if (!storefront) {
     res.status(404).json({ error: "Restaurant not found." });
     return;
   }
-  const categories = await prisma.category.findMany({
-    where: { restaurantId: restaurant.id },
-    orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
-  });
-  res.json(categories);
+  res.set("Cache-Control", "public, max-age=30, stale-while-revalidate=120");
+  res.json(storefront.categories);
 });
 
 restaurantRouter.get("/:slug/dishes", async (req, res) => {
-  const restaurant = await getRestaurantBySlug(req.params.slug);
-  if (!restaurant) {
+  const branchId = String(req.query.branchId || "").trim() || "main";
+  const storefront = await getPublicStorefrontPayload({
+    slug: req.params.slug,
+    branchId,
+  });
+  if (!storefront) {
     res.status(404).json({ error: "Restaurant not found." });
     return;
   }
+  res.set("Cache-Control", "public, max-age=30, stale-while-revalidate=120");
+  res.json(storefront.dishes);
+});
+
+restaurantRouter.get("/:slug/storefront", async (req, res) => {
   const branchId = String(req.query.branchId || "").trim() || "main";
-  const dishes = await prisma.dish.findMany({
-    where: { restaurantId: restaurant.id, isAvailable: true },
-    orderBy: { createdAt: "desc" },
+  const storefront = await getPublicStorefrontPayload({
+    slug: req.params.slug,
+    branchId,
   });
-  const overrides = await listBranchDishStockOverrides({ restaurantId: restaurant.id, branchId });
-  const overrideByDishId = new Map(overrides.map((item) => [item.dishId, item]));
-  const automationRow = await prisma.platformTrackerDocument.findUnique({
-    where: { key: automationSettingsKey(restaurant.id) },
-    select: { payload: true },
-  });
-  const automationSettings = {
-    ...DEFAULT_AUTOMATION_SETTINGS,
-    ...toLooseRecord(automationRow?.payload),
-  };
-  const autoHideUnavailable = Boolean(automationSettings.auto_hide_unavailable_dishes);
-  const filtered = dishes
-    .map((dish) => {
-      const override = overrideByDishId.get(dish.id);
-      if (!override) {
-        return {
-          ...dish,
-          availability_status: "available",
-          stock_quantity: null,
-          low_stock_threshold: 5,
-          hidden_from_public_menu: false,
-          branchId,
-        };
-      }
-      return {
-        ...dish,
-        availability_status: override.availability_status,
-        stock_quantity: override.stock_quantity,
-        low_stock_threshold: override.low_stock_threshold,
-        hidden_from_public_menu: override.hidden_from_public_menu,
-        branchId,
-      };
-    })
-    .filter((dish) => !dish.hidden_from_public_menu)
-    .filter((dish) => (autoHideUnavailable ? dish.availability_status !== "unavailable" : true))
-    .map((dish) => ({
-      ...dish,
-      isAvailable: dish.isAvailable && dish.availability_status !== "unavailable",
-    }));
-  res.json(filtered);
+  if (!storefront) {
+    res.status(404).json({ error: "Restaurant not found." });
+    return;
+  }
+  res.set("Cache-Control", "public, max-age=30, stale-while-revalidate=120");
+  res.json(storefront);
 });
 
 restaurantRouter.get("/:slug", async (req, res) => {
-  const restaurant = await getRestaurantBySlug(req.params.slug);
+  const restaurant = await getPublicRestaurantBySlug(req.params.slug);
   if (!restaurant) {
     res.status(404).json({ error: "Restaurant not found." });
     return;
   }
-  res.json(await withSubscription(restaurant));
+  res.set("Cache-Control", "public, max-age=30, stale-while-revalidate=120");
+  res.json(restaurant);
 });
 
 restaurantRouter.get("/me/whatsapp-settings", requireAuth, async (req: AuthRequest, res) => {
@@ -540,8 +518,9 @@ restaurantRouter.get("/me/automation-settings", requireAuth, async (req: AuthReq
     res.status(404).json({ error: "Restaurant not found." });
     return;
   }
-  const row = await prisma.platformTrackerDocument.findUnique({
-    where: { key: automationSettingsKey(restaurant.id) },
+  const row = await findRestaurantDocumentByKey({
+    restaurantId: restaurant.id,
+    key: automationSettingsKey(restaurant.id),
     select: { payload: true },
   });
   const payload = toLooseRecord(row?.payload);
@@ -572,8 +551,9 @@ restaurantRouter.patch("/me/automation-settings", requireAuth, async (req: AuthR
         branch_defaults: z.record(z.unknown()).optional(),
       })
       .parse(req.body || {});
-    const existingRow = await prisma.platformTrackerDocument.findUnique({
-      where: { key: automationSettingsKey(restaurant.id) },
+    const existingRow = await findRestaurantDocumentByKey({
+      restaurantId: restaurant.id,
+      key: automationSettingsKey(restaurant.id),
       select: { payload: true },
     });
     const existing = {
@@ -588,15 +568,10 @@ restaurantRouter.patch("/me/automation-settings", requireAuth, async (req: AuthR
         : ((existing.branch_defaults as Prisma.InputJsonObject) || ({} as Prisma.InputJsonObject)),
       updatedAt: new Date().toISOString(),
     };
-    await prisma.platformTrackerDocument.upsert({
-      where: { key: automationSettingsKey(restaurant.id) },
-      create: {
-        key: automationSettingsKey(restaurant.id),
-        payload: next as Prisma.InputJsonValue,
-      },
-      update: {
-        payload: next as Prisma.InputJsonValue,
-      },
+    await upsertRestaurantDocument({
+      restaurantId: restaurant.id,
+      key: automationSettingsKey(restaurant.id),
+      payload: next as Prisma.InputJsonValue,
     });
     await recordActivityEvent({
       actorUserId: req.user!.id,

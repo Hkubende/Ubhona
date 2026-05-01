@@ -7,6 +7,7 @@ import { hasRestaurantProfile } from "./lib/restaurant";
 import { isCurrentUserAdmin } from "./lib/admin";
 import { canAccessRoute, getDefaultRouteForRole, getPrimaryDashboardRole, isRoleAllowed } from "./lib/roles";
 import type { DashboardRole } from "./types/roles";
+import { UbhonaLoader } from "./components/ui/ubhona-loader";
 import "./index.css";
 
 const App = React.lazy(() => import("./App"));
@@ -16,10 +17,13 @@ const MenuItemPage = React.lazy(() => import("./pages/MenuItemPage"));
 const Checkout = React.lazy(() => import("./pages/Checkout"));
 const Orders = React.lazy(() => import("./pages/Orders"));
 const Login = React.lazy(() => import("./pages/Login"));
+const ResetPassword = React.lazy(() => import("./pages/ResetPassword"));
 const Signup = React.lazy(() => import("./pages/Signup"));
 const Onboarding = React.lazy(() => import("./pages/Onboarding"));
 const MenuManager = React.lazy(() => import("./pages/MenuManager"));
+const PrivacyPolicy = React.lazy(() => import("./pages/PrivacyPolicy"));
 const Pricing = React.lazy(() => import("./pages/Pricing"));
+const TermsOfService = React.lazy(() => import("./pages/TermsOfService"));
 const OrdersDashboard = React.lazy(() => import("./pages/OrdersDashboard"));
 const NewOrderEntryPage = React.lazy(() => import("./pages/NewOrderEntry"));
 const Branding = React.lazy(() => import("./pages/Branding"));
@@ -37,6 +41,7 @@ const RestaurantsAdmin = React.lazy(() => import("./pages/admin/RestaurantsAdmin
 const BillingAdmin = React.lazy(() => import("./pages/admin/BillingAdmin"));
 const SupportAdmin = React.lazy(() => import("./pages/admin/SupportAdmin"));
 const PlatformTracker = React.lazy(() => import("./pages/admin/PlatformTracker"));
+const ContactSupport = React.lazy(() => import("./pages/ContactSupport"));
 const RestaurantHome = React.lazy(() => import("./pages/storefront/RestaurantHome"));
 const MenuPage = React.lazy(() => import("./pages/storefront/MenuPage"));
 const DishPage = React.lazy(() => import("./pages/storefront/DishPage"));
@@ -105,7 +110,16 @@ function RedirectLegacyRoute({ to }: { to: string }) {
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
     <BrowserRouter basename={import.meta.env.BASE_URL}>
-      <React.Suspense fallback={<div className="p-4 text-sm text-white/70">Loading...</div>}>
+      <React.Suspense
+        fallback={
+          <UbhonaLoader
+            fullScreen
+            label="Loading Ubhona"
+            detail="Preparing your workspace"
+            shellClassName="bg-background"
+          />
+        }
+      >
       <Routes>
         <Route path="/" element={<App />} />
         <Route path="/menu/:dishId" element={<MenuItemPage />} />
@@ -270,6 +284,9 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
         <Route path="/checkout" element={<Checkout />} />
         <Route path="/orders" element={<Orders />} />
         <Route path="/pricing" element={<Pricing />} />
+        <Route path="/contact" element={<ContactSupport />} />
+        <Route path="/privacy" element={<PrivacyPolicy />} />
+        <Route path="/terms" element={<TermsOfService />} />
         <Route
           path="/admin"
           element={
@@ -326,6 +343,7 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
             </RedirectAuthed>
           }
         />
+        <Route path="/reset-password" element={<ResetPassword />} />
         <Route
           path="/signup"
           element={

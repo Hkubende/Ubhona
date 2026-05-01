@@ -1,10 +1,11 @@
 import * as React from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { DashboardLayout } from "../components/dashboard/dashboard-layout";
 import {
   ActionBar,
   ContentGrid,
   DashboardPanel,
+  EmptyStateCard,
   MetricCard,
   PageContainer,
   SectionHeader,
@@ -23,6 +24,7 @@ function formatKsh(value: number) {
 }
 
 export default function PaymentsCenterPage() {
+  const navigate = useNavigate();
   const { restaurant, orders, loading, error } = useRestaurantOrders();
 
   const profile = React.useMemo<RestaurantProfile | null>(() => {
@@ -71,6 +73,7 @@ export default function PaymentsCenterPage() {
       profile={profile}
       title="Payments"
       subtitle="Restaurant payment operations and settlement visibility."
+      showTopbarSearch={false}
       actions={
         <Link to="/dashboard/orders">
           <Button variant="primary" size="sm">Open Orders</Button>
@@ -108,10 +111,22 @@ export default function PaymentsCenterPage() {
             </>
           ) : null}
         </div>
+        {!loading && !orders.length ? (
+          <div className="mt-4">
+            <EmptyStateCard
+              title="No payment activity yet"
+              message="Payments will populate here after the first completed order. Use this page to monitor paid totals, outstanding balances, and billing state."
+              actionLabel="Open Orders"
+              onAction={() => navigate("/dashboard/orders")}
+              secondaryActionLabel="Open Billing"
+              onSecondaryAction={() => navigate("/dashboard/billing")}
+            />
+          </div>
+        ) : null}
       </DashboardPanel>
 
       <DashboardPanel>
-        <SectionHeader title="Payment Workflow" subtitle="M-Pesa and manual billing state for subscription operations." />
+        <SectionHeader title="Payment Workflow" subtitle="Review settlement health, billing state, and the next action needed before launch or renewal." />
         <ActionBar>
           <div className="flex flex-wrap gap-2">
             <Badge variant="accent">{subscriptionMeta.label}</Badge>
@@ -122,12 +137,25 @@ export default function PaymentsCenterPage() {
           </Link>
         </ActionBar>
         {error ? (
-          <p className="text-sm text-rose-300">{error}</p>
+          <EmptyStateCard
+            title="Payments unavailable"
+            message={error}
+            actionLabel="Open Orders"
+            onAction={() => navigate("/dashboard/orders")}
+          />
         ) : (
           <div className="space-y-2">
             <p className={typography.body}>
-              Subscription billing is backend-driven. M-Pesa pending/success/failure and manual verification states are reflected here.
+              Track restaurant payment activity here. This page reflects real order settlements and billing records only, so empty sections usually mean no live payment or invoice data has been generated yet.
             </p>
+            {!billing ? (
+              <EmptyStateCard
+                title="Billing setup not loaded yet"
+                message="Subscription and invoice details will appear here after billing data is available for this restaurant. Orders can still be tracked from the operations side in the meantime."
+                actionLabel="Open Settings"
+                onAction={() => navigate("/dashboard/settings")}
+              />
+            ) : null}
             {billing ? (
               <div className="grid gap-2 md:grid-cols-2">
                 <div className="rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2 text-xs text-white/78">
@@ -147,7 +175,7 @@ export default function PaymentsCenterPage() {
               </div>
             ) : null}
             {openInvoice ? (
-              <div className="rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-xs text-white/78">
+                <div className="rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-xs text-white/78">
                 <div className="flex flex-wrap items-center gap-2">
                   <span className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] uppercase tracking-[0.12em] ${openInvoiceMeta?.className || "border-white/15"}`}>
                     {openInvoiceMeta?.label || openInvoice.status}
@@ -156,7 +184,7 @@ export default function PaymentsCenterPage() {
                     Invoice {openInvoice.paymentReference} - {openInvoice.currency} {openInvoice.amount.toLocaleString("en-KE")}
                   </span>
                 </div>
-                <div className="mt-1 text-white/60">Settle from Pricing with M-Pesa STK or manual fallback.</div>
+                <div className="mt-1 text-white/60">Resolve this live invoice from Billing using M-Pesa or the manual fallback path.</div>
               </div>
             ) : null}
             {latestPayment ? (
@@ -170,6 +198,12 @@ export default function PaymentsCenterPage() {
                 </div>
                 {latestPaymentMeta ? <div className="mt-1 text-white/60">{latestPaymentMeta.hint}</div> : null}
               </div>
+            ) : null}
+            {billing && !latestPayment && !openInvoice ? (
+              <EmptyStateCard
+                title="No billing events yet"
+                message="No live invoices or billing payments have been recorded for this restaurant yet. This is expected on starter or trial setups until the first payable billing event happens."
+              />
             ) : null}
           </div>
         )}

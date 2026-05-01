@@ -1,4 +1,5 @@
 import { ApiError, api } from "./api";
+import { hasRemoteAuthSession } from "./auth";
 import { isApiConfigured } from "./config";
 
 export type ActivityItem = {
@@ -95,7 +96,7 @@ export async function getActivityHistory(params?: {
   entityType?: string;
   entityId?: string;
 }): Promise<ActivityItem[]> {
-  if (!isApiConfigured) return [];
+  if (!isApiConfigured || !hasRemoteAuthSession()) return [];
   const query = new URLSearchParams();
   if (params?.limit != null) query.set("limit", String(params.limit));
   if (params?.entityType) query.set("entityType", params.entityType);
@@ -111,7 +112,7 @@ export async function getActivityHistory(params?: {
 }
 
 export async function getOrderHistory(orderId: string, limit = 30): Promise<ActivityItem[]> {
-  if (!isApiConfigured) return [];
+  if (!isApiConfigured || !hasRemoteAuthSession()) return [];
   try {
     const response = await api.get<unknown[]>(
       `/restaurants/me/orders/${encodeURIComponent(orderId)}/history?limit=${Math.max(1, Math.min(100, limit))}`
@@ -124,7 +125,7 @@ export async function getOrderHistory(orderId: string, limit = 30): Promise<Acti
 }
 
 export async function getDishHistory(dishId: string, limit = 30): Promise<ActivityItem[]> {
-  if (!isApiConfigured) return [];
+  if (!isApiConfigured || !hasRemoteAuthSession()) return [];
   try {
     const response = await api.get<unknown[]>(
       `/restaurants/me/dishes/${encodeURIComponent(dishId)}/history?limit=${Math.max(1, Math.min(100, limit))}`
@@ -137,7 +138,7 @@ export async function getDishHistory(dishId: string, limit = 30): Promise<Activi
 }
 
 export async function getApprovals(status?: "pending" | "approved" | "rejected"): Promise<ApprovalItem[]> {
-  if (!isApiConfigured) return [];
+  if (!isApiConfigured || !hasRemoteAuthSession()) return [];
   const suffix = status ? `?status=${status}` : "";
   try {
     const response = await api.get<unknown[]>(`/restaurants/me/approvals${suffix}`);

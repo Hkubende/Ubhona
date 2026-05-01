@@ -10,10 +10,11 @@ import {
   getConversionMetrics,
   getTopDishes,
   recordAnalyticsEvent,
+  type AnalyticsEventType,
 } from "../services/analytics.service.js";
 import { isRestaurantFeatureEnabled } from "../services/billing.service.js";
-import { authAwareRateLimitKey, createRateLimiter } from "../middleware/rate-limit.js";
 import { runWithRestaurantDbSession } from "../services/db-session.service.js";
+import { authAwareRateLimitKey, createRateLimiter } from "../middleware/rate-limit.js";
 
 const eventSchema = z.object({
   restaurantId: z.string().min(1),
@@ -68,8 +69,6 @@ async function ingestEvent(req: Request, res: Response) {
 }
 
 analyticsRouter.post("/events", analyticsIngestLimiter, ingestEvent);
-
-// Backward compatibility for older clients
 analyticsRouter.post("/event", analyticsIngestLimiter, ingestEvent);
 
 analyticsRouter.get("/summary", requireAuth, analyticsReadLimiter, async (req: AuthRequest, res) => {
@@ -82,13 +81,14 @@ analyticsRouter.get("/summary", requireAuth, analyticsReadLimiter, async (req: A
     res.status(403).json({ error: "Upgrade to Growth to unlock analytics." });
     return;
   }
-  const query = z
-    .object({
-      days: z.coerce.number().int().positive().max(365).optional(),
-    })
-    .safeParse(req.query);
+  const query = z.object({ days: z.coerce.number().int().positive().max(365).optional() }).safeParse(req.query);
   const days = query.success ? query.data.days || 30 : 30;
-  const summary = await getAnalyticsSummary(restaurant.id, days);
+  const summary = await getAnalyticsSummary({
+    restaurantId: restaurant.id,
+    userId: req.user!.id,
+    isAdmin: req.user!.role === "platform_admin",
+    days,
+  });
   res.json(summary);
 });
 
@@ -102,13 +102,14 @@ analyticsRouter.get("/top-dishes", requireAuth, analyticsReadLimiter, async (req
     res.status(403).json({ error: "Upgrade to Growth to unlock analytics." });
     return;
   }
-  const query = z
-    .object({
-      days: z.coerce.number().int().positive().max(365).optional(),
-    })
-    .safeParse(req.query);
+  const query = z.object({ days: z.coerce.number().int().positive().max(365).optional() }).safeParse(req.query);
   const days = query.success ? query.data.days || 30 : 30;
-  res.json(await getTopDishes(restaurant.id, days));
+  res.json(await getTopDishes({
+    restaurantId: restaurant.id,
+    userId: req.user!.id,
+    isAdmin: req.user!.role === "platform_admin",
+    days,
+  }));
 });
 
 analyticsRouter.get("/conversion", requireAuth, analyticsReadLimiter, async (req: AuthRequest, res) => {
@@ -121,11 +122,12 @@ analyticsRouter.get("/conversion", requireAuth, analyticsReadLimiter, async (req
     res.status(403).json({ error: "Upgrade to Growth to unlock analytics." });
     return;
   }
-  const query = z
-    .object({
-      days: z.coerce.number().int().positive().max(365).optional(),
-    })
-    .safeParse(req.query);
+  const query = z.object({ days: z.coerce.number().int().positive().max(365).optional() }).safeParse(req.query);
   const days = query.success ? query.data.days || 30 : 30;
-  res.json(await getConversionMetrics(restaurant.id, days));
+  res.json(await getConversionMetrics({
+    restaurantId: restaurant.id,
+    userId: req.user!.id,
+    isAdmin: req.user!.role === "platform_admin",
+    days,
+  }));
 });

@@ -6,5 +6,6 @@ export default defineConfig({
     include: ["src/__tests__/**/*.test.ts"],
     clearMocks: true,
     restoreMocks: true,
+    setupFiles: ["src/__tests__/setup-env.ts"],
   },
 });
