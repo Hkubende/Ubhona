@@ -5,6 +5,7 @@ import { DashboardLayout } from "../components/dashboard/dashboard-layout";
 import {
   PageContainer,
   DashboardPanel,
+  MetricCard,
 } from "../components/dashboard/dashboard-primitives";
 import { Button } from "../components/ui/Button";
 import { spacing } from "../design-system";
