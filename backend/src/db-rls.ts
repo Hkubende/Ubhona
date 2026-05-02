@@ -187,6 +187,7 @@ function createDelegateProxy(basePrisma: PrismaLike, path: string[]): any {
 
             if (
               !currentContext ||
+              (!isTenantProtected && !currentContext.isAdmin && !currentContext.restaurantId) ||
               property === "$connect" ||
               property === "$disconnect" ||
               property === "$on" ||
