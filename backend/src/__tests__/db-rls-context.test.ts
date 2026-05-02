@@ -74,6 +74,33 @@ describe("db RLS tenant context", () => {
     expect(tx.category.findMany).not.toHaveBeenCalled();
   });
 
+  it("allows non-tenant bootstrap queries before a restaurant exists", async () => {
+    const basePrisma = {
+      $transaction: vi.fn(),
+      $executeRaw: vi.fn(),
+      $executeRawUnsafe: vi.fn(),
+      restaurant: {
+        findFirst: vi.fn().mockResolvedValue(null),
+      },
+    };
+
+    const prisma = createRlsAwarePrisma(basePrisma as any);
+
+    const row = await runWithDbRlsContext(
+      {
+        userId: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+        isAdmin: false,
+      },
+      () => prisma.restaurant.findFirst({ where: { ownerUserId: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa" } })
+    );
+
+    expect(row).toBeNull();
+    expect(basePrisma.restaurant.findFirst).toHaveBeenCalledWith({
+      where: { ownerUserId: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa" },
+    });
+    expect(basePrisma.$transaction).not.toHaveBeenCalled();
+  });
+
   it("fails closed when a tenant-protected delegate is accessed without context", async () => {
     const basePrisma = {
       $transaction: vi.fn(),
