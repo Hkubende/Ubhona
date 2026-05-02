@@ -7,7 +7,16 @@ const prismaMock = {
   analyticsEvent: { create: vi.fn() },
 };
 
-const runWithPublicStorefrontDbContextMock = vi.fn(async (_restaurantId, fn) => fn());
+let publicStorefrontContextActive = false;
+const sideEffectContextChecks: Array<{ name: string; active: boolean }> = [];
+const runWithPublicStorefrontDbContextMock = vi.fn(async (_restaurantId, fn) => {
+  publicStorefrontContextActive = true;
+  try {
+    return await fn();
+  } finally {
+    publicStorefrontContextActive = false;
+  }
+});
 const runWithTenantContextMock = vi.fn();
 const getRestaurantLimitStatusMock = vi.fn();
 const incrementRestaurantUsageMock = vi.fn();
@@ -75,6 +84,8 @@ vi.mock("../services/menu-control.service.js", () => ({
 describe("order.service storefront audit", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    sideEffectContextChecks.length = 0;
+    publicStorefrontContextActive = false;
     prismaMock.restaurant.findUnique.mockResolvedValue({
       id: "rest-1",
       ownerUserId: "owner-1",
@@ -106,11 +117,17 @@ describe("order.service storefront audit", () => {
     });
     prismaMock.analyticsEvent.create.mockResolvedValue({ id: "event-1" });
     incrementRestaurantUsageMock.mockResolvedValue(undefined);
-    setOrderBranchContextMock.mockResolvedValue(undefined);
+    setOrderBranchContextMock.mockImplementation(async () => {
+      sideEffectContextChecks.push({ name: "setOrderBranchContext", active: publicStorefrontContextActive });
+    });
     recordActivityEventMock.mockResolvedValue(undefined);
-    registerOrderWhatsAppPreferenceMock.mockResolvedValue(undefined);
+    registerOrderWhatsAppPreferenceMock.mockImplementation(async () => {
+      sideEffectContextChecks.push({ name: "registerOrderWhatsAppPreference", active: publicStorefrontContextActive });
+    });
     sendOrderPlacedMessageMock.mockResolvedValue(undefined);
-    createOrderLifecycleNotificationsMock.mockResolvedValue(undefined);
+    createOrderLifecycleNotificationsMock.mockImplementation(async () => {
+      sideEffectContextChecks.push({ name: "createOrderLifecycleNotifications", active: publicStorefrontContextActive });
+    });
   });
 
   it("uses an explicit system actor for storefront-created orders", async () => {
@@ -138,5 +155,27 @@ describe("order.service storefront audit", () => {
     expect(recordActivityEventMock).not.toHaveBeenCalledWith(
       expect.objectContaining({ actorUserId: expect.anything() })
     );
+  });
+
+  it("keeps storefront tenant-document side effects inside the restaurant RLS context", async () => {
+    const { createStorefrontOrder } = await import("../services/order.service.js");
+
+    await createStorefrontOrder({
+      restaurantId: "rest-1",
+      branchId: "main",
+      items: [{ dishId: "dish-1", quantity: 1 }],
+      customerName: "Alice",
+      customerPhone: "254700000001",
+      whatsappOptIn: false,
+    });
+
+    expect(runWithPublicStorefrontDbContextMock).toHaveBeenCalledTimes(2);
+    expect(runWithPublicStorefrontDbContextMock).toHaveBeenNthCalledWith(1, "rest-1", expect.any(Function));
+    expect(runWithPublicStorefrontDbContextMock).toHaveBeenNthCalledWith(2, "rest-1", expect.any(Function));
+    expect(sideEffectContextChecks).toEqual([
+      { name: "setOrderBranchContext", active: true },
+      { name: "registerOrderWhatsAppPreference", active: true },
+      { name: "createOrderLifecycleNotifications", active: true },
+    ]);
   });
 });

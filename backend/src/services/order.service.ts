@@ -137,11 +137,6 @@ export async function createStorefrontOrder(input: StorefrontOrderInput) {
   });
 
   await incrementRestaurantUsage(restaurant as BillingRestaurantRecord, "ordersPerMonth", 1);
-  await setOrderBranchContext({
-    restaurantId: input.restaurantId,
-    orderId: order.id,
-    branchId,
-  });
   await recordActivityEvent({
     systemActorKey: STOREFRONT_CHECKOUT_SYSTEM_ACTOR_KEY,
     actorRole: STOREFRONT_CHECKOUT_SYSTEM_ROLE,
@@ -166,22 +161,29 @@ export async function createStorefrontOrder(input: StorefrontOrderInput) {
     },
   });
 
-  await registerOrderWhatsAppPreference({
-    orderId: order.id,
-    restaurantId: input.restaurantId,
-    optedIn: Boolean(input.whatsappOptIn),
-    whatsappNumber: input.whatsappNumber || input.customerPhone || null,
-    source: "checkout",
-  });
-  if (input.whatsappOptIn) {
-    await sendOrderPlacedMessage(order.id, input.restaurantId);
-  }
-  await createOrderLifecycleNotifications({
-    restaurantId: input.restaurantId,
-    orderId: order.id,
-    status: "pending",
-    tableNumber: order.tableNumber,
-    customerName: order.customerName,
+  await runWithPublicStorefrontDbContext(input.restaurantId, async () => {
+    await setOrderBranchContext({
+      restaurantId: input.restaurantId,
+      orderId: order.id,
+      branchId,
+    });
+    await registerOrderWhatsAppPreference({
+      orderId: order.id,
+      restaurantId: input.restaurantId,
+      optedIn: Boolean(input.whatsappOptIn),
+      whatsappNumber: input.whatsappNumber || input.customerPhone || null,
+      source: "checkout",
+    });
+    if (input.whatsappOptIn) {
+      await sendOrderPlacedMessage(order.id, input.restaurantId);
+    }
+    await createOrderLifecycleNotifications({
+      restaurantId: input.restaurantId,
+      orderId: order.id,
+      status: "pending",
+      tableNumber: order.tableNumber,
+      customerName: order.customerName,
+    });
   });
 
   return { order, totalAmount };
