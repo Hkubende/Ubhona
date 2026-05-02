@@ -1,6 +1,13 @@
 import * as React from "react";
 import { getActiveRestaurantId, getAnalyticsSummary, getDashboardRestaurant } from "../lib/dashboard-data";
-import { getCurrentPlan, getFeatureGate, type RestaurantProfile } from "../lib/restaurant";
+import {
+  canUseFeature,
+  getCurrentPlan,
+  getFeatureGate,
+  getRestaurantProfile,
+  syncRestaurantProfile,
+  type RestaurantProfile,
+} from "../lib/restaurant";
 import type { AnalyticsSummary, Restaurant } from "../types/dashboard";
 
 type UseRestaurantAnalyticsState = {
@@ -26,6 +33,7 @@ export function useRestaurantAnalytics(): UseRestaurantAnalyticsState {
 
   const plan = React.useMemo(() => getCurrentPlan(profile), [profile]);
   const analyticsGate = React.useMemo(() => getFeatureGate("analytics", profile), [profile]);
+  const analyticsEnabled = analyticsGate.enabled;
 
   const refresh = React.useCallback(async () => {
     setLoading(true);
@@ -33,11 +41,18 @@ export function useRestaurantAnalytics(): UseRestaurantAnalyticsState {
     try {
       const activeRestaurantId = await getActiveRestaurantId();
       setRestaurantId(activeRestaurantId);
-      const [restaurantData, analyticsData] = await Promise.all([
-        getDashboardRestaurant(activeRestaurantId),
-        getAnalyticsSummary(activeRestaurantId),
-      ]);
+      const resolvedProfile = (await syncRestaurantProfile()) || profile || getRestaurantProfile();
+      if (resolvedProfile) {
+        setProfile(resolvedProfile);
+      }
+      const enabled = canUseFeature("analytics", resolvedProfile || profile || getRestaurantProfile());
+      const restaurantData = await getDashboardRestaurant(activeRestaurantId);
       setRestaurant(restaurantData);
+      if (!enabled) {
+        setSummary(null);
+        return;
+      }
+      const analyticsData = await getAnalyticsSummary(activeRestaurantId);
       setSummary(analyticsData);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load analytics.");
@@ -53,11 +68,12 @@ export function useRestaurantAnalytics(): UseRestaurantAnalyticsState {
   }, [refresh]);
 
   React.useEffect(() => {
+    if (!analyticsEnabled) return;
     const timer = window.setInterval(() => {
       void refresh();
     }, 12000);
     return () => window.clearInterval(timer);
-  }, [refresh]);
+  }, [analyticsEnabled, refresh]);
 
   return {
     restaurantId,
@@ -66,7 +82,7 @@ export function useRestaurantAnalytics(): UseRestaurantAnalyticsState {
     loading,
     error,
     planLabel: plan.label,
-    analyticsEnabled: true,
+    analyticsEnabled,
     gateMessage: analyticsGate.message,
     refresh,
     setRestaurantProfile: setProfile,

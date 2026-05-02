@@ -6,11 +6,12 @@ import { Badge } from "../../components/ui/Badge";
 import { Button, buttonVariants } from "../../components/ui/Button";
 import { Input } from "../../components/ui/Input";
 import { UbhonaActionMenu } from "../../components/ui/ubhona-action-menu";
+import { UbhonaLoader } from "../../components/ui/ubhona-loader";
 import { DataTable, EmptyStateCard, PageContainer, SectionHeader, StatusBadge } from "../../components/dashboard/dashboard-primitives";
 import { useRestaurantOrders } from "../../hooks/use-restaurant-orders";
 import { getDishUrl } from "../../lib/qr";
 import { normalizeOrderStatus } from "../../lib/order-status";
-import { canPerformAction } from "../../lib/roles";
+import { canAccessDashboardRoute, canPerformAction, getPrimaryDashboardRole } from "../../lib/roles";
 import type { RestaurantProfile } from "../../lib/restaurant";
 import type { Order, OrderStatus } from "../../types/dashboard";
 import { cn } from "../../lib/utils";
@@ -61,6 +62,8 @@ export default function StaffOrdersBoardPage() {
   const [tableFilter, setTableFilter] = React.useState("all");
   const [submittingOrderId, setSubmittingOrderId] = React.useState("");
   const canUpdateServiceOrders = canPerformAction("update_service_order_status");
+  const currentRole = getPrimaryDashboardRole();
+  const canCreateOrders = canAccessDashboardRoute("/dashboard/orders/new", currentRole);
 
   const profile = React.useMemo<RestaurantProfile | null>(() => {
     if (!restaurant) return null;
@@ -141,6 +144,11 @@ export default function StaffOrdersBoardPage() {
       subtitle="Live service board for front-of-house tracking and fulfillment."
       actions={
         <div className="flex items-center gap-2">
+          {canCreateOrders ? (
+            <Link to="/dashboard/orders/new" className={buttonVariants({ variant: "primary", size: "sm" })}>
+              New Order
+            </Link>
+          ) : null}
           <Badge variant="success">Ready to Serve {readyCount}</Badge>
           <Button size="sm" variant="secondary" onClick={() => void refresh()}>
             Refresh
@@ -149,9 +157,9 @@ export default function StaffOrdersBoardPage() {
       }
     >
       <PageContainer className="space-y-4">
-        <section className="rounded-3xl border border-white/10 bg-[#0D0B0B]/92 p-4">
+        <section className="ui-surface rounded-3xl p-4">
           <SectionHeader title="Live Controls" subtitle="Search by order, customer, table, or dish. Filter to focus active service states." />
-          <div className="mt-3 grid gap-2 md:grid-cols-[minmax(0,1fr)_auto_auto]">
+          <div className="mt-3 grid gap-3 md:grid-cols-[minmax(0,1fr)_auto_auto] md:items-start">
             <div className="relative">
               <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-text-secondary/65" />
               <Input
@@ -163,7 +171,7 @@ export default function StaffOrdersBoardPage() {
                 className="pl-9"
               />
             </div>
-            <div className="flex flex-wrap items-center gap-1.5">
+            <div className="-mx-1 flex items-center gap-1.5 overflow-x-auto px-1 pb-1 md:mx-0 md:flex-wrap md:px-0 md:pb-0">
               {FILTER_OPTIONS.map((option) => {
                 const active = statusFilter === option;
                 return (
@@ -171,7 +179,7 @@ export default function StaffOrdersBoardPage() {
                     key={option}
                     size="sm"
                     variant={active ? "primary" : "secondary"}
-                    className="h-8 rounded-lg px-2.5 py-1 text-[11px] capitalize"
+                    className="min-h-11 shrink-0 rounded-lg px-3.5 py-1 text-[11px] capitalize md:min-h-8 md:px-2.5"
                     onClick={() => setStatusFilter(option)}
                   >
                     {option}
@@ -184,10 +192,10 @@ export default function StaffOrdersBoardPage() {
               name="staffOrdersTableFilter"
               value={tableFilter}
               onChange={(event) => setTableFilter(event.target.value)}
-              className="min-h-10 rounded-xl border border-white/12 bg-black/25 px-3 text-sm text-text-primary"
+              className="min-h-11 rounded-xl border border-border bg-[color:var(--ui-note-icon-bg)] px-3 text-sm text-text-primary"
             >
               {tableOptions.map((option) => (
-                <option key={option} value={option} className="bg-[#0D0B0B] text-text-primary">
+                <option key={option} value={option} className="bg-[color:var(--color-surface)] text-text-primary">
                   {option === "all" ? "All tables" : `Table ${option}`}
                 </option>
               ))}
@@ -195,13 +203,11 @@ export default function StaffOrdersBoardPage() {
           </div>
         </section>
 
-        {loading ? (
-          <div className="rounded-2xl border border-white/10 bg-black/20 p-4 text-sm text-text-secondary/72">Loading order board...</div>
-        ) : null}
+        {loading ? <UbhonaLoader variant="inline" label="Loading order board" /> : null}
         {error ? <EmptyStateCard message={error} /> : null}
 
         {!loading && !error ? (
-          <section className="rounded-3xl border border-white/10 bg-[#0D0B0B]/92 p-3.5">
+          <section className="ui-surface rounded-3xl p-3.5">
             {!filtered.length ? (
               <EmptyStateCard message="No orders match current filters." />
             ) : (
@@ -215,34 +221,47 @@ export default function StaffOrdersBoardPage() {
                       <article
                         key={order.id}
                         className={cn(
-                          "rounded-2xl border bg-black/25 p-3",
-                          isReady ? "border-success/35 shadow-[0_0_0_1px_rgba(46,230,166,0.15)]" : "border-white/10",
-                          isOverdue && "border-[#FF6A1A]/45 bg-[#FF6A1A]/[0.08]"
+                          "rounded-2xl border bg-[color:var(--ui-note-icon-bg)] p-4",
+                          isReady ? "border-success/35 shadow-[0_0_0_1px_rgba(46,230,166,0.15)]" : "border-border",
+                          isOverdue && "border-primary/40 bg-primary/10"
                         )}
                       >
                         <div className="flex items-start justify-between gap-2">
-                          <div>
-                            <p className="font-mono text-[11px] text-text-secondary/82">{order.id}</p>
-                            <p className="mt-0.5 text-sm font-semibold text-text-primary">
+                          <div className="min-w-0 space-y-1">
+                            <p className="text-base font-semibold text-text-primary">
                               {order.tableNumber ? `Table ${order.tableNumber}` : order.customerName || "Guest"}
                             </p>
-                            <p className="text-xs text-text-secondary/72">{formatCreated(order.createdAt)}</p>
+                            <p className="font-mono text-[11px] text-text-secondary/78">{order.id}</p>
+                            <p className="text-sm text-text-secondary/72">
+                              {order.customerName || "Guest"}{order.customerPhone ? ` | ${order.customerPhone}` : ""}
+                            </p>
+                            <p className="text-xs text-text-secondary/62">{formatCreated(order.createdAt)}</p>
                           </div>
                           <StatusBadge status={order.status} />
                         </div>
-                        <div className="mt-2 flex flex-wrap items-center gap-2">
-                          <Badge variant={paymentBadgeVariant(order.paymentStatus)}>
-                            Payment: {order.paymentStatus || "unpaid"}
-                          </Badge>
-                          {isOverdue ? <Badge variant="warning">Overdue</Badge> : null}
-                          <span className="text-xs text-text-secondary/75">{order.items.length} items</span>
-                          <span className="text-xs font-semibold text-text-primary">{formatCurrency(order.total)}</span>
+                        <div className="mt-3 rounded-2xl border border-border bg-surface px-3 py-3">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <Badge variant={paymentBadgeVariant(order.paymentStatus)}>
+                              Payment: {order.paymentStatus || "unpaid"}
+                            </Badge>
+                            {isOverdue ? <Badge variant="warning">Overdue</Badge> : null}
+                            <span className="text-xs text-text-secondary/75">{order.items.length} items</span>
+                            <span className="text-xs font-semibold text-text-primary">{formatCurrency(order.total)}</span>
+                          </div>
+                          <div className="mt-2 text-xs leading-5 text-text-secondary/68">
+                            {order.items.slice(0, 2).map((item) => `${item.quantity}x ${item.name}`).join(", ")}
+                            {order.items.length > 2 ? ", ..." : ""}
+                          </div>
                         </div>
-                        <div className="mt-2 flex flex-wrap gap-1.5">
+                        <div className="mt-3 flex items-center gap-2 border-t border-border pt-3">
+                          <Badge variant={paymentBadgeVariant(order.paymentStatus)}>
+                            {order.takenByWaiterName || "Unassigned"}
+                          </Badge>
                           {nextStatus ? (
                             <Button
                               size="sm"
                               variant={isReady ? "success" : "primary"}
+                              className="min-h-11 flex-1 justify-center px-4 text-xs"
                               disabled={submittingOrderId === order.id || !canUpdateServiceOrders}
                               onClick={() => void onAdvanceStatus(order)}
                             >
@@ -250,6 +269,7 @@ export default function StaffOrdersBoardPage() {
                             </Button>
                           ) : null}
                           <UbhonaActionMenu
+                            className="h-11 w-11 shrink-0"
                             items={[
                               {
                                 key: "open-order",
@@ -269,7 +289,7 @@ export default function StaffOrdersBoardPage() {
 
                 <DataTable className="hidden md:block">
                   <table className="min-w-full text-sm">
-                    <thead className="border-b border-white/10 bg-black/30">
+                    <thead className="border-b border-border bg-[color:var(--ui-note-icon-bg)]">
                       <tr className="text-left text-[11px] uppercase tracking-[0.08em] text-text-secondary/72">
                         <th className="px-3 py-2">Reference</th>
                         <th className="px-3 py-2">Table / Customer</th>
@@ -288,7 +308,7 @@ export default function StaffOrdersBoardPage() {
                         return (
                           <tr
                             key={order.id}
-                            className={cn("border-b border-white/8", isReady && "bg-success/5", isOverdue && "bg-[#FF6A1A]/[0.07]")}
+                            className={cn("border-b border-border", isReady && "bg-success/5", isOverdue && "bg-primary/8")}
                           >
                             <td className="px-3 py-2">
                               <div className="font-mono text-[11px] text-text-secondary/82">{order.id}</div>

@@ -1,6 +1,12 @@
 import { Prisma, type UserRole } from "@prisma/client";
-import { prisma } from "../prisma.js";
+import { prisma, runWithTenantContext } from "../prisma.js";
 import { logAuditEvent } from "./audit.service.js";
+import { getSystemActorLabel } from "./system-actors.js";
+import {
+  findRestaurantDocumentByKey,
+  listRestaurantDocuments,
+  upsertRestaurantDocument,
+} from "./tenant-document.service.js";
 
 export type ApprovalStatus = "pending" | "approved" | "rejected";
 
@@ -12,8 +18,17 @@ export type ApprovalActionType =
   | "printer_settings_update"
   | "role_change";
 
-export type ActivityEventInput = {
-  actorUserId: string;
+type ActivityActorInput =
+  | {
+      actorUserId: string;
+      systemActorKey?: never;
+    }
+  | {
+      actorUserId?: never;
+      systemActorKey: string;
+    };
+
+export type ActivityEventInput = ActivityActorInput & {
   actorRole: UserRole;
   action: string;
   entityType: string;
@@ -78,8 +93,20 @@ export async function recordActivityEvent(input: ActivityEventInput) {
     after: input.after || null,
     ...(input.metadata || {}),
   };
+
+  if (typeof input.actorUserId === "string") {
+    return logAuditEvent({
+      actorUserId: input.actorUserId,
+      actorRole: input.actorRole,
+      action: input.action,
+      targetType: input.entityType,
+      targetId: input.entityId,
+      metadata,
+    });
+  }
+
   return logAuditEvent({
-    actorUserId: input.actorUserId,
+    systemActorKey: input.systemActorKey,
     actorRole: input.actorRole,
     action: input.action,
     targetType: input.entityType,
@@ -94,10 +121,11 @@ export function toHumanReadableActivity(log: {
   targetId: string;
   createdAt: Date;
   actor: { name: string; email: string } | null;
+  systemActorKey: string | null;
   metadata: Prisma.JsonValue | null;
 }) {
   const metadata = toRecord(log.metadata);
-  const actorName = log.actor?.name || log.actor?.email || "Someone";
+  const actorName = log.actor?.name || log.actor?.email || getSystemActorLabel(log.systemActorKey) || "Someone";
   const action = log.action;
   const entityType = log.targetType;
   const before = toRecord(metadata.before);
@@ -151,7 +179,7 @@ export async function getRestaurantActivityHistory(input: {
   entityId?: string;
 }) {
   const limit = Math.max(1, Math.min(200, input.limit || 50));
-  const rows = await prisma.auditLog.findMany({
+  const rows = (await prisma.auditLog.findMany({
     where: {
       ...(input.entityType ? { targetType: input.entityType } : {}),
       ...(input.entityId ? { targetId: input.entityId } : {}),
@@ -167,7 +195,15 @@ export async function getRestaurantActivityHistory(input: {
     },
     orderBy: { createdAt: "desc" },
     take: limit,
-  });
+  })) as Array<{
+    action: string;
+    targetType: string;
+    targetId: string;
+    createdAt: Date;
+    metadata: Prisma.JsonValue | null;
+    systemActorKey: string | null;
+    actor: { name: string; email: string } | null;
+  }>;
   return rows.map((row) =>
     toHumanReadableActivity({
       action: row.action,
@@ -175,6 +211,7 @@ export async function getRestaurantActivityHistory(input: {
       targetId: row.targetId,
       createdAt: row.createdAt,
       actor: row.actor,
+      systemActorKey: row.systemActorKey,
       metadata: row.metadata,
     })
   );
@@ -222,13 +259,10 @@ export async function createApprovalRequest(input: {
     reviewNote: null,
   };
 
-  await prisma.platformTrackerDocument.upsert({
-    where: { key: getApprovalDocKey(input.restaurantId, id) },
-    update: { payload: approval as Prisma.InputJsonValue },
-    create: {
-      key: getApprovalDocKey(input.restaurantId, id),
-      payload: approval as Prisma.InputJsonValue,
-    },
+  await upsertRestaurantDocument({
+    restaurantId: input.restaurantId,
+    key: getApprovalDocKey(input.restaurantId, id),
+    payload: approval as Prisma.InputJsonValue,
   });
 
   await recordActivityEvent({
@@ -259,10 +293,9 @@ export async function listApprovalRequests(input: {
   limit?: number;
 }) {
   const limit = Math.max(1, Math.min(200, input.limit || 50));
-  const rows = await prisma.platformTrackerDocument.findMany({
-    where: {
-      key: { startsWith: `${APPROVAL_KEY_PREFIX}${input.restaurantId}:` },
-    },
+  const rows = await listRestaurantDocuments({
+    restaurantId: input.restaurantId,
+    keyPrefix: `${APPROVAL_KEY_PREFIX}${input.restaurantId}:`,
     orderBy: { updatedAt: "desc" },
     take: limit,
   });
@@ -276,7 +309,8 @@ export async function listApprovalRequests(input: {
   });
 }
 
-async function applyApprovedRequest(record: ApprovalRecord) {
+async function applyApprovedRequest(input: { record: ApprovalRecord; reviewerUserId: string; reviewerRole: UserRole }) {
+  const { record } = input;
   if (record.actionType === "dish_price_change") {
     const payload = toRecord(record.requestPayload);
     const after = toRecord(payload.after);
@@ -284,15 +318,27 @@ async function applyApprovedRequest(record: ApprovalRecord) {
     if (!Number.isFinite(price) || price <= 0) {
       throw new Error("Invalid approved price payload.");
     }
-    await prisma.dish.updateMany({
-      where: { id: record.entityId, restaurantId: record.restaurantId || record.organizationId },
-      data: { price },
+    await runWithTenantContext({
+      restaurantId: record.restaurantId || record.organizationId,
+      userId: input.reviewerUserId,
+      isAdmin: input.reviewerRole === "platform_admin",
+      fn: async (tx) =>
+        tx.dish.updateMany({
+          where: { id: record.entityId },
+          data: { price },
+        }),
     });
     return;
   }
   if (record.actionType === "dish_delete") {
-    await prisma.dish.deleteMany({
-      where: { id: record.entityId, restaurantId: record.restaurantId || record.organizationId },
+    await runWithTenantContext({
+      restaurantId: record.restaurantId || record.organizationId,
+      userId: input.reviewerUserId,
+      isAdmin: input.reviewerRole === "platform_admin",
+      fn: async (tx) =>
+        tx.dish.deleteMany({
+          where: { id: record.entityId },
+        }),
     });
     return;
   }
@@ -307,7 +353,10 @@ export async function reviewApprovalRequest(input: {
   note?: string;
 }) {
   const key = getApprovalDocKey(input.restaurantId, input.approvalId);
-  const existing = await prisma.platformTrackerDocument.findUnique({ where: { key } });
+  const existing = await findRestaurantDocumentByKey({
+    restaurantId: input.restaurantId,
+    key,
+  });
   if (!existing) throw new Error("Approval request not found.");
   const record = toRecord(existing.payload) as unknown as ApprovalRecord;
   if (record.status !== "pending") {
@@ -324,12 +373,17 @@ export async function reviewApprovalRequest(input: {
     reviewedAt: nowIso(),
     reviewNote: input.note || null,
   };
-  await prisma.platformTrackerDocument.update({
-    where: { key },
-    data: { payload: next as Prisma.InputJsonValue },
+  await upsertRestaurantDocument({
+    restaurantId: input.restaurantId,
+    key,
+    payload: next as Prisma.InputJsonValue,
   });
   if (input.decision === "approved") {
-    await applyApprovedRequest(next);
+    await applyApprovedRequest({
+      record: next,
+      reviewerUserId: input.reviewerUserId,
+      reviewerRole: input.reviewerRole,
+    });
   }
   await recordActivityEvent({
     actorUserId: input.reviewerUserId,

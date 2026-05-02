@@ -1,5 +1,10 @@
 import { Prisma } from "@prisma/client";
-import { prisma } from "../prisma.js";
+import {
+  deleteRestaurantDocuments,
+  findRestaurantDocumentByKey,
+  listRestaurantDocuments,
+  upsertRestaurantDocument,
+} from "./tenant-document.service.js";
 
 export type BranchDishAvailabilityStatus = "available" | "low_stock" | "unavailable";
 
@@ -66,12 +71,9 @@ function toStockOverride(payload: unknown): BranchDishStockOverride | null {
 }
 
 export async function listBranchDishStockOverrides(input: { restaurantId: string; branchId: string }) {
-  const rows = await prisma.platformTrackerDocument.findMany({
-    where: {
-      key: {
-        startsWith: `${STOCK_KEY_PREFIX}${input.restaurantId}:${input.branchId}:`,
-      },
-    },
+  const rows = await listRestaurantDocuments({
+    restaurantId: input.restaurantId,
+    keyPrefix: `${STOCK_KEY_PREFIX}${input.restaurantId}:${input.branchId}:`,
     orderBy: { updatedAt: "desc" },
   });
   return rows
@@ -80,8 +82,9 @@ export async function listBranchDishStockOverrides(input: { restaurantId: string
 }
 
 export async function getBranchDishStockOverride(input: { restaurantId: string; branchId: string; dishId: string }) {
-  const row = await prisma.platformTrackerDocument.findUnique({
-    where: { key: stockKey(input.restaurantId, input.branchId, input.dishId) },
+  const row = await findRestaurantDocumentByKey({
+    restaurantId: input.restaurantId,
+    key: stockKey(input.restaurantId, input.branchId, input.dishId),
     select: { payload: true },
   });
   if (!row) return null;
@@ -113,24 +116,17 @@ export async function upsertBranchDishStockOverride(input: {
     updatedAt: new Date().toISOString(),
   });
   if (!next) throw new Error("Invalid stock override payload.");
-  await prisma.platformTrackerDocument.upsert({
-    where: { key: stockKey(input.restaurantId, input.branchId, input.dishId) },
-    create: {
-      key: stockKey(input.restaurantId, input.branchId, input.dishId),
-      payload: next as Prisma.InputJsonValue,
-    },
-    update: {
-      payload: next as Prisma.InputJsonValue,
-    },
+  await upsertRestaurantDocument({
+    restaurantId: input.restaurantId,
+    key: stockKey(input.restaurantId, input.branchId, input.dishId),
+    payload: next as Prisma.InputJsonValue,
   });
   return next;
 }
 
 export async function removeBranchDishStockOverride(input: { restaurantId: string; branchId: string; dishId: string }) {
-  await prisma.platformTrackerDocument.deleteMany({
-    where: {
-      key: stockKey(input.restaurantId, input.branchId, input.dishId),
-    },
+  await deleteRestaurantDocuments({
+    restaurantId: input.restaurantId,
+    key: stockKey(input.restaurantId, input.branchId, input.dishId),
   });
 }
-

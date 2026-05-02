@@ -1,5 +1,5 @@
 import * as React from "react";
-import { getActiveRestaurantId, getDashboardRestaurant, getOrders, setOrderStatus } from "../lib/dashboard-data";
+import { getActiveRestaurantId, getDashboardRestaurant, getOrders } from "../lib/dashboard-data";
 import type { Order, OrderStatus, Restaurant } from "../types/dashboard";
 import { platformStore } from "../state/platform-store";
 import { updateOrderStatusWorkflow } from "../services";
@@ -11,6 +11,7 @@ import { emitAutomationEvent, getAutomationSettings, getCurrentBranchId, getOrde
 type UseRestaurantOrdersState = {
   restaurantId: string;
   restaurant: Restaurant | null;
+  allOrders: Order[];
   orders: Order[];
   loading: boolean;
   error: string;
@@ -21,7 +22,14 @@ type UseRestaurantOrdersState = {
   overdueOrderIds: string[];
 };
 
-export function useRestaurantOrders(): UseRestaurantOrdersState {
+type UseRestaurantOrdersOptions = {
+  enableRealtime?: boolean;
+  pollingIntervalMs?: number;
+  trackOverdue?: boolean;
+};
+
+export function useRestaurantOrders(options: UseRestaurantOrdersOptions = {}): UseRestaurantOrdersState {
+  const { enableRealtime = true, pollingIntervalMs = 5000, trackOverdue = true } = options;
   const [restaurantId, setRestaurantId] = React.useState("");
   const [restaurant, setRestaurant] = React.useState<Restaurant | null>(null);
   const [allOrders, setAllOrders] = React.useState<Order[]>([]);
@@ -70,7 +78,7 @@ export function useRestaurantOrders(): UseRestaurantOrdersState {
           status,
           role: "manager",
         });
-        const next = await setOrderStatus(restaurantId, orderId, status);
+        const next = await getOrders(restaurantId);
         setAllOrders(next);
       } catch (err) {
         setError(err instanceof Error ? err.message : "Failed to update order status.");
@@ -86,17 +94,23 @@ export function useRestaurantOrders(): UseRestaurantOrdersState {
   React.useEffect(() => {
     if (!restaurantId) return () => undefined;
 
-    const unsubscribeRealtimeEvents = subscribeOrderRealtimeEvents(() => {
-      void refresh({ silent: true });
-    }, { restaurantId });
+    const unsubscribeRealtimeEvents = enableRealtime
+      ? subscribeOrderRealtimeEvents(() => {
+          void refresh({ silent: true });
+        }, { restaurantId })
+      : () => undefined;
 
     // Fallback short polling keeps remote changes fresh where push events are unavailable.
-    const timer = window.setInterval(() => {
-      void refresh({ silent: true });
-    }, 5000);
+    const timer =
+      pollingIntervalMs > 0
+        ? window.setInterval(() => {
+            if (document.visibilityState !== "visible") return;
+            void refresh({ silent: true });
+          }, pollingIntervalMs)
+        : null;
 
     let unsubscribeSupabase: (() => void) | null = null;
-    if (isSupabaseConfigured && supabase) {
+    if (enableRealtime && isSupabaseConfigured && supabase) {
       const channel = supabase
         .channel(`orders-live-${restaurantId}`)
         .on(
@@ -120,13 +134,13 @@ export function useRestaurantOrders(): UseRestaurantOrdersState {
 
     return () => {
       unsubscribeRealtimeEvents();
-      window.clearInterval(timer);
+      if (timer != null) window.clearInterval(timer);
       if (unsubscribeSupabase) unsubscribeSupabase();
     };
-  }, [refresh, restaurantId]);
+  }, [enableRealtime, pollingIntervalMs, refresh, restaurantId]);
 
   React.useEffect(() => {
-    if (!restaurantId || !allOrders.length) {
+    if (!trackOverdue || !restaurantId || !allOrders.length) {
       setOverdueOrderIds([]);
       return;
     }
@@ -185,7 +199,7 @@ export function useRestaurantOrders(): UseRestaurantOrdersState {
     return () => {
       mounted = false;
     };
-  }, [allOrders, restaurantId]);
+  }, [allOrders, restaurantId, trackOverdue]);
 
   const orders = React.useMemo(() => {
     if (statusFilter === "all") return allOrders;
@@ -195,6 +209,7 @@ export function useRestaurantOrders(): UseRestaurantOrdersState {
   return {
     restaurantId,
     restaurant,
+    allOrders,
     orders,
     loading,
     error,

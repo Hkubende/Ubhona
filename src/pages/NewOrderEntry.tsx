@@ -9,6 +9,7 @@ import {
   SectionHeader,
 } from "../components/dashboard/dashboard-primitives";
 import { UbhonaDropdown } from "../components/ui/ubhona-dropdown";
+import { UbhonaLoader } from "../components/ui/ubhona-loader";
 import { Button } from "../components/ui/Button";
 import { Input } from "../components/ui/Input";
 import { Textarea } from "../components/ui/Textarea";
@@ -249,7 +250,11 @@ export default function NewOrderEntryPage() {
       subtitle="Create an order on behalf of a walk-in or assisted customer."
     >
       <PageContainer>
-      {loading ? <DashboardPanel className={typography.body}>Loading menu...</DashboardPanel> : null}
+      {loading ? (
+        <DashboardPanel>
+          <UbhonaLoader variant="inline" label="Loading menu" />
+        </DashboardPanel>
+      ) : null}
       {error ? <EmptyStateCard message={error} /> : null}
 
       {!loading && restaurant ? (

@@ -21,9 +21,13 @@ coverage
 .vscode/*
 !.vscode/extensions.json
 .idea
+.mcp.json
+.cursor/mcp.json
+.opencode.json
 .DS_Store
 *.suo
 *.ntvs*
 *.njsproj
 *.sln
 *.sw?
+.vercel

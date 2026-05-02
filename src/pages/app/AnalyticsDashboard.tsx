@@ -11,6 +11,7 @@ import {
   PageContainer,
   SectionHeader,
 } from "../../components/dashboard/dashboard-primitives";
+import { Badge } from "../../components/ui/Badge";
 import { buttonVariants } from "../../components/ui/Button";
 import { useRestaurantAnalytics } from "../../hooks/use-restaurant-analytics";
 import { getRestaurantProfile, syncRestaurantProfile, type RestaurantProfile } from "../../lib/restaurant";
@@ -75,6 +76,46 @@ export default function AnalyticsDashboard() {
     [chartSeries]
   );
 
+  if (!analyticsEnabled) {
+    return (
+      <DashboardLayout
+        profile={profile}
+        title="Analytics"
+        subtitle="Understand dish performance, AR engagement, and order momentum."
+      >
+        <PageContainer>
+          <DashboardPanel>
+            <div className="ui-action-surface rounded-[24px] border border-amber-300/18 px-5 py-5">
+              <div className="flex items-center gap-2">
+                <Badge variant="warning">Plan gated</Badge>
+                <div className="ubhona-summary-eyebrow text-white/48">
+                  Analytics access
+                </div>
+              </div>
+              <div className="mt-4 flex items-start gap-3">
+                <div className="ui-panel-inset grid h-10 w-10 place-items-center rounded-[16px]">
+                  <Lock className="h-4 w-4 text-amber-200" />
+                </div>
+                <div>
+                  <div className="font-semibold tracking-[-0.01em] text-amber-50">Analytics locked on {planLabel}</div>
+                  <p className="mt-1 text-sm leading-6 text-white/72">{gateMessage}</p>
+                </div>
+              </div>
+              <div className="mt-4">
+                <Link
+                  to="/pricing"
+                  className={`mt-3 ${buttonVariants({ variant: "primary", size: "sm" })}`}
+                >
+                  Compare Plans
+                </Link>
+              </div>
+            </div>
+          </DashboardPanel>
+        </PageContainer>
+      </DashboardLayout>
+    );
+  }
+
   return (
     <DashboardLayout
       profile={profile}
@@ -82,30 +123,12 @@ export default function AnalyticsDashboard() {
       subtitle="Understand dish performance, AR engagement, and order momentum."
     >
       <PageContainer>
-      {!loading && !analyticsEnabled ? (
-        <DashboardPanel>
-          <div className="flex items-start gap-3 rounded-2xl border border-amber-400/25 bg-amber-500/10 p-4">
-            <Lock className="mt-0.5 h-4 w-4 text-amber-300" />
-            <div>
-              <div className="font-bold text-amber-100">Analytics locked on {planLabel}</div>
-              <p className="mt-1 text-sm text-white/75">{gateMessage}</p>
-              <Link
-                to="/pricing"
-                className={`mt-3 ${buttonVariants({ variant: "primary", size: "sm" })}`}
-              >
-                Compare Plans
-              </Link>
-            </div>
-          </div>
-        </DashboardPanel>
-      ) : null}
-
-      <ContentGrid columns="metrics">
+      <div className="ubhona-summary-grid">
         <MetricCard label="Dish Views" value={String(summary?.totalDishViews ?? 0)} />
         <MetricCard label="AR Opens" value={String(summary?.arOpens ?? 0)} tone="sand" />
         <MetricCard label="Add to Cart" value={String(summary?.totalAddToCart ?? 0)} tone="orange" />
         <MetricCard label="Orders Placed" value={String(summary?.totalOrdersPlaced ?? 0)} tone="emerald" />
-      </ContentGrid>
+      </div>
 
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1.55fr)_minmax(320px,1fr)]">
         <DashboardPanel>

@@ -9,8 +9,11 @@ import {
 import { trackAnalyticsEvent } from "../../lib/analytics";
 import { Button } from "../../components/ui/Button";
 import { Card } from "../../components/ui/Card";
+import { UbhonaLoader } from "../../components/ui/ubhona-loader";
 import { cn } from "../../lib/utils";
-import { tokens, typography } from "../../design-system";
+import { spacing, tokens, typography } from "../../design-system";
+import { applyDishImageFallback, getDishImageVariantUrl } from "../../lib/image-variants";
+import { getStorefrontBrandColors } from "../../lib/storefront-theme";
 
 const LOGO_SRC = `${import.meta.env.BASE_URL}ubhona-logo.jpeg`;
 
@@ -75,12 +78,12 @@ export default function RestaurantHome() {
   if (error) {
     const notFound = /not found/i.test(error);
     return (
-      <div className="min-h-screen bg-[#0b0b10] p-8 text-white">
+      <div className={cn(tokens.classes.storefrontShell, "p-8")}>
         <div className="ubhona-storefront-panel mx-auto max-w-4xl p-8 text-center">
-          <div className="text-2xl font-semibold tracking-[-0.03em] text-orange-300">
+          <div className="ubhona-storefront-text-accent text-2xl font-semibold tracking-[-0.03em]">
             {notFound ? "Restaurant not found" : "Storefront unavailable"}
           </div>
-          <p className="mt-2 text-sm text-white/65">
+          <p className="ubhona-storefront-text-secondary mt-2 text-sm">
             {notFound ? "Check the storefront link and try again." : error}
           </p>
         </div>
@@ -89,23 +92,16 @@ export default function RestaurantHome() {
   }
 
   if (!restaurant) {
-    return (
-      <div className="min-h-screen bg-[#0b0b10] p-8 text-white">
-        <div className="ubhona-storefront-panel mx-auto max-w-4xl p-8 text-center text-white/70">
-          Loading restaurant...
-        </div>
-      </div>
-    );
+    return <UbhonaLoader fullScreen label="Loading restaurant" shellClassName={tokens.classes.storefrontShell} />;
   }
 
-  const primary = restaurant.themePrimary || "#FF6A1A";
-  const secondary = restaurant.themeSecondary || "#E8D8C3";
+  const { primary, secondary, heroAccent } = getStorefrontBrandColors(restaurant);
 
   return (
     <div className={tokens.classes.storefrontShell}>
-      <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6 lg:px-8">
+      <div className={cn("mx-auto max-w-6xl", spacing.pagePadding)}>
         <section
-          className={cn(tokens.classes.storefrontHero, "p-6 sm:p-8")}
+          className={cn(tokens.classes.storefrontHero, "p-5 sm:p-6 lg:p-7")}
           style={{
             background: restaurant.coverImage
               ? `linear-gradient(135deg, ${primary}66 0%, rgba(11,11,16,0.82) 45%, ${secondary}55 100%), url(${restaurant.coverImage}) center/cover no-repeat`
@@ -117,13 +113,13 @@ export default function RestaurantHome() {
               <img
                 src={restaurant.logoUrl || LOGO_SRC}
                 alt={restaurant.name}
-                className="h-14 w-14 rounded-2xl border border-white/20 object-cover shadow-[0_14px_28px_rgba(0,0,0,0.18)]"
+                className="ubhona-storefront-media-frame-strong h-14 w-14 rounded-[20px] object-cover"
               />
               <div>
-                <h1 className="text-3xl font-semibold tracking-[-0.04em]" style={{ color: primary }}>
+                <h1 className={cn("text-[2rem] sm:text-[2.4rem]", typography.pageTitle)} style={{ color: heroAccent }}>
                   {restaurant.name}
                 </h1>
-                <p className="text-sm text-white/72">{restaurant.location}</p>
+                <p className={cn("ubhona-storefront-text-secondary", typography.body)}>{restaurant.location}</p>
               </div>
             </div>
             <div className="flex gap-3">
@@ -131,7 +127,6 @@ export default function RestaurantHome() {
                 onClick={() => navigate(`/r/${slug}/menu`)}
                 variant="primary"
                 size="lg"
-                style={{ backgroundColor: primary }}
               >
                 View Menu
               </Button>
@@ -144,14 +139,14 @@ export default function RestaurantHome() {
               </Button>
             </div>
           </div>
-          <p className={cn("mt-4 max-w-2xl", typography.body, "text-white/82")}>
+          <p className={cn("ubhona-storefront-text-secondary mt-4 max-w-2xl", typography.body)}>
             {restaurant.shortDescription || "Welcome to our digital storefront. Browse menu items and preview in AR."}
           </p>
         </section>
 
-        <Card className="mt-6 border-primary/10 p-5">
-          <div className="mb-1 text-xl font-semibold tracking-[-0.03em] text-white">Menu Preview</div>
-          <div className="flex flex-wrap items-center gap-2 text-sm text-white/70">
+        <Card className="mt-6 border-primary/10 p-5 sm:p-6">
+          <div className={cn(typography.sectionTitle, "mb-1 text-text-primary")}>Menu Preview</div>
+          <div className="flex flex-wrap items-center gap-2 text-sm text-text-secondary/72">
             <span className={tokens.classes.metricChip}>{displayCategories.length} categories</span>
             <span className={tokens.classes.metricChip}>{dishes.length} dishes</span>
           </div>
@@ -159,16 +154,23 @@ export default function RestaurantHome() {
             {displayCategories.map((category) => {
               const items = grouped.get(category.id) || [];
               if (!items.length) return null;
-              return (
-                <div key={category.id}>
-                  <h2 className="mb-2 text-lg font-semibold tracking-[-0.02em] text-orange-300">{category.name}</h2>
+                return (
+                  <div key={category.id}>
+                  <h2 className={cn("ubhona-storefront-text-accent mb-2", typography.subSectionTitle)}>{category.name}</h2>
                   <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                     {items.slice(0, 3).map((dish) => (
-                      <article key={dish.id} className="ui-surface-soft rounded-2xl p-3 transition duration-300 ease-out hover:-translate-y-0.5 hover:border-primary/20">
-                        <img src={dish.thumbUrl} alt={dish.name} className="h-32 w-full rounded-xl object-cover" />
-                        <div className="mt-2 font-semibold">{dish.name}</div>
-                        <div className="text-xs text-white/60">{dish.description}</div>
-                        <div className="mt-1 text-sm font-semibold text-orange-300">
+                      <article key={dish.id} className="ui-surface-soft rounded-[22px] p-4 transition duration-300 ease-out hover:-translate-y-0.5 hover:border-primary/20">
+                        <img
+                          src={getDishImageVariantUrl(dish.thumbUrl, "small")}
+                          alt={dish.name}
+                          loading="lazy"
+                          decoding="async"
+                          onError={(event) => applyDishImageFallback(event, dish.thumbUrl)}
+                          className="h-32 w-full rounded-xl object-cover"
+                        />
+                        <div className="mt-3 text-sm font-semibold text-text-primary">{dish.name}</div>
+                        <div className="mt-1 text-sm leading-6 text-text-secondary/78">{dish.description}</div>
+                        <div className="ubhona-storefront-text-accent mt-2 text-sm font-semibold">
                           KSh {dish.price.toLocaleString("en-KE")}
                         </div>
                       </article>
@@ -179,7 +181,7 @@ export default function RestaurantHome() {
             })}
           </div>
           {!dishes.length ? (
-            <div className="mt-4 rounded-2xl border border-dashed border-white/15 bg-black/20 p-4 text-sm text-white/65">
+            <div className="ui-panel-inset mt-4 rounded-2xl border-dashed p-4 text-sm text-text-secondary/78">
               No dishes are published for this restaurant yet.
             </div>
           ) : null}
@@ -188,7 +190,6 @@ export default function RestaurantHome() {
               onClick={() => navigate(`/r/${slug}/menu`)}
               variant="primary"
               size="lg"
-              style={{ backgroundColor: primary }}
             >
               Open Full Menu
             </Button>
@@ -201,7 +202,7 @@ export default function RestaurantHome() {
             </Button>
           </div>
         </Card>
-        <div className="mt-4 text-center text-xs font-semibold uppercase tracking-[0.14em] text-[#B8AEA3]/75">
+        <div className="ubhona-storefront-text-muted mt-4 text-center text-xs font-semibold uppercase tracking-[0.14em]">
           Powered by Ubhona
         </div>
       </div>

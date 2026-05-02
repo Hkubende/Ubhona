@@ -1,4 +1,5 @@
-import { prisma } from "../prisma.js";
+import { runWithPublicStorefrontDbContext } from "../db-rls.js";
+import { prisma, runWithTenantContext } from "../prisma.js";
 import type { BillingRestaurantRecord } from "./billing.service.js";
 import { getRestaurantLimitStatus, incrementRestaurantUsage } from "./billing.service.js";
 import {
@@ -7,8 +8,16 @@ import {
   sendOrderPlacedMessage,
 } from "./whatsapp.service.js";
 import { recordActivityEvent } from "./activity.service.js";
+import { STOREFRONT_CHECKOUT_SYSTEM_ACTOR_KEY, STOREFRONT_CHECKOUT_SYSTEM_ROLE } from "./system-actors.js";
 import { getBranchDishStockOverride } from "./stock.service.js";
 import { deductInventoryForOrderTransition } from "./inventory.service.js";
+import {
+  assertValidOrderStatusTransition,
+  type OrderLifecycleStatus,
+} from "./order-status.service.js";
+import { getOrderBranchContext, setOrderBranchContext } from "./order-context.service.js";
+import { createOrderLifecycleNotifications } from "./notification.service.js";
+import { getEffectiveDishMenuState } from "./menu-control.service.js";
 
 export type StorefrontOrderInput = {
   restaurantId: string;
@@ -46,81 +55,96 @@ export async function createStorefrontOrder(input: StorefrontOrderInput) {
   }
 
   const requestedDishIds = [...new Set(input.items.map((item) => item.dishId))];
-  const dishes = (await prisma.dish.findMany({
-    where: {
-      restaurantId: input.restaurantId,
-      id: { in: requestedDishIds },
-      isAvailable: true,
-    },
-    select: { id: true, name: true, price: true },
-  })) as Array<{ id: string; name: string; price: number }>;
-  const dishMap = new Map<string, { id: string; name: string; price: number }>(
-    dishes.map((dish: { id: string; name: string; price: number }) => [dish.id, dish])
-  );
-  const invalidDishId = requestedDishIds.find((dishId) => !dishMap.has(dishId));
-  if (invalidDishId) {
-    throw new Error(`Invalid or unavailable dish: ${invalidDishId}`);
-  }
-  for (const dishId of requestedDishIds) {
-    const stockOverride = await getBranchDishStockOverride({
-      restaurantId: input.restaurantId,
-      branchId,
-      dishId,
-    });
-    if (stockOverride?.availability_status === "unavailable" || stockOverride?.hidden_from_public_menu) {
-      throw new Error(`Dish ${dishId} is unavailable for branch ${branchId}.`);
+  const { order, totalAmount, itemsCount } = await runWithPublicStorefrontDbContext(input.restaurantId, async () => {
+    const dishes = (await prisma.dish.findMany({
+      where: {
+        id: { in: requestedDishIds },
+        isAvailable: true,
+      },
+      select: { id: true, name: true, price: true },
+    })) as Array<{ id: string; name: string; price: number }>;
+    const dishMap = new Map<string, { id: string; name: string; price: number }>(
+      dishes.map((dish: { id: string; name: string; price: number }) => [dish.id, dish])
+    );
+    const invalidDishId = requestedDishIds.find((dishId) => !dishMap.has(dishId));
+    if (invalidDishId) {
+      throw new Error(`Invalid or unavailable dish: ${invalidDishId}`);
     }
-  }
-
-  const orderItems = input.items.map((item) => {
-    const dish = dishMap.get(item.dishId)!;
-    const priceSnapshot = Number(dish.price);
-    return {
-      dishId: item.dishId,
-      nameSnapshot: dish.name,
-      priceSnapshot,
-      quantity: item.quantity,
-      subtotal: priceSnapshot * item.quantity,
-    };
-  });
-  const totalAmount = orderItems.reduce((sum, item) => sum + item.subtotal, 0);
-
-  const order = await prisma.order.create({
-    data: {
-      restaurantId: input.restaurantId,
-      customerName: input.customerName?.trim() || null,
-      customerPhone: input.customerPhone?.trim() || null,
-      tableNumber: input.tableNumber?.trim() || null,
-      totalAmount,
-      paymentStatus: "unpaid",
-      paymentMethod: "manual_mpesa",
-      paymentReference: "",
-      status: "pending",
-      items: {
-        create: orderItems,
-      },
-    },
-    include: { items: true },
-  });
-
-  await prisma.analyticsEvent.create({
-    data: {
-      restaurantId: input.restaurantId,
-      orderId: order.id,
-      eventType: "order_created",
-      source: "storefront",
-      metadata: {
-        itemsCount: orderItems.reduce((sum, item) => sum + item.quantity, 0),
-        totalAmount,
+    for (const dishId of requestedDishIds) {
+      const stockOverride = await getBranchDishStockOverride({
+        restaurantId: input.restaurantId,
         branchId,
+        dishId,
+      });
+      const dish = dishMap.get(dishId);
+      const menuControl = getEffectiveDishMenuState({
+        branchId,
+        isAvailable: Boolean(dish),
+        stockOverride,
+      });
+      if (!menuControl.isOrderable) {
+        throw new Error(`Dish ${dishId} is unavailable for branch ${branchId}.`);
+      }
+    }
+
+    const orderItems = input.items.map((item) => {
+      const dish = dishMap.get(item.dishId)!;
+      const priceSnapshot = Number(dish.price);
+      return {
+        dishId: item.dishId,
+        nameSnapshot: dish.name,
+        priceSnapshot,
+        quantity: item.quantity,
+        subtotal: priceSnapshot * item.quantity,
+      };
+    });
+    const totalAmount = orderItems.reduce((sum, item) => sum + item.subtotal, 0);
+    const itemsCount = orderItems.reduce((sum, item) => sum + item.quantity, 0);
+
+    const order = await prisma.order.create({
+      data: {
+        restaurantId: input.restaurantId,
+        customerName: input.customerName?.trim() || null,
+        customerPhone: input.customerPhone?.trim() || null,
+        tableNumber: input.tableNumber?.trim() || null,
+        totalAmount,
+        paymentStatus: "unpaid",
+        paymentMethod: "manual_mpesa",
+        paymentReference: "",
+        status: "pending",
+        items: {
+          create: orderItems,
+        },
       },
-    },
+      include: { items: true },
+    });
+
+    await prisma.analyticsEvent.create({
+      data: {
+        restaurantId: input.restaurantId,
+        orderId: order.id,
+        eventType: "order_created",
+        source: "storefront",
+        metadata: {
+          itemsCount,
+          totalAmount,
+          branchId,
+        },
+      },
+    });
+
+    return { order, totalAmount, itemsCount };
   });
 
   await incrementRestaurantUsage(restaurant as BillingRestaurantRecord, "ordersPerMonth", 1);
+  await setOrderBranchContext({
+    restaurantId: input.restaurantId,
+    orderId: order.id,
+    branchId,
+  });
   await recordActivityEvent({
-    actorUserId: restaurant.ownerUserId,
-    actorRole: "restaurant_owner",
+    systemActorKey: STOREFRONT_CHECKOUT_SYSTEM_ACTOR_KEY,
+    actorRole: STOREFRONT_CHECKOUT_SYSTEM_ROLE,
     action: "order_created",
     entityType: "order",
     entityId: order.id,
@@ -131,9 +155,13 @@ export async function createStorefrontOrder(input: StorefrontOrderInput) {
       status: order.status,
       paymentStatus: order.paymentStatus,
       totalAmount: totalAmount,
-      itemsCount: orderItems.reduce((sum, item) => sum + item.quantity, 0),
+      itemsCount,
       tableNumber: input.tableNumber || null,
       customerName: input.customerName || null,
+      branchId,
+    },
+    metadata: {
+      actorType: "storefront_checkout",
       branchId,
     },
   });
@@ -148,78 +176,153 @@ export async function createStorefrontOrder(input: StorefrontOrderInput) {
   if (input.whatsappOptIn) {
     await sendOrderPlacedMessage(order.id, input.restaurantId);
   }
+  await createOrderLifecycleNotifications({
+    restaurantId: input.restaurantId,
+    orderId: order.id,
+    status: "pending",
+    tableNumber: order.tableNumber,
+    customerName: order.customerName,
+  });
 
   return { order, totalAmount };
 }
 
 export async function getRestaurantOrders(input: {
   restaurantId: string;
-  status?: "pending" | "confirmed" | "preparing" | "ready" | "completed";
+  status?: OrderLifecycleStatus;
+  userId: string;
+  isAdmin: boolean;
 }) {
-  return prisma.order.findMany({
-    where: {
-      restaurantId: input.restaurantId,
-      ...(input.status ? { status: input.status } : {}),
-    },
-    include: { items: true },
-    orderBy: { createdAt: "desc" },
+  return runWithTenantContext({
+    restaurantId: input.restaurantId,
+    userId: input.userId,
+    isAdmin: input.isAdmin,
+    fn: async (tx) =>
+      tx.order.findMany({
+        where: {
+          ...(input.status ? { status: input.status } : {}),
+        },
+        include: { items: true },
+        orderBy: { createdAt: "desc" },
+      }),
   });
 }
 
 export async function updateRestaurantOrderStatus(input: {
   restaurantId: string;
   orderId: string;
-  status: "pending" | "confirmed" | "preparing" | "ready" | "completed";
-  actorUserId?: string;
-  actorRole?: "platform_admin" | "restaurant_owner" | "restaurant_manager" | "staff";
+  status: OrderLifecycleStatus;
+  actorUserId: string;
+  actorRole: "platform_admin" | "restaurant_owner" | "restaurant_manager" | "staff";
+  isAdmin: boolean;
 }) {
-  const existing = await prisma.order.findFirst({
-    where: { id: input.orderId, restaurantId: input.restaurantId },
-    select: { id: true, status: true, paymentStatus: true },
+  const existing = await runWithTenantContext({
+    restaurantId: input.restaurantId,
+    userId: input.actorUserId,
+    isAdmin: input.isAdmin,
+    fn: async (tx) =>
+      tx.order.findUnique({
+        where: { id: input.orderId },
+        select: { id: true, status: true, paymentStatus: true },
+      }),
   });
   if (!existing) {
     throw new Error("Order not found.");
   }
   const isStatusChange = existing.status !== input.status;
+  if (isStatusChange) {
+    assertValidOrderStatusTransition(existing.status, input.status);
+  }
   if (isStatusChange && (input.status === "confirmed" || input.status === "preparing")) {
-    await deductInventoryForOrderTransition({
-      restaurantId: input.restaurantId,
-      branchId: "main",
-      orderId: input.orderId,
-      toStatus: input.status,
-      actor: input.actorUserId
-        ? { userId: input.actorUserId, role: input.actorRole || "restaurant_owner" }
-        : undefined,
-    });
+    try {
+      const branchId = await getOrderBranchContext({
+        restaurantId: input.restaurantId,
+        orderId: input.orderId,
+      });
+      await deductInventoryForOrderTransition({
+        restaurantId: input.restaurantId,
+        branchId,
+        orderId: input.orderId,
+        toStatus: input.status,
+        actor: { userId: input.actorUserId, role: input.actorRole },
+      });
+    } catch (error) {
+      console.warn("[orders] inventory deduction skipped during status update", {
+        restaurantId: input.restaurantId,
+        orderId: input.orderId,
+        status: input.status,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
   }
-  const order = await prisma.order.update({
-    where: { id: existing.id },
-    data: { status: input.status },
-    include: { items: true },
-  });
-  await handleOrderStatusWhatsAppNotifications({
-    orderId: order.id,
+  const order = await runWithTenantContext({
     restaurantId: input.restaurantId,
-    status: input.status,
+    userId: input.actorUserId,
+    isAdmin: input.isAdmin,
+    fn: async (tx) =>
+      tx.order.update({
+        where: { id: existing.id },
+        data: { status: input.status },
+        include: { items: true },
+      }),
   });
-  const restaurant = await prisma.restaurant.findUnique({
-    where: { id: input.restaurantId },
-    select: { ownerUserId: true },
-  });
-  if (!restaurant) {
-    throw new Error("Restaurant not found.");
-  }
-  await recordActivityEvent({
-    actorUserId: input.actorUserId || restaurant.ownerUserId,
-    actorRole: input.actorRole || "restaurant_owner",
-    action: "order_status_changed",
-    entityType: "order",
-    entityId: order.id,
-    organizationId: input.restaurantId,
-    restaurantId: input.restaurantId,
-    source: "orders_api",
-    before: { status: existing.status, paymentStatus: existing.paymentStatus },
-    after: { status: order.status, paymentStatus: order.paymentStatus },
-  });
+
+  // Status persistence is authoritative; post-update notifications/audit should not hold the HTTP response open.
+  void (async () => {
+    try {
+      await handleOrderStatusWhatsAppNotifications({
+        orderId: order.id,
+        restaurantId: input.restaurantId,
+        status: input.status,
+      });
+    } catch (error) {
+      console.warn("[orders] whatsapp status notification skipped after status update", {
+        restaurantId: input.restaurantId,
+        orderId: order.id,
+        status: input.status,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+
+    try {
+      await createOrderLifecycleNotifications({
+        restaurantId: input.restaurantId,
+        orderId: order.id,
+        status: input.status,
+        tableNumber: (order as { tableNumber?: string | null }).tableNumber || null,
+        customerName: (order as { customerName?: string | null }).customerName || null,
+      });
+    } catch (error) {
+      console.warn("[orders] staff notification skipped after status update", {
+        restaurantId: input.restaurantId,
+        orderId: order.id,
+        status: input.status,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+
+    try {
+      await recordActivityEvent({
+        actorUserId: input.actorUserId,
+        actorRole: input.actorRole,
+        action: "order_status_changed",
+        entityType: "order",
+        entityId: order.id,
+        organizationId: input.restaurantId,
+        restaurantId: input.restaurantId,
+        source: "orders_api",
+        before: { status: existing.status, paymentStatus: existing.paymentStatus },
+        after: { status: order.status, paymentStatus: order.paymentStatus },
+      });
+    } catch (error) {
+      console.warn("[orders] activity log skipped after status update", {
+        restaurantId: input.restaurantId,
+        orderId: order.id,
+        status: input.status,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  })();
+
   return order;
 }

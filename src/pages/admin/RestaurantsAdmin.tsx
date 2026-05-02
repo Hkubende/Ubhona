@@ -46,18 +46,18 @@ export default function RestaurantsAdmin() {
   };
 
   return (
-    <div className="min-h-screen bg-[#0b0b10] text-white">
+    <div className="min-h-screen bg-app-bg text-text-primary">
       <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
-        <div className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-3xl border border-white/10 bg-black/35 p-5 backdrop-blur-xl">
+        <div className="ui-surface mb-6 flex flex-wrap items-center justify-between gap-3 rounded-3xl p-5 backdrop-blur-xl">
           <div>
             <div className="text-2xl font-black">
-              <span className="text-orange-400">Restaurants</span> Admin
+              <span className="text-primary">Restaurants</span> Admin
             </div>
-            <div className="text-sm text-white/60">Platform-wide restaurant management</div>
+            <div className="text-sm text-text-secondary/70">Platform-wide restaurant management</div>
           </div>
           <button
             onClick={() => navigate("/admin")}
-            className="inline-flex items-center gap-2 rounded-2xl border border-white/10 bg-white/[0.05] px-4 py-2 text-sm font-bold hover:bg-white/[0.08]"
+            className="ui-button-secondary inline-flex items-center gap-2 rounded-2xl border border-border px-4 py-2 text-sm font-bold"
           >
             <ArrowLeft className="h-4 w-4" />
             Admin Home
@@ -77,12 +77,12 @@ export default function RestaurantsAdmin() {
 
         <div className="mb-4 grid gap-3 md:grid-cols-[1.2fr_0.4fr_0.4fr_auto]">
           <div className="relative">
-            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-white/40" />
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-text-secondary/45" />
             <input
               value={q}
               onChange={(event) => setQ(event.target.value)}
               placeholder="Search name, slug, email, phone..."
-              className="w-full rounded-2xl border border-white/10 bg-white/[0.05] py-2 pl-10 pr-3 text-sm outline-none"
+              className="ui-input-control w-full rounded-2xl py-2 pl-10 pr-3 text-sm outline-none"
             />
           </div>
           <UbhonaSelect
@@ -111,16 +111,16 @@ export default function RestaurantsAdmin() {
           </UbhonaSelect>
           <button
             onClick={() => void refresh()}
-            className="rounded-2xl bg-orange-500 px-4 py-2 text-sm font-bold text-black hover:bg-orange-400"
+            className="ui-button-primary rounded-2xl px-4 py-2 text-sm font-bold text-white"
           >
             Refresh
           </button>
         </div>
 
-        <div className="overflow-hidden rounded-3xl border border-white/10 bg-white/[0.04]">
+        <div className="ui-surface overflow-hidden rounded-3xl">
           <div className="overflow-x-auto">
             <table className="min-w-full">
-              <thead className="bg-white/[0.04] text-left text-xs uppercase tracking-wide text-white/60">
+              <thead className="ui-table-header text-left text-xs uppercase tracking-wide text-text-secondary/70">
                 <tr>
                   <th className="px-3 py-3">Restaurant</th>
                   <th className="px-3 py-3">Owner</th>
@@ -131,21 +131,21 @@ export default function RestaurantsAdmin() {
               </thead>
               <tbody>
                 {restaurants.map((restaurant) => (
-                  <tr key={restaurant.id} className="border-t border-white/10 text-sm">
+                  <tr key={restaurant.id} className="border-t border-border text-sm">
                     <td className="px-3 py-3">
-                      <div className="font-bold text-white">{restaurant.name}</div>
-                      <div className="text-xs text-white/55">@{restaurant.slug}</div>
-                      <div className="text-xs text-white/55">{restaurant.email}</div>
+                      <div className="font-bold text-text-primary">{restaurant.name}</div>
+                      <div className="text-xs text-text-secondary/60">@{restaurant.slug}</div>
+                      <div className="text-xs text-text-secondary/60">{restaurant.email}</div>
                     </td>
                     <td className="px-3 py-3">
                       <div>{restaurant.owner.name}</div>
-                      <div className="text-xs text-white/55">{restaurant.owner.email}</div>
+                      <div className="text-xs text-text-secondary/60">{restaurant.owner.email}</div>
                     </td>
                     <td className="px-3 py-3">
-                      <div className="font-semibold text-orange-300">{restaurant.subscriptionPlan}</div>
-                      <div className="text-xs text-white/60">{restaurant.subscriptionStatus}</div>
+                      <div className="font-semibold text-primary">{restaurant.subscriptionPlan}</div>
+                      <div className="text-xs text-text-secondary/70">{restaurant.subscriptionStatus}</div>
                     </td>
-                    <td className="px-3 py-3 text-xs text-white/70">
+                    <td className="px-3 py-3 text-xs text-text-secondary/78">
                       <div>Dishes: {restaurant.usage.dishes}</div>
                       <div>Orders: {restaurant.usage.orders}</div>
                       <div>Analytics: {restaurant.usage.analyticsEvents}</div>
@@ -173,7 +173,7 @@ export default function RestaurantsAdmin() {
             </table>
           </div>
           {!restaurants.length ? (
-            <div className="p-5 text-sm text-white/60">No restaurants match current filters.</div>
+            <div className="p-5 text-sm text-text-secondary/70">No restaurants match current filters.</div>
           ) : null}
         </div>
       </div>

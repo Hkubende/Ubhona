@@ -1,4 +1,5 @@
 import { ApiError, api } from "./api";
+import { hasRemoteAuthSession } from "./auth";
 import { isApiConfigured } from "./config";
 import { getRestaurantProfile } from "./restaurant";
 import { canCreateDishWithPlan, setDishCount } from "./growth";
@@ -22,11 +23,22 @@ export type RestaurantDish = {
     low_stock_threshold: number;
     hidden_from_public_menu: boolean;
   } | null;
+  menuControl?: {
+    branchId: string;
+    baseAvailability: boolean;
+    stockAvailability: "available" | "low_stock" | "unavailable";
+    hiddenFromPublicMenu: boolean;
+    status: "available" | "low_stock" | "paused" | "unavailable";
+    isVisibleOnPublicMenu: boolean;
+    isOrderable: boolean;
+    blockingReason: "dish_paused" | "branch_unavailable" | "hidden_from_public_menu" | null;
+  } | null;
   createdAt: string;
 };
 
 const DISHES_KEY = "mv_restaurant_dishes_v1";
 const LEGACY_BUCKET = "__legacy__";
+const dishesRequests = new Map<string, Promise<RestaurantDish[]>>();
 
 type ApiDishRow = {
   id?: unknown;
@@ -45,6 +57,7 @@ type ApiDishRow = {
   model?: unknown;
   isAvailable?: unknown;
   stock?: unknown;
+  menuControl?: unknown;
   createdAt?: unknown;
 };
 
@@ -57,6 +70,8 @@ function mapDish(row: ApiDishRow): RestaurantDish {
   const profile = getRestaurantProfile();
   const branchId = getCurrentBranchId();
   const stockRecord = row.stock && typeof row.stock === "object" ? (row.stock as Record<string, unknown>) : null;
+  const menuControlRecord =
+    row.menuControl && typeof row.menuControl === "object" ? (row.menuControl as Record<string, unknown>) : null;
   const localStock = getLocalDishStockOverride({
     restaurantId: String(row.restaurantId || profile?.id || "local_default_restaurant"),
     dishId: String(row.id || ""),
@@ -93,6 +108,37 @@ function mapDish(row: ApiDishRow): RestaurantDish {
             ? Number(stockRecord.low_stock_threshold)
             : 5,
           hidden_from_public_menu: Boolean(stockRecord.hidden_from_public_menu),
+        }
+      : null,
+    menuControl: menuControlRecord
+      ? {
+          branchId: String(menuControlRecord.branchId || branchId),
+          baseAvailability: menuControlRecord.baseAvailability !== false,
+          stockAvailability:
+            String(menuControlRecord.stockAvailability || "").toLowerCase() === "low_stock"
+              ? "low_stock"
+              : String(menuControlRecord.stockAvailability || "").toLowerCase() === "unavailable"
+                ? "unavailable"
+                : "available",
+          hiddenFromPublicMenu: Boolean(menuControlRecord.hiddenFromPublicMenu),
+          status:
+            String(menuControlRecord.status || "").toLowerCase() === "low_stock"
+              ? "low_stock"
+              : String(menuControlRecord.status || "").toLowerCase() === "paused"
+                ? "paused"
+                : String(menuControlRecord.status || "").toLowerCase() === "unavailable"
+                  ? "unavailable"
+                  : "available",
+          isVisibleOnPublicMenu: Boolean(menuControlRecord.isVisibleOnPublicMenu),
+          isOrderable: Boolean(menuControlRecord.isOrderable),
+          blockingReason:
+            String(menuControlRecord.blockingReason || "").toLowerCase() === "dish_paused"
+              ? "dish_paused"
+              : String(menuControlRecord.blockingReason || "").toLowerCase() === "branch_unavailable"
+                ? "branch_unavailable"
+                : String(menuControlRecord.blockingReason || "").toLowerCase() === "hidden_from_public_menu"
+                  ? "hidden_from_public_menu"
+                  : null,
         }
       : null,
     createdAt: String(row.createdAt || new Date().toISOString()),
@@ -161,23 +207,33 @@ function isApiUnavailable(error: unknown) {
 export async function getRestaurantDishes(): Promise<RestaurantDish[]> {
   const restaurantId = getActiveRestaurantId();
   const branchId = getCurrentBranchId();
-  if (!isApiConfigured) {
+  if (!isApiConfigured || !hasRemoteAuthSession()) {
     const cached = readCache();
     setDishCount(restaurantId, cached.length);
     return cached;
   }
+  const requestKey = `${restaurantId}:${branchId}`;
+  const existingRequest = dishesRequests.get(requestKey);
+  if (existingRequest) return existingRequest;
 
-  try {
-    const rows = await api.get<unknown[]>(`/dishes?branchId=${encodeURIComponent(branchId)}`);
-    const mapped = rows.map((row) => mapDish(toDishRow(row))).filter((dish) => dish.restaurantId === restaurantId);
-    writeCache(mapped);
-    setDishCount(restaurantId, mapped.length);
-    return mapped;
-  } catch {
-    const cached = readCache();
-    setDishCount(restaurantId, cached.length);
-    return cached;
-  }
+  const request = (async () => {
+    try {
+      const rows = await api.get<unknown[]>(`/dishes?branchId=${encodeURIComponent(branchId)}`);
+      const mapped = rows.map((row) => mapDish(toDishRow(row))).filter((dish) => dish.restaurantId === restaurantId);
+      writeCache(mapped);
+      setDishCount(restaurantId, mapped.length);
+      return mapped;
+    } catch {
+      const cached = readCache();
+      setDishCount(restaurantId, cached.length);
+      return cached;
+    } finally {
+      dishesRequests.delete(requestKey);
+    }
+  })();
+
+  dishesRequests.set(requestKey, request);
+  return request;
 }
 
 export function saveRestaurantDishes(dishes: RestaurantDish[]) {

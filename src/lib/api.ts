@@ -4,6 +4,8 @@ const API_BASE = appConfig.apiUrl.replace(/\/+$/, "");
 const API_NOT_CONFIGURED_MESSAGE = "API is not configured. Running in static/demo mode.";
 const API_UNREACHABLE_MESSAGE = "API is unreachable. Running in static/demo mode.";
 const API_RECHECK_MS = 30_000;
+const API_HEALTHCHECK_TIMEOUT_MS = 12_000;
+const API_REQUEST_TIMEOUT_MS = 30_000;
 const SHOULD_LOG_INFO = import.meta.env.DEV && import.meta.env.VITE_LOG_API_INFO === "true";
 let hasWarnedApiNotConfigured = false;
 let hasWarnedApiUnreachable = false;
@@ -61,7 +63,7 @@ async function canReachApi(): Promise<boolean> {
 
   reachabilityCheck = (async () => {
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 2500);
+    const timeout = setTimeout(() => controller.abort(), API_HEALTHCHECK_TIMEOUT_MS);
     try {
       const response = await fetch(`${API_BASE}/health`, {
         method: "GET",
@@ -105,20 +107,28 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   }
 
   let response: Response;
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), API_REQUEST_TIMEOUT_MS);
   try {
     response = await fetch(`${API_BASE}${path}`, {
       ...init,
       headers: buildHeaders(init.headers, init.body != null),
+      signal: controller.signal,
     });
     reachabilityState = "reachable";
     reachabilityCheckedAt = Date.now();
   } catch {
     markApiUnreachable();
     throw new ApiError(API_UNREACHABLE_MESSAGE, 503, { code: "API_UNREACHABLE" });
+  } finally {
+    clearTimeout(timeout);
   }
 
   const body = await response.json().catch(() => null);
   if (!response.ok) {
+    if (response.status === 401) {
+      localStorage.removeItem(AUTH_TOKEN_KEY);
+    }
     const message = extractErrorMessage(body) || `Request failed (${response.status})`;
     throw new ApiError(message, response.status, body);
   }

@@ -3,7 +3,6 @@ import request from "supertest";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
-  runWithRestaurantDbSession: vi.fn(),
   uploadAssetServerManaged: vi.fn(),
 }));
 
@@ -33,10 +32,6 @@ vi.mock("../middleware/rate-limit.js", () => ({
   createRateLimiter: () => (_req: any, _res: any, next: any) => next(),
 }));
 
-vi.mock("../services/db-session.service.js", () => ({
-  runWithRestaurantDbSession: mocks.runWithRestaurantDbSession,
-}));
-
 vi.mock("../services/restaurant.service.js", () => ({
   getOwnedRestaurant: vi.fn(),
 }));
@@ -58,7 +53,6 @@ function buildApp() {
 describe("uploadsRouter", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mocks.runWithRestaurantDbSession.mockImplementation(async (_input, callback) => callback({ tx: true }));
     mocks.uploadAssetServerManaged.mockResolvedValue({
       url: "https://storage.example.com/thumb.png",
       path: "restaurant-1/dish-1/thumbnail.png",
@@ -78,22 +72,17 @@ describe("uploadsRouter", () => {
       });
 
     expect(response.status).toBe(200);
-    expect(mocks.runWithRestaurantDbSession).toHaveBeenCalledWith(
-      {
-        userId: "user-1",
-        restaurantId: "restaurant-1",
-        isAdmin: false,
-      },
-      expect.any(Function)
-    );
     expect(mocks.uploadAssetServerManaged).toHaveBeenCalledWith({
       restaurantId: "restaurant-1",
+      userId: "user-1",
+      isAdmin: false,
       dishId: "dish-1",
       fileName: "thumb.png",
       fileType: "image/png",
       bytes: expect.any(Buffer),
       assetType: "thumb",
-    }, { tx: true });
+      uploadedBy: "user-1",
+    });
     expect(response.body).toMatchObject({
       ok: true,
       url: "https://storage.example.com/thumb.png",

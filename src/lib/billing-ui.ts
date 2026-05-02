@@ -11,13 +11,13 @@ export function toTitleCase(value: string) {
 export function subscriptionStatusMeta(status: string) {
   const normalized = String(status || "").trim().toLowerCase();
   if (normalized === "active") {
-    return { label: "Active", hint: "Full access enabled.", className: "border-emerald-400/30 bg-emerald-500/12 text-emerald-100" };
+    return { label: "Active", hint: "Paid billing is in good standing.", className: "border-emerald-400/30 bg-emerald-500/12 text-emerald-100" };
   }
   if (normalized === "trialing") {
-    return { label: "Trial", hint: "Trial plan currently active.", className: "border-cyan-400/30 bg-cyan-500/12 text-cyan-100" };
+    return { label: "Trial", hint: "Free or trial access is active. Paid billing begins only after a live invoice is issued.", className: "border-cyan-400/30 bg-cyan-500/12 text-cyan-100" };
   }
   if (normalized === "past_due") {
-    return { label: "Past Due", hint: "Payment needed to keep access uninterrupted.", className: "border-amber-400/30 bg-amber-500/12 text-amber-100" };
+    return { label: "Action Required", hint: "A live invoice is overdue or a payment failed. Review billing to avoid interruption.", className: "border-amber-400/30 bg-amber-500/12 text-amber-100" };
   }
   if (normalized === "cancelled") {
     return { label: "Cancelled", hint: "Subscription is cancelled.", className: "border-rose-400/30 bg-rose-500/12 text-rose-100" };
@@ -34,13 +34,13 @@ export function paymentStatusMeta(status: string) {
     return { label: "Paid", hint: "Payment confirmed.", className: "border-emerald-400/30 bg-emerald-500/12 text-emerald-100" };
   }
   if (normalized === "pending" || normalized === "initiated") {
-    return { label: "Pending", hint: "Awaiting M-Pesa/customer confirmation.", className: "border-amber-400/30 bg-amber-500/12 text-amber-100" };
+    return { label: "Pending Confirmation", hint: "Awaiting M-Pesa/customer confirmation.", className: "border-amber-400/30 bg-amber-500/12 text-amber-100" };
   }
   if (normalized === "requires_verification") {
-    return { label: "Manual Verification", hint: "Awaiting staff/admin verification.", className: "border-orange-400/30 bg-orange-500/12 text-orange-100" };
+    return { label: "Needs Review", hint: "Awaiting staff/admin verification.", className: "border-orange-400/30 bg-orange-500/12 text-orange-100" };
   }
   if (normalized === "failed") {
-    return { label: "Failed", hint: "Payment attempt failed.", className: "border-rose-400/30 bg-rose-500/12 text-rose-100" };
+    return { label: "Payment Failed", hint: "The provider did not confirm this payment. Retry from Billing or use the manual fallback path.", className: "border-rose-400/30 bg-rose-500/12 text-rose-100" };
   }
   if (normalized === "timeout") {
     return { label: "Timed Out", hint: "No confirmation received in time.", className: "border-rose-400/30 bg-rose-500/12 text-rose-100" };
@@ -60,7 +60,7 @@ export function invoiceStatusMeta(status: string) {
     return { label: "Payment Required", className: "border-amber-400/30 bg-amber-500/12 text-amber-100" };
   }
   if (normalized === "failed") {
-    return { label: "Failed", className: "border-rose-400/30 bg-rose-500/12 text-rose-100" };
+    return { label: "Payment Failed", className: "border-rose-400/30 bg-rose-500/12 text-rose-100" };
   }
   if (normalized === "expired") {
     return { label: "Expired", className: "border-rose-400/30 bg-rose-500/12 text-rose-100" };
@@ -70,4 +70,3 @@ export function invoiceStatusMeta(status: string) {
   }
   return { label: toTitleCase(normalized || "unknown"), className: "border-white/15 bg-white/[0.06] text-white/88" };
 }
-

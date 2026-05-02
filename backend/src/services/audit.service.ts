@@ -1,5 +1,6 @@
 import { Prisma, type UserRole } from "@prisma/client";
 import { prisma } from "../prisma.js";
+import { getSystemActorLabel } from "./system-actors.js";
 
 export type AuditAction =
   | "suspend_restaurant"
@@ -11,39 +12,69 @@ export type AuditTargetType =
   | "order"
   | "subscription";
 
-export async function logAuditEvent(input: {
-  actorUserId: string;
-  actorRole: UserRole;
-  action: AuditAction | string;
-  targetType: AuditTargetType | string;
-  targetId: string;
-  metadata?: Record<string, unknown>;
-}) {
-  const entry = await prisma.auditLog.create({
-    data: {
-      actorUserId: input.actorUserId,
-      actorRole: input.actorRole,
-      action: input.action,
-      targetType: input.targetType,
-      targetId: input.targetId,
-      metadata: input.metadata as Prisma.InputJsonValue | undefined,
-    },
-    select: {
-      id: true,
-      actorUserId: true,
-      actorRole: true,
-      action: true,
-      targetType: true,
-      targetId: true,
-      createdAt: true,
-    },
-  });
+type AuditActorInput =
+  | {
+      actorUserId: string;
+      systemActorKey?: never;
+    }
+  | {
+      actorUserId?: never;
+      systemActorKey: string;
+    };
 
-  // Structured operational telemetry for quick log-based triage.
+type AuditLogEntry = {
+  id: string;
+  actorUserId: string | null;
+  systemActorKey: string | null;
+  actorRole: UserRole;
+  action: string;
+  targetType: string;
+  targetId: string;
+  createdAt: Date;
+};
+
+function toAuditActorLabel(systemActorKey: string | null | undefined) {
+  if (!systemActorKey) return null;
+  if (systemActorKey === "payment_provider_callback") return "Payment Callback System";
+  return `System (${systemActorKey})`;
+}
+
+export async function logAuditEvent(
+  input: AuditActorInput & {
+    actorRole: UserRole;
+    action: AuditAction | string;
+    targetType: AuditTargetType | string;
+    targetId: string;
+    metadata?: Record<string, unknown>;
+  }
+) {
+  const sharedData = {
+    actorRole: input.actorRole,
+    action: input.action,
+    targetType: input.targetType,
+    targetId: input.targetId,
+    metadata: input.metadata as Prisma.InputJsonValue | undefined,
+  };
+
+  const entry = (("actorUserId" in input)
+    ? await prisma.auditLog.create({
+        data: {
+          actorUserId: input.actorUserId,
+          ...sharedData,
+        },
+      })
+    : await prisma.auditLog.create({
+        data: {
+          systemActorKey: input.systemActorKey,
+          ...sharedData,
+        },
+      })) as AuditLogEntry;
+
   console.info(
     JSON.stringify({
       event: "admin_audit",
       ...entry,
+      actorLabel: getSystemActorLabel(entry.systemActorKey),
     })
   );
 

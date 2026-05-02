@@ -1,5 +1,5 @@
 import { ApiError, api, AUTH_TOKEN_KEY } from "./api";
-import { allowOfflineDemoFallback } from "./config";
+import { allowOfflineDemoFallback, isApiConfigured } from "./config";
 import { clearRestaurantProfile, getRestaurantProfile, type RestaurantProfile } from "./restaurant";
 
 export type AuthUser = {
@@ -27,6 +27,7 @@ export type SessionState = {
 
 const SESSION_KEY = "mv_auth_user_v1";
 const LOCAL_USERS_KEY = "mv_auth_local_users_v1";
+const LOCAL_RESET_TOKENS_KEY = "mv_auth_local_reset_tokens_v1";
 const LOCAL_TOKEN_PREFIX = "local:";
 const PROFILE_KEY = "mv_restaurant_profile_v1";
 const PROFILE_REGISTRY_KEY = "mv_restaurant_profiles_registry_v1";
@@ -147,6 +148,37 @@ function readLocalUsers(): LocalAuthUser[] {
 
 function writeLocalUsers(users: LocalAuthUser[]) {
   localStorage.setItem(LOCAL_USERS_KEY, JSON.stringify(users));
+}
+
+function readLocalResetTokens(): Record<string, { email: string; expiresAt: number }> {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(LOCAL_RESET_TOKENS_KEY) || "{}");
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return {};
+    const out: Record<string, { email: string; expiresAt: number }> = {};
+    for (const [token, value] of Object.entries(parsed as Record<string, unknown>)) {
+      if (!value || typeof value !== "object") continue;
+      const row = value as Record<string, unknown>;
+      const email = String(row.email || "").trim().toLowerCase();
+      const expiresAt = Number(row.expiresAt || 0);
+      if (!email || !Number.isFinite(expiresAt)) continue;
+      out[token] = { email, expiresAt };
+    }
+    return out;
+  } catch {
+    return {};
+  }
+}
+
+function writeLocalResetTokens(tokens: Record<string, { email: string; expiresAt: number }>) {
+  localStorage.setItem(LOCAL_RESET_TOKENS_KEY, JSON.stringify(tokens));
+}
+
+function buildPublicResetUrl(token: string) {
+  if (typeof window === "undefined") return `/reset-password?token=${encodeURIComponent(token)}`;
+  const origin = window.location.origin.replace(/\/+$/, "");
+  const base = (import.meta.env.BASE_URL || "/").replace(/\/+$/, "");
+  const path = base ? `${base}/reset-password` : "/reset-password";
+  return `${origin}${path}?token=${encodeURIComponent(token)}`;
 }
 
 function withBase(path: string) {
@@ -337,6 +369,19 @@ function isApiUnavailable(error: unknown) {
   return code === "API_NOT_CONFIGURED" || code === "API_UNREACHABLE";
 }
 
+function isAuthSessionInvalidatingError(error: unknown) {
+  if (!(error instanceof ApiError)) return false;
+  if (error.status === 401) return true;
+  if (error.status !== 404) return false;
+
+  const bodyError =
+    error.body && typeof error.body === "object" && "error" in error.body
+      ? String((error.body as { error?: unknown }).error || "")
+      : "";
+  const message = `${error.message} ${bodyError}`.toLowerCase();
+  return message.includes("user not found");
+}
+
 function createLocalSession(user: LocalAuthUser) {
   const previous = readSession();
   if (previous?.id && previous.id !== user.id) {
@@ -481,13 +526,96 @@ export async function loginUser(
   }
 }
 
+export async function requestPasswordReset(email: string): Promise<{ ok: true; message: string; resetUrl?: string } | AuthFailure> {
+  const normalizedEmail = email.trim().toLowerCase();
+  try {
+    const response = await api.post<{ message: string; resetUrl?: string }>("/auth/forgot-password", {
+      email: normalizedEmail,
+    });
+    return { ok: true, message: response.message, resetUrl: response.resetUrl };
+  } catch (error) {
+    if (!isApiUnavailable(error) || !allowOfflineDemoFallback) {
+      return { ok: false, error: error instanceof Error ? error.message : "Password reset request failed." };
+    }
+
+    const localUser = readLocalUsers().find((user) => user.email === normalizedEmail) || null;
+    if (!localUser) {
+      return { ok: true, message: "If an account exists for that email, password reset instructions have been prepared." };
+    }
+
+    const token = `local-reset-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+    const tokens = readLocalResetTokens();
+    tokens[token] = {
+      email: normalizedEmail,
+      expiresAt: Date.now() + 30 * 60 * 1000,
+    };
+    writeLocalResetTokens(tokens);
+
+    return {
+      ok: true,
+      message: "If an account exists for that email, password reset instructions have been prepared.",
+      resetUrl: buildPublicResetUrl(token),
+    };
+  }
+}
+
+export async function resetPasswordWithToken(
+  token: string,
+  password: string
+): Promise<{ ok: true; message: string } | AuthFailure> {
+  try {
+    const response = await api.post<{ message: string }>("/auth/reset-password", {
+      token,
+      password,
+    });
+    return { ok: true, message: response.message };
+  } catch (error) {
+    if (!isApiUnavailable(error) || !allowOfflineDemoFallback) {
+      return { ok: false, error: error instanceof Error ? error.message : "Password reset failed." };
+    }
+
+    const tokens = readLocalResetTokens();
+    const record = tokens[token];
+    if (!record || record.expiresAt < Date.now()) {
+      if (record) {
+        delete tokens[token];
+        writeLocalResetTokens(tokens);
+      }
+      return { ok: false, error: "Invalid or expired password reset link." };
+    }
+
+    const users = readLocalUsers();
+    const index = users.findIndex((user) => user.email === record.email);
+    if (index < 0) {
+      return { ok: false, error: "Invalid or expired password reset link." };
+    }
+
+    users[index] = {
+      ...users[index],
+      password,
+    };
+    writeLocalUsers(users);
+    delete tokens[token];
+    writeLocalResetTokens(tokens);
+    return { ok: true, message: "Password updated successfully. You can now sign in." };
+  }
+}
+
 export async function refreshCurrentUser() {
-  if (hasLocalToken()) return readSession();
+  const token = getAuthToken();
+  if (!token) return null;
+  if (hasLocalToken()) {
+    return readSession();
+  }
   try {
     const user = await api.get<AuthUser>("/auth/me");
     writeSession(user);
     return user;
-  } catch {
+  } catch (error) {
+    if (isAuthSessionInvalidatingError(error)) {
+      logoutUser();
+      return null;
+    }
     return readSession();
   }
 }
@@ -505,6 +633,11 @@ export function getCurrentUser() {
 export function isAuthenticated() {
   const token = localStorage.getItem(AUTH_TOKEN_KEY);
   return getCurrentUser() != null && Boolean(token);
+}
+
+export function hasRemoteAuthSession() {
+  const token = localStorage.getItem(AUTH_TOKEN_KEY) || "";
+  return getCurrentUser() != null && Boolean(token) && !token.startsWith(LOCAL_TOKEN_PREFIX);
 }
 
 export function isPlatformAdmin() {

@@ -16,13 +16,13 @@ import { ImageThumbnail } from "../components/ui/ImageThumbnail";
 import { Input } from "../components/ui/Input";
 import { DishCard } from "../components/ui/DishCard";
 import { UbhonaActionMenu } from "../components/ui/ubhona-action-menu";
+import { UbhonaLoader } from "../components/ui/ubhona-loader";
 import { UbhonaSelect, UbhonaSelectItem } from "../components/ui/ubhona-select";
-import { useRestaurantDashboard } from "../hooks/use-restaurant-dashboard";
 import { useRestaurantMenuBuilder } from "../hooks/use-restaurant-menu-builder";
 import { getFilteredDishes, normalizeDishInput, sortCategories } from "../lib/menu-builder";
 import { cn } from "../lib/utils";
 import { spacing, tokens, typography } from "../design-system";
-import { getCurrentPlan, type RestaurantProfile } from "../lib/restaurant";
+import { getCurrentPlan, getRestaurantProfile, getRestaurantBranding, type RestaurantProfile } from "../lib/restaurant";
 import type { Dish } from "../types/dashboard";
 import { getRemainingStarterAllowance, getUpgradePrompt } from "../lib/growth";
 import { canPerformAction } from "../lib/roles";
@@ -45,23 +45,24 @@ function formatKsh(value: number) {
   return `KSh ${value.toLocaleString("en-KE")}`;
 }
 
-function getStockTone(status?: "available" | "low_stock" | "unavailable") {
+function getStockTone(status?: "available" | "low_stock" | "paused" | "unavailable") {
+  if (status === "paused") return "neutral" as const;
   if (status === "unavailable") return "danger" as const;
   if (status === "low_stock") return "warning" as const;
   return "success" as const;
 }
 
 function getStockLabel(dish: Dish) {
-  const status = dish.stock?.availability_status;
+  const status = dish.menuControl?.status;
+  if (status === "paused") return "Paused";
   if (status === "unavailable") return "Unavailable";
   if (status === "low_stock") return "Low Stock";
-  if (dish.available) return "Available";
-  return "Paused";
+  return "Available";
 }
 
 export default function MenuManager() {
-  const { data } = useRestaurantDashboard();
   const {
+    restaurantId,
     categories,
     dishes,
     loading,
@@ -96,28 +97,20 @@ export default function MenuManager() {
     url: string;
   } | null>(null);
   const workspaceRef = React.useRef<HTMLDivElement | null>(null);
+  const persistedProfile = React.useMemo(() => getRestaurantProfile(), [restaurantId]);
+  const branding = React.useMemo(() => getRestaurantBranding(persistedProfile), [persistedProfile]);
 
   const profile = React.useMemo<RestaurantProfile | null>(() => {
-    if (!data) return null;
+    if (!persistedProfile) return null;
     return {
-      id: data.restaurant.id,
-      restaurantName: data.restaurant.name,
-      slug: data.restaurant.slug,
-      phone: data.restaurant.phone,
-      email: data.restaurant.email,
-      location: data.restaurant.location,
-      logo: data.brandingSettings.logoUrl || data.restaurant.logoUrl,
-      coverImage: data.brandingSettings.coverImageUrl || data.restaurant.coverImageUrl,
-      themePrimary: data.brandingSettings.primaryColor || data.restaurant.primaryColor,
-      themeSecondary: "#34d399",
-      shortDescription: data.brandingSettings.description || data.restaurant.description,
-      subscriptionPlan: data.restaurant.subscriptionPlan || "starter",
-      subscriptionStatus: data.restaurant.subscriptionStatus || "active",
-      trialEndsAt: null,
-      renewalDate: null,
-      createdAt: new Date().toISOString(),
+      ...persistedProfile,
+      logo: persistedProfile.logo || branding.logoUrl,
+      coverImage: persistedProfile.coverImage || branding.coverImageUrl,
+      themePrimary: persistedProfile.themePrimary || branding.primary,
+      themeSecondary: persistedProfile.themeSecondary || branding.secondary,
+      shortDescription: persistedProfile.shortDescription || branding.shortDescription,
     };
-  }, [data]);
+  }, [branding, persistedProfile]);
   const currentPlan = React.useMemo(() => getCurrentPlan(profile), [profile]);
   const allowance = React.useMemo(
     () => (profile ? getRemainingStarterAllowance(profile.id) : null),
@@ -250,10 +243,22 @@ export default function MenuManager() {
     await editCategory(editingCategoryId, {
       name: editingCategoryName,
       sortOrder: target?.sortOrder,
+      isActive: target?.menuControl?.isActive ?? true,
     });
     setEditingCategoryId(null);
     setEditingCategoryName("");
   }, [editCategory, editingCategoryId, editingCategoryName, sortedCategories]);
+
+  const onToggleCategoryAvailability = React.useCallback(
+    async (category: (typeof categoryCounts)[number]) => {
+      await editCategory(category.id, {
+        name: category.name,
+        sortOrder: category.sortOrder,
+        isActive: category.menuControl?.isActive === false,
+      });
+    },
+    [editCategory]
+  );
 
   const onSubmitDish = React.useCallback(
     async (event: React.FormEvent<HTMLFormElement>) => {
@@ -569,11 +574,18 @@ export default function MenuManager() {
                 title="Dishes"
                 subtitle="Visual rows, fast price updates, and edit actions that stay in this workspace."
               />
-              {loading ? <p className="text-sm text-white/70">Loading menu data...</p> : null}
+              {loading ? (
+                <UbhonaLoader
+                  variant="inline"
+                  label="Checking menu setup"
+                  detail="Ubhona is loading categories, dishes, media, and storefront visibility so you can confirm what is actually ready to publish."
+                  className="max-w-sm"
+                />
+              ) : null}
               {error ? <EmptyStateCard message={error} /> : null}
               {!loading && !error && !sortedCategories.length ? (
                 <EmptyStateCard
-                  message="Add at least one category to start building the menu."
+                  message="Add at least one category before dishes can be organised and shown on your storefront or QR menu."
                   actionLabel="Open category manager"
                   onAction={() => {
                     setIsCategoryManagerOpen(true);
@@ -597,7 +609,7 @@ export default function MenuManager() {
                           description={dish.description}
                           imageUrl={dish.imageUrl}
                           categoryLabel={categoryNameById.get(dish.categoryId) || "Unknown"}
-                          status={<Badge variant={getStockTone(dish.stock?.availability_status)}>{getStockLabel(dish)}</Badge>}
+                          status={<Badge variant={getStockTone(dish.menuControl?.status)}>{getStockLabel(dish)}</Badge>}
                           active={editingDishId === dish.id}
                           onClick={() => populateDishForm(dish)}
                           actions={
@@ -800,7 +812,7 @@ export default function MenuManager() {
                             </td>
                             <td className="px-4 py-2.5">
                               <div className="flex flex-col gap-1">
-                                <Badge variant={getStockTone(dish.stock?.availability_status)}>{getStockLabel(dish)}</Badge>
+                                <Badge variant={getStockTone(dish.menuControl?.status)}>{getStockLabel(dish)}</Badge>
                                 {dish.stock?.stock_quantity != null ? (
                                   <span className="text-[11px] text-white/55">Qty: {dish.stock.stock_quantity}</span>
                                 ) : null}
@@ -901,9 +913,16 @@ export default function MenuManager() {
               ) : null}
               {!loading && !error && !filteredDishes.length ? (
                 <EmptyStateCard
-                  message="No dishes match the current filters. Adjust the controls or add a new dish."
-                  actionLabel="Add dish"
+                  title={!dishes.length ? "No dishes yet" : "No matching dishes"}
+                  message={
+                    !dishes.length
+                      ? "Create your first dish, then keep it available and visible on the public menu so storefront links, QR codes, and first orders show real data instead of an empty catalog."
+                      : "No dishes match the current search or category filter. Adjust the controls, or add a dish if the live menu is still incomplete."
+                  }
+                  actionLabel={!dishes.length ? "Create First Dish" : "Add Dish"}
                   onAction={onCreateDishFromHeader}
+                  secondaryActionLabel={!dishes.length ? "Manage Categories" : undefined}
+                  onSecondaryAction={!dishes.length ? (() => setIsCategoryManagerOpen(true)) : undefined}
                 />
               ) : null}
               {saving ? <p className="text-xs text-white/55">Saving menu changes...</p> : null}
@@ -951,7 +970,7 @@ export default function MenuManager() {
                   </div>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
-                  <Badge variant={getStockTone(activeDish.stock?.availability_status)}>{getStockLabel(activeDish)}</Badge>
+                  <Badge variant={getStockTone(activeDish.menuControl?.status)}>{getStockLabel(activeDish)}</Badge>
                   {activeDish.stock?.hidden_from_public_menu ? (
                     <Badge variant="neutral">Hidden on Public Menu</Badge>
                   ) : (
@@ -1031,6 +1050,7 @@ export default function MenuManager() {
                 setEditingCategoryName("");
               }}
               onRemoveCategory={(id) => void removeCategory(id)}
+              onToggleCategoryAvailability={(category) => void onToggleCategoryAvailability(category)}
             />
           </div>
         </div>

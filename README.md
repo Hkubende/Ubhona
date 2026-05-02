@@ -110,6 +110,26 @@ Example prompts:
 - "Check network requests when opening the AR menu."
 - "Identify performance bottlenecks in the AR viewer."
 
+## Context7
+
+For version-sensitive library and framework work, this repo supports Context7 as an optional documentation source.
+
+Recommended project-local setup:
+
+```bash
+npx ctx7@latest setup --project --mcp
+```
+
+Fallback project-local setup when MCP is not the right fit:
+
+```bash
+npx ctx7@latest setup --project --cli --universal
+```
+
+Use Context7 for current external docs before editing code that depends on package behavior. Keep repo-local instructions first, then use Context7 for library/framework verification.
+
+See [docs/context7.md](./docs/context7.md) for setup notes, generated files, and usage guidance in Ubhona.
+
 Build:
 
 ```bash
@@ -167,6 +187,14 @@ Workflows:
 - Deployment-mode preview check: `.github/workflows/deploy-preview-check.yml` (Render-like build verification, no production deploy).
 - GitHub Pages deploy: `.github/workflows/deploy-pages.yml` (publishes `dist` on push to `main`).
 - Render production deploy is handled by Render.
+
+RLS rollout:
+- preflight: `npm run rls:preflight`
+- apply: `npm run rls:apply`
+- validate: `npm run rls:validate`
+- audit validate: `npm run rls:audit:validate`
+- runtime-equivalent validation requires `APP_RUNTIME_DATABASE_URL`; plain `DATABASE_URL` is apply/migration only
+- runbook: `docs/rls-rollout.md`
 
 Render (static site):
 - Build command: `npm install && npm run build`

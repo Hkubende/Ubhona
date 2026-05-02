@@ -1,4 +1,5 @@
 import { api } from "./api";
+import { hasRemoteAuthSession } from "./auth";
 
 export type AnalyticsEventType =
   | "page_view"
@@ -6,7 +7,13 @@ export type AnalyticsEventType =
   | "ar_open"
   | "add_to_cart"
   | "checkout_start"
-  | "order_placed";
+  | "order_placed"
+  | "landing_visit"
+  | "cta_click"
+  | "signup_start"
+  | "signup_complete"
+  | "onboarding_start"
+  | "onboarding_complete";
 
 export type AnalyticsEventRecord = {
   id: string;
@@ -65,8 +72,28 @@ export type AnalyticsConversion = {
   };
 };
 
+export type LaunchSignupFunnel = {
+  periodDays: number;
+  totals: {
+    landingVisits: number;
+    ctaClicks: number;
+    signupStarts: number;
+    signupCompletions: number;
+    onboardingStarts: number;
+    onboardingCompletions: number;
+  };
+  rates: {
+    ctaClickRate: number;
+    signupStartRate: number;
+    signupCompletionRate: number;
+    onboardingCompletionRate: number;
+  };
+};
+
 const ANALYTICS_EVENTS_KEY = "mv_analytics_events_v1";
 const MAX_LOCAL_EVENTS = 4000;
+const LOCAL_RESTAURANT_ID_PREFIXES = ["local_", "demo_"];
+export const LAUNCH_FUNNEL_RESTAURANT_ID = "local_launch_site";
 
 function getSessionId() {
   const key = "mv_analytics_session_v1";
@@ -87,7 +114,22 @@ function parseEvent(value: unknown): AnalyticsEventRecord | null {
   const restaurantId = String(row.restaurantId || "").trim();
   const eventType = String(row.eventType || "").trim() as AnalyticsEventType;
   if (!restaurantId) return null;
-  if (!["page_view", "dish_view", "ar_open", "add_to_cart", "checkout_start", "order_placed"].includes(eventType)) {
+  if (
+    ![
+      "page_view",
+      "dish_view",
+      "ar_open",
+      "add_to_cart",
+      "checkout_start",
+      "order_placed",
+      "landing_visit",
+      "cta_click",
+      "signup_start",
+      "signup_complete",
+      "onboarding_start",
+      "onboarding_complete",
+    ].includes(eventType)
+  ) {
     return null;
   }
   return {
@@ -240,11 +282,51 @@ function buildSummaryFromEvents(events: AnalyticsEventRecord[], days: number): A
   };
 }
 
+function buildLaunchSignupFunnel(events: AnalyticsEventRecord[], days: number): LaunchSignupFunnel {
+  const totals: LaunchSignupFunnel["totals"] = {
+    landingVisits: 0,
+    ctaClicks: 0,
+    signupStarts: 0,
+    signupCompletions: 0,
+    onboardingStarts: 0,
+    onboardingCompletions: 0,
+  };
+
+  for (const event of events) {
+    if (event.eventType === "landing_visit") totals.landingVisits += 1;
+    if (event.eventType === "cta_click") totals.ctaClicks += 1;
+    if (event.eventType === "signup_start") totals.signupStarts += 1;
+    if (event.eventType === "signup_complete") totals.signupCompletions += 1;
+    if (event.eventType === "onboarding_start") totals.onboardingStarts += 1;
+    if (event.eventType === "onboarding_complete") totals.onboardingCompletions += 1;
+  }
+
+  const safePct = (numerator: number, denominator: number) => (denominator > 0 ? (numerator / denominator) * 100 : 0);
+
+  return {
+    periodDays: days,
+    totals,
+    rates: {
+      ctaClickRate: safePct(totals.ctaClicks, totals.landingVisits),
+      signupStartRate: safePct(totals.signupStarts, totals.ctaClicks),
+      signupCompletionRate: safePct(totals.signupCompletions, totals.signupStarts),
+      onboardingCompletionRate: safePct(totals.onboardingCompletions, totals.onboardingStarts),
+    },
+  };
+}
+
 function filterEvents(days: number, restaurantId?: string) {
   return readLocalEvents().filter((event) => {
     if (restaurantId && event.restaurantId !== restaurantId) return false;
     return withinDays(event.timestamp, days);
   });
+}
+
+function shouldSendRemoteAnalytics(restaurantId: string) {
+  const normalized = String(restaurantId || "").trim().toLowerCase();
+  if (!normalized) return false;
+  if (!hasRemoteAuthSession()) return false;
+  return !LOCAL_RESTAURANT_ID_PREFIXES.some((prefix) => normalized.startsWith(prefix));
 }
 
 export async function trackAnalyticsEvent(input: {
@@ -267,6 +349,10 @@ export async function trackAnalyticsEvent(input: {
   };
   pushLocalEvent(localEvent);
 
+  if (!shouldSendRemoteAnalytics(input.restaurantId)) {
+    return;
+  }
+
   try {
     await api.post("/analytics/events", {
       ...input,
@@ -278,8 +364,35 @@ export async function trackAnalyticsEvent(input: {
   }
 }
 
+export async function trackLaunchFunnelEvent(
+  eventType:
+    | "landing_visit"
+    | "cta_click"
+    | "signup_start"
+    | "signup_complete"
+    | "onboarding_start"
+    | "onboarding_complete",
+  metadata?: Record<string, unknown>
+) {
+  await trackAnalyticsEvent({
+    restaurantId: LAUNCH_FUNNEL_RESTAURANT_ID,
+    eventType,
+    source: "launch_site",
+    metadata,
+  });
+}
+
+export function getLaunchSignupFunnel(days = 30): LaunchSignupFunnel {
+  const safeDays = Math.max(1, Math.floor(days));
+  const events = filterEvents(safeDays, LAUNCH_FUNNEL_RESTAURANT_ID);
+  return buildLaunchSignupFunnel(events, safeDays);
+}
+
 export async function getAnalyticsSummary(days = 30, restaurantId?: string) {
   const safeDays = Math.max(1, Math.floor(days));
+  if (!hasRemoteAuthSession()) {
+    return buildSummaryFromEvents(filterEvents(safeDays, restaurantId), safeDays);
+  }
   const query = new URLSearchParams({ days: String(safeDays) });
   if (restaurantId) query.set("restaurantId", restaurantId);
   try {
@@ -292,6 +405,14 @@ export async function getAnalyticsSummary(days = 30, restaurantId?: string) {
 
 export async function getAnalyticsTopDishes(days = 30, restaurantId?: string) {
   const safeDays = Math.max(1, Math.floor(days));
+  if (!hasRemoteAuthSession()) {
+    const summary = buildSummaryFromEvents(filterEvents(safeDays, restaurantId), safeDays);
+    return {
+      periodDays: safeDays,
+      mostViewedDishes: summary.mostViewedDishes,
+      mostOrderedDishes: summary.mostOrderedDishes,
+    };
+  }
   const query = new URLSearchParams({ days: String(safeDays) });
   if (restaurantId) query.set("restaurantId", restaurantId);
   try {
@@ -314,6 +435,14 @@ export async function getAnalyticsTopDishes(days = 30, restaurantId?: string) {
 
 export async function getAnalyticsConversion(days = 30, restaurantId?: string) {
   const safeDays = Math.max(1, Math.floor(days));
+  if (!hasRemoteAuthSession()) {
+    const summary = buildSummaryFromEvents(filterEvents(safeDays, restaurantId), safeDays);
+    return {
+      periodDays: safeDays,
+      totals: summary.totals,
+      rates: summary.rates,
+    };
+  }
   const query = new URLSearchParams({ days: String(safeDays) });
   if (restaurantId) query.set("restaurantId", restaurantId);
   try {

@@ -49,8 +49,10 @@ model Restaurant {
   categories       Category[]
   dishes           Dish[]
   orders           Order[]
+  payments         Payment[]
   assets           UploadAsset[]
   analyticsEvents  AnalyticsEvent[]
+  platformTrackerDocuments PlatformTrackerDocument[]
 
   @@map("restaurants")
 }
@@ -122,6 +124,8 @@ model OrderItem {
 
 model Payment {
   id                String   @id @default(uuid())
+  restaurantId      String   @map("restaurant_id")
+  restaurant        Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
   orderId           String   @map("order_id")
   order             Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
   provider          String   @default("mpesa")
@@ -139,6 +143,8 @@ model Payment {
   createdAt         DateTime @default(now()) @map("created_at")
   updatedAt         DateTime @updatedAt @map("updated_at")
 
+  @@index([restaurantId])
+  @@index([restaurantId, createdAt])
   @@index([orderId])
   @@unique([checkoutRequestId])
   @@map("payments")
@@ -182,28 +188,45 @@ model AnalyticsEvent {
 }
 
 model PlatformTrackerDocument {
+  id           String     @id @default(uuid())
+  key          String     @unique
+  restaurantId String     @map("restaurant_id")
+  restaurant   Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  payload      Json
+  createdAt    DateTime   @default(now()) @map("created_at")
+  updatedAt    DateTime   @updatedAt @map("updated_at")
+
+  @@index([restaurantId])
+  @@index([restaurantId, updatedAt])
+  @@map("platform_tracker_documents")
+}
+
+model PlatformConfig {
   id        String   @id @default(uuid())
   key       String   @unique
   payload   Json
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
-  @@map("platform_tracker_documents")
+  @@index([updatedAt])
+  @@map("platform_configs")
 }
 
 model AuditLog {
-  id         String   @id @default(uuid())
-  actorUserId String  @map("actor_user_id")
-  actor      User     @relation("AuditActor", fields: [actorUserId], references: [id], onDelete: Restrict)
-  actorRole  UserRole @map("actor_role")
-  action     String
-  targetType String   @map("target_type")
-  targetId   String   @map("target_id")
-  metadata   Json?    @map("metadata_json")
-  createdAt  DateTime @default(now()) @map("created_at")
+  id             String   @id @default(uuid())
+  actorUserId    String?  @map("actor_user_id")
+  actor          User?    @relation("AuditActor", fields: [actorUserId], references: [id], onDelete: Restrict)
+  systemActorKey String?  @map("system_actor_key")
+  actorRole      UserRole @map("actor_role")
+  action         String
+  targetType     String   @map("target_type")
+  targetId       String   @map("target_id")
+  metadata       Json?    @map("metadata_json")
+  createdAt      DateTime @default(now()) @map("created_at")
 
   @@index([action, createdAt])
   @@index([targetType, targetId, createdAt])
   @@index([actorUserId, createdAt])
+  @@index([systemActorKey, createdAt])
   @@map("audit_logs")
 }

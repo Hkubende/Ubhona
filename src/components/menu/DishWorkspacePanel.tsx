@@ -10,6 +10,7 @@ import UploadField from "../uploads/UploadField";
 import { cn } from "../../lib/utils";
 import { radius, spacing, tokens, typography } from "../../design-system";
 import type { Category, Dish } from "../../types/dashboard";
+import type { UploadedMediaAsset } from "../../lib/uploads";
 
 export type DishFormState = {
   name: string;
@@ -46,6 +47,7 @@ type DishWorkspacePanelProps = {
   onSaveCategoryEdit: () => void;
   onCancelCategoryEdit: () => void;
   onRemoveCategory: (id: string) => void;
+  onToggleCategoryAvailability: (category: CategoryCount) => void;
 };
 
 export function DishWorkspacePanel({
@@ -71,8 +73,19 @@ export function DishWorkspacePanel({
   onSaveCategoryEdit,
   onCancelCategoryEdit,
   onRemoveCategory,
+  onToggleCategoryAvailability,
 }: DishWorkspacePanelProps) {
   const modelFileName = dishForm.modelUrl ? dishForm.modelUrl.split("/").pop() || "Model linked" : "";
+  const [thumbnailAsset, setThumbnailAsset] = React.useState<UploadedMediaAsset | null>(null);
+  const [modelAsset, setModelAsset] = React.useState<UploadedMediaAsset | null>(null);
+
+  React.useEffect(() => {
+    if (!editingDishId) {
+      setThumbnailAsset(null);
+      setModelAsset(null);
+    }
+  }, [editingDishId]);
+
   return (
     <DashboardPanel className="space-y-5 p-5 lg:space-y-6 lg:p-6">
       <SectionHeader
@@ -80,7 +93,7 @@ export function DishWorkspacePanel({
         subtitle={
           editingDishId
             ? "Make changes here and keep the dish list visible while you work."
-            : "Create dishes and manage categories in the same compact working area."
+            : "Create the next live dish here, then upload media so your storefront and QR links feel complete."
         }
         action={
           editingDishId ? (
@@ -96,6 +109,12 @@ export function DishWorkspacePanel({
           ) : null
         }
       />
+
+      {!editingDishId ? (
+        <div className={cn(tokens.classes.panelInset, "px-4 py-3 text-sm text-text-secondary/76")}>
+          <span className="font-semibold text-text-primary">First dish checklist:</span> add a clear name, set the price, choose a category, then upload a thumbnail before sharing the menu QR.
+        </div>
+      ) : null}
 
       <EditorPanel className={cn("p-[18px]", spacing.stackMd)}>
         <div className={cn("flex flex-wrap items-start justify-between", spacing.gapMd)}>
@@ -125,7 +144,7 @@ export function DishWorkspacePanel({
                 type="button"
                 onClick={() => onDishFormChange({ categoryId: category.id })}
                 className={cn(
-                  `${radius.panel} border px-3 py-1 text-xs transition-colors hover:border-white/25 hover:text-text-primary`,
+                  `${radius.panel} border px-3 py-1 text-xs transition-colors hover:border-border-strong hover:text-text-primary`,
                   dishForm.categoryId === category.id
                     ? tokens.classes.categoryChipActive
                     : tokens.classes.categoryChipIdle
@@ -135,12 +154,12 @@ export function DishWorkspacePanel({
               </button>
             ))
           ) : (
-            <span className="text-sm text-white/55">No categories yet.</span>
+            <span className="text-sm text-text-secondary/58">No categories yet.</span>
           )}
         </div>
 
         {isCategoryManagerOpen ? (
-          <div className={cn(`border-t border-white/10 pt-4`, spacing.stackSm)}>
+          <div className={cn("border-t border-border pt-4", spacing.stackSm)}>
             <form onSubmit={onAddCategory} className={cn(`grid sm:grid-cols-[1fr_auto]`, spacing.gapSm)}>
               <Input
                 id="new-category-name"
@@ -182,10 +201,20 @@ export function DishWorkspacePanel({
                     ) : (
                       <>
                         <div>
-                                  <div className="font-medium text-text-primary">{category.name}</div>
-                                  <div className="text-[11px] text-text-secondary/55">{category.count} dishes</div>
+                          <div className="font-medium text-text-primary">{category.name}</div>
+                          <div className="text-[11px] text-text-secondary/55">
+                            {category.count} dishes - {category.menuControl?.isActive === false ? "Hidden on storefront" : "Visible on storefront"}
+                          </div>
                         </div>
                         <div className="flex items-center gap-2">
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="text-text-secondary/78 hover:text-text-primary"
+                            onClick={() => onToggleCategoryAvailability(category)}
+                          >
+                            {category.menuControl?.isActive === false ? "Show" : "Hide"}
+                          </Button>
                           <Button
                             size="sm"
                             variant="ghost"
@@ -215,7 +244,7 @@ export function DishWorkspacePanel({
         ) : null}
       </EditorPanel>
 
-      <form onSubmit={onSubmitDish} className={cn("border-t border-white/8 pt-4", spacing.stackMd)}>
+      <form onSubmit={onSubmitDish} className={cn("border-t border-border pt-4", spacing.stackMd)}>
         <div className={cn("grid sm:grid-cols-2", spacing.gapMd)}>
           <div>
             <label htmlFor="dish-name" className={cn("mb-1.5 block", typography.label)}>
@@ -284,7 +313,7 @@ export function DishWorkspacePanel({
               type="checkbox"
               checked={dishForm.available}
               onChange={(event) => onDishFormChange({ available: event.target.checked })}
-              className="h-4 w-4 rounded border-white/20 bg-black/30 accent-[#FF6A1A]"
+              className="h-4 w-4 rounded border-border bg-surface accent-[var(--color-primary)]"
             />
             Available
           </label>
@@ -311,10 +340,17 @@ export function DishWorkspacePanel({
             accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp"
             value={dishForm.imageUrl}
             onUploaded={(url) => onDishFormChange({ imageUrl: url })}
+            onUploadedAsset={setThumbnailAsset}
             linkedFieldLabel="Image URL"
             restaurantId={restaurantId}
             dishId={editingDishId || undefined}
           />
+          {thumbnailAsset ? (
+            <p className="text-[11px] text-text-secondary/68">
+              Stored in `{thumbnailAsset.bucket}` at `{thumbnailAsset.path}` ({Math.max(1, Math.round(thumbnailAsset.sizeBytes / 1024))} KB)
+              {thumbnailAsset.width && thumbnailAsset.height ? ` • ${thumbnailAsset.width}x${thumbnailAsset.height}` : ""}
+            </p>
+          ) : null}
         </div>
 
         <div className="space-y-2">
@@ -335,16 +371,22 @@ export function DishWorkspacePanel({
             accept=".glb,.gltf,model/gltf-binary,model/gltf+json"
             value={dishForm.modelUrl}
             onUploaded={(url) => onDishFormChange({ modelUrl: url })}
+            onUploadedAsset={setModelAsset}
             restaurantId={restaurantId}
             dishId={editingDishId || undefined}
           />
+          {modelAsset ? (
+            <p className="text-[11px] text-text-secondary/68">
+              Stored in `{modelAsset.bucket}` at `{modelAsset.path}` ({Math.max(1, Math.round(modelAsset.sizeBytes / 1024))} KB)
+            </p>
+          ) : null}
         </div>
 
         {(dishForm.imageUrl || dishForm.modelUrl) ? (
           <div className="grid gap-3 sm:grid-cols-2">
             {dishForm.imageUrl ? (
               <div className={tokens.classes.previewFrame}>
-                <div className="border-b border-white/8 px-3 py-2 text-[11px] uppercase tracking-[0.08em] text-text-secondary/68">
+                <div className="border-b border-border px-3 py-2 text-[11px] uppercase tracking-[0.08em] text-text-secondary/68">
                   Thumbnail Preview
                 </div>
                 <img
@@ -365,8 +407,8 @@ export function DishWorkspacePanel({
                   className={cn(
                     "rounded-full border px-2 py-0.5 text-[10px] font-semibold",
                     dishForm.modelUrl
-                      ? "border-emerald-400/35 bg-emerald-500/12 text-emerald-200"
-                      : "border-white/12 bg-white/6 text-text-secondary/75"
+                      ? "border-emerald-400/35 bg-emerald-500/12 text-emerald-700 dark:text-emerald-200"
+                      : "border-border bg-[color:var(--ui-note-icon-bg)] text-text-secondary/75"
                   )}
                 >
                   {dishForm.modelUrl ? "Linked" : "Not linked"}
@@ -374,7 +416,7 @@ export function DishWorkspacePanel({
               </div>
               {dishForm.modelUrl ? (
                 <div className="space-y-2">
-                  <div className="rounded-lg border border-white/12 bg-black/30 px-2.5 py-2 text-xs text-text-secondary">
+                  <div className="rounded-lg border border-border bg-[color:var(--ui-note-icon-bg)] px-2.5 py-2 text-xs text-text-secondary">
                     <div className="truncate font-medium text-text-primary">{modelFileName}</div>
                     <div className="truncate text-text-secondary/68">{dishForm.modelUrl}</div>
                   </div>
@@ -388,7 +430,7 @@ export function DishWorkspacePanel({
                   </a>
                 </div>
               ) : (
-                <div className="rounded-lg border border-white/10 bg-black/25 px-2.5 py-2 text-xs text-text-secondary/65">
+                <div className="rounded-lg border border-border bg-[color:var(--ui-note-icon-bg)] px-2.5 py-2 text-xs text-text-secondary/65">
                   No model linked yet
                 </div>
               )}

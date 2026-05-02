@@ -20,13 +20,13 @@ export function StatCard({ label, value, tone = "default", className }: StatCard
   return (
     <div
       className={cn(
-        "ui-surface-soft p-4 transition duration-300 ease-out hover:-translate-y-0.5 hover:border-primary/20",
+        "ui-surface-soft p-4 sm:p-5 transition duration-300 ease-out hover:-translate-y-0.5 hover:border-[color:var(--color-border-strong)]",
         radius.panel,
         className
       )}
     >
       <div className={typography.label}>{label}</div>
-      <div className={cn("mt-2 text-xl font-semibold tracking-[-0.03em]", toneMap[tone])}>{value}</div>
+      <div className={cn("mt-2.5 text-[1.35rem] font-semibold tracking-[-0.035em]", toneMap[tone])}>{value}</div>
     </div>
   );
 }

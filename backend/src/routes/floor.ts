@@ -51,6 +51,8 @@ floorRouter.get("/snapshot", async (req: AuthRequest, res) => {
     restaurantId: restaurant.id,
     branchId: query.data.branchId || "main",
     idleThresholdMinutes: query.data.idleThresholdMinutes,
+    actorUserId: req.user!.id,
+    isAdmin: req.user!.role === "platform_admin",
   });
   res.json(snapshot);
 });
@@ -352,6 +354,8 @@ floorRouter.post("/sessions/:sessionId/orders", async (req: AuthRequest, res) =>
       branchId: body.branchId,
       sessionId: req.params.sessionId,
       orderId: body.orderId,
+      actorUserId: req.user!.id,
+      isAdmin: req.user!.role === "platform_admin",
     });
     await recordActivityEvent({
       actorUserId: req.user!.id,

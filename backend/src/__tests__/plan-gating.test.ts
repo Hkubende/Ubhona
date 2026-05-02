@@ -10,6 +10,7 @@ const mocks = vi.hoisted(() => ({
   },
   getOwnedRestaurant: vi.fn(),
   getAnalyticsSummary: vi.fn(),
+  isRestaurantFeatureEnabled: vi.fn(),
 }));
 
 vi.mock("jsonwebtoken", () => ({
@@ -41,6 +42,10 @@ vi.mock("../services/analytics.service.js", () => ({
   getConversionMetrics: vi.fn(),
   getTopDishes: vi.fn(),
   recordAnalyticsEvent: vi.fn(),
+}));
+
+vi.mock("../services/billing.service.js", () => ({
+  isRestaurantFeatureEnabled: mocks.isRestaurantFeatureEnabled,
 }));
 
 import { analyticsRouter } from "../routes/analytics.js";
@@ -83,6 +88,10 @@ describe("Analytics route plan gating", () => {
       email: "owner@demo.com",
       role: "restaurant_owner",
     });
+    mocks.isRestaurantFeatureEnabled.mockImplementation(async (restaurant) => {
+      const plan = String(restaurant?.subscriptionPlan || "").toLowerCase();
+      return plan === "growth" || plan === "pro" || plan === "enterprise";
+    });
   });
 
   it("rejects unauthenticated requests", async () => {
@@ -103,7 +112,7 @@ describe("Analytics route plan gating", () => {
       .set("Authorization", "Bearer test-token");
 
     expect(response.status).toBe(403);
-    expect(response.body.error).toMatch(/Upgrade to Pro/i);
+    expect(response.body.error).toMatch(/Upgrade to Growth/i);
   });
 
   it("allows pro plan analytics summary", async () => {
@@ -125,6 +134,11 @@ describe("Analytics route plan gating", () => {
       .set("Authorization", "Bearer test-token");
 
     expect(response.status).toBe(200);
-    expect(mocks.getAnalyticsSummary).toHaveBeenCalledWith("rest-1", 30);
+    expect(mocks.getAnalyticsSummary).toHaveBeenCalledWith({
+      restaurantId: "rest-1",
+      userId: "user-1",
+      isAdmin: false,
+      days: 30,
+    });
   });
 });

@@ -10,6 +10,7 @@ import {
   printPaymentReceipt as printPaymentReceiptService,
 } from "../../lib/print";
 import { CheckoutSuccessPage } from "../../components/storefront/checkout-components";
+import { UbhonaLoader } from "../../components/ui/ubhona-loader";
 
 export default function OrderConfirmation() {
   const navigate = useNavigate();
@@ -110,18 +111,20 @@ export default function OrderConfirmation() {
     void printPaymentReceiptService(toPrintOrder(order, restaurant.name), { trigger: "auto" });
   }, [order, restaurant, toPrintOrder]);
 
-  if (loading) return <div className="ubhona-storefront-shell min-h-screen p-8 text-white/70">Loading order...</div>;
+  if (loading) {
+    return <UbhonaLoader fullScreen label="Loading order" shellClassName="ubhona-storefront-shell" />;
+  }
   if (!restaurant) {
     return (
-      <div className="min-h-screen bg-[#0b0b10] p-8 text-white">
+      <div className="ubhona-storefront-shell min-h-screen p-8">
         <div className="ubhona-storefront-panel mx-auto max-w-4xl p-8 text-center">
-          <div className="text-2xl font-semibold tracking-[-0.03em] text-orange-300">Restaurant not found</div>
-          <p className="mt-2 text-sm text-white/65">Check the storefront link and try again.</p>
+          <div className="ubhona-storefront-text-accent text-2xl font-semibold tracking-[-0.03em]">Restaurant not found</div>
+          <p className="ubhona-storefront-text-secondary mt-2 text-sm">Check the storefront link and try again.</p>
         </div>
       </div>
     );
   }
-  if (!order) return <div className="ubhona-storefront-shell min-h-screen p-8 text-white/70">Order not found.</div>;
+  if (!order) return <div className="ubhona-storefront-shell ubhona-storefront-text-secondary min-h-screen p-8">Order not found.</div>;
 
   return (
     <CheckoutSuccessPage

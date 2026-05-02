@@ -18,6 +18,14 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("../prisma.js", () => ({
   prisma: mocks.prisma,
+  runWithTenantContext: vi.fn(async ({ userId, restaurantId, isAdmin, fn }) =>
+    mocks.prisma.$transaction(async (tx: any) => {
+      await tx.$executeRaw`SELECT set_config('app.user_id', ${userId}, true)`;
+      await tx.$executeRaw`SELECT set_config('app.restaurant_id', ${restaurantId}, true)`;
+      await tx.$executeRaw`SELECT set_config('app.is_admin', ${isAdmin ? "true" : "false"}, true)`;
+      return fn(tx);
+    })
+  ),
 }));
 
 vi.mock("../middleware/auth.js", () => ({
@@ -26,6 +34,7 @@ vi.mock("../middleware/auth.js", () => ({
       id: "user-1",
       email: "owner@example.com",
       role: "restaurant_owner",
+      restaurantId: "restaurant-1",
     };
     next();
   },

@@ -1,5 +1,10 @@
 import { Prisma } from "@prisma/client";
-import { prisma } from "../prisma.js";
+import { prisma, runWithTenantContext } from "../prisma.js";
+import {
+  findRestaurantDocumentByKey,
+  listRestaurantDocuments,
+  upsertRestaurantDocument,
+} from "./tenant-document.service.js";
 
 export type FloorTableStatus = "available" | "occupied" | "reserved" | "cleaning";
 export type ReservationStatus = "booked" | "arrived" | "cancelled" | "completed";
@@ -171,17 +176,18 @@ function normalizeOrderSessionLink(value: unknown): OrderSessionLink | null {
   };
 }
 
-async function upsertDoc(key: string, payload: unknown) {
-  await prisma.platformTrackerDocument.upsert({
-    where: { key },
-    create: { key, payload: payload as Prisma.InputJsonValue },
-    update: { payload: payload as Prisma.InputJsonValue },
+async function upsertDoc(restaurantId: string, key: string, payload: unknown) {
+  await upsertRestaurantDocument({
+    restaurantId,
+    key,
+    payload: payload as Prisma.InputJsonValue,
   });
 }
 
 export async function listFloorTables(input: { restaurantId: string; branchId: string }) {
-  const rows = await prisma.platformTrackerDocument.findMany({
-    where: { key: { startsWith: `${PREFIX.table}${input.restaurantId}:${input.branchId}:` } },
+  const rows = await listRestaurantDocuments({
+    restaurantId: input.restaurantId,
+    keyPrefix: `${PREFIX.table}${input.restaurantId}:${input.branchId}:`,
     orderBy: { updatedAt: "desc" },
   });
   return rows.map((x: { payload: unknown }) => normalizeTable(x.payload)).filter((x: TableRecord | null): x is TableRecord => !!x);
@@ -199,7 +205,11 @@ export async function upsertFloorTable(input: {
 }) {
   const tableId = input.tableId || randomId("tbl");
   const key = tableKey(input.restaurantId, input.branchId, tableId);
-  const existing = await prisma.platformTrackerDocument.findUnique({ where: { key }, select: { payload: true } });
+  const existing = await findRestaurantDocumentByKey({
+    restaurantId: input.restaurantId,
+    key,
+    select: { payload: true },
+  });
   const prev = existing ? normalizeTable(existing.payload) : null;
   const next: TableRecord = {
     id: tableId,
@@ -213,7 +223,7 @@ export async function upsertFloorTable(input: {
     created_at: prev?.created_at || nowIso(),
     updated_at: nowIso(),
   };
-  await upsertDoc(key, next);
+  await upsertDoc(input.restaurantId, key, next);
   return next;
 }
 
@@ -223,20 +233,22 @@ export async function setTableStatus(input: {
   tableId: string;
   status: FloorTableStatus;
 }) {
-  const row = await prisma.platformTrackerDocument.findUnique({
-    where: { key: tableKey(input.restaurantId, input.branchId, input.tableId) },
+  const row = await findRestaurantDocumentByKey({
+    restaurantId: input.restaurantId,
+    key: tableKey(input.restaurantId, input.branchId, input.tableId),
     select: { payload: true },
   });
   const table = row ? normalizeTable(row.payload) : null;
   if (!table) throw new Error("Table not found.");
   const next: TableRecord = { ...table, status: input.status, updated_at: nowIso() };
-  await upsertDoc(tableKey(input.restaurantId, input.branchId, input.tableId), next);
+  await upsertDoc(input.restaurantId, tableKey(input.restaurantId, input.branchId, input.tableId), next);
   return next;
 }
 
 export async function listReservations(input: { restaurantId: string; branchId: string }) {
-  const rows = await prisma.platformTrackerDocument.findMany({
-    where: { key: { startsWith: `${PREFIX.reservation}${input.restaurantId}:${input.branchId}:` } },
+  const rows = await listRestaurantDocuments({
+    restaurantId: input.restaurantId,
+    keyPrefix: `${PREFIX.reservation}${input.restaurantId}:${input.branchId}:`,
     orderBy: { updatedAt: "desc" },
   });
   return rows
@@ -270,7 +282,7 @@ export async function createReservation(input: {
     created_at: nowIso(),
     updated_at: nowIso(),
   };
-  await upsertDoc(reservationKey(input.restaurantId, input.branchId, id), reservation);
+  await upsertDoc(input.restaurantId, reservationKey(input.restaurantId, input.branchId, id), reservation);
   if (reservation.table_id) {
     await setTableStatus({
       restaurantId: input.restaurantId,
@@ -293,7 +305,11 @@ export async function updateReservation(input: {
   notes?: string | null;
 }) {
   const key = reservationKey(input.restaurantId, input.branchId, input.reservationId);
-  const row = await prisma.platformTrackerDocument.findUnique({ where: { key }, select: { payload: true } });
+  const row = await findRestaurantDocumentByKey({
+    restaurantId: input.restaurantId,
+    key,
+    select: { payload: true },
+  });
   const reservation = row ? normalizeReservation(row.payload) : null;
   if (!reservation) throw new Error("Reservation not found.");
   const next: ReservationRecord = {
@@ -305,7 +321,7 @@ export async function updateReservation(input: {
     notes: input.notes === undefined ? reservation.notes : input.notes,
     updated_at: nowIso(),
   };
-  await upsertDoc(key, next);
+  await upsertDoc(input.restaurantId, key, next);
   if (next.table_id && (next.status === "booked" || next.status === "arrived")) {
     await setTableStatus({
       restaurantId: input.restaurantId,
@@ -333,8 +349,9 @@ export async function updateReservation(input: {
 }
 
 export async function listTableSessions(input: { restaurantId: string; branchId: string }) {
-  const rows = await prisma.platformTrackerDocument.findMany({
-    where: { key: { startsWith: `${PREFIX.session}${input.restaurantId}:${input.branchId}:` } },
+  const rows = await listRestaurantDocuments({
+    restaurantId: input.restaurantId,
+    keyPrefix: `${PREFIX.session}${input.restaurantId}:${input.branchId}:`,
     orderBy: { updatedAt: "desc" },
   });
   return rows
@@ -374,7 +391,7 @@ export async function openTableSession(input: {
     order_ids: [],
     updated_at: nowIso(),
   };
-  await upsertDoc(sessionKey(input.restaurantId, input.branchId, session.id), session);
+  await upsertDoc(input.restaurantId, sessionKey(input.restaurantId, input.branchId, session.id), session);
   await setTableStatus({
     restaurantId: input.restaurantId,
     branchId: input.branchId,
@@ -391,7 +408,11 @@ export async function closeTableSession(input: {
   markStatus?: "cleaning" | "available";
 }) {
   const key = sessionKey(input.restaurantId, input.branchId, input.sessionId);
-  const row = await prisma.platformTrackerDocument.findUnique({ where: { key }, select: { payload: true } });
+  const row = await findRestaurantDocumentByKey({
+    restaurantId: input.restaurantId,
+    key,
+    select: { payload: true },
+  });
   const session = row ? normalizeSession(row.payload) : null;
   if (!session) throw new Error("Session not found.");
   const closed: TableSessionRecord = {
@@ -400,7 +421,7 @@ export async function closeTableSession(input: {
     closed_at: nowIso(),
     updated_at: nowIso(),
   };
-  await upsertDoc(key, closed);
+  await upsertDoc(input.restaurantId, key, closed);
   await setTableStatus({
     restaurantId: input.restaurantId,
     branchId: input.branchId,
@@ -424,14 +445,26 @@ export async function attachOrderToSession(input: {
   branchId: string;
   sessionId: string;
   orderId: string;
+  actorUserId: string;
+  isAdmin: boolean;
 }) {
   const key = sessionKey(input.restaurantId, input.branchId, input.sessionId);
-  const row = await prisma.platformTrackerDocument.findUnique({ where: { key }, select: { payload: true } });
+  const row = await findRestaurantDocumentByKey({
+    restaurantId: input.restaurantId,
+    key,
+    select: { payload: true },
+  });
   const session = row ? normalizeSession(row.payload) : null;
   if (!session) throw new Error("Session not found.");
-  const order = await prisma.order.findFirst({
-    where: { id: input.orderId, restaurantId: input.restaurantId },
-    select: { id: true },
+  const order = await runWithTenantContext({
+    restaurantId: input.restaurantId,
+    userId: input.actorUserId,
+    isAdmin: input.isAdmin,
+    fn: async (tx) =>
+      tx.order.findUnique({
+        where: { id: input.orderId },
+        select: { id: true },
+      }),
   });
   if (!order) throw new Error("Order not found.");
   const nextOrderIds = Array.from(new Set([...session.order_ids, input.orderId]));
@@ -440,14 +473,14 @@ export async function attachOrderToSession(input: {
     order_ids: nextOrderIds,
     updated_at: nowIso(),
   };
-  await upsertDoc(key, next);
+  await upsertDoc(input.restaurantId, key, next);
   const link: OrderSessionLink = {
     restaurant_id: input.restaurantId,
     order_id: input.orderId,
     table_session_id: input.sessionId,
     linked_at: nowIso(),
   };
-  await upsertDoc(orderSessionKey(input.restaurantId, input.orderId), link);
+  await upsertDoc(input.restaurantId, orderSessionKey(input.restaurantId, input.orderId), link);
   await setTableStatus({
     restaurantId: input.restaurantId,
     branchId: input.branchId,
@@ -458,19 +491,31 @@ export async function attachOrderToSession(input: {
 }
 
 export async function getOrderSessionLink(input: { restaurantId: string; orderId: string }) {
-  const row = await prisma.platformTrackerDocument.findUnique({
-    where: { key: orderSessionKey(input.restaurantId, input.orderId) },
+  const row = await findRestaurantDocumentByKey({
+    restaurantId: input.restaurantId,
+    key: orderSessionKey(input.restaurantId, input.orderId),
     select: { payload: true },
   });
   return row ? normalizeOrderSessionLink(row.payload) : null;
 }
 
-async function loadOrdersByIds(restaurantId: string, orderIds: string[]) {
-  if (!orderIds.length) return [];
-  return prisma.order.findMany({
-    where: { restaurantId, id: { in: orderIds } },
-    include: { items: true },
-    orderBy: { createdAt: "desc" },
+async function loadOrdersByIds(input: {
+  restaurantId: string;
+  orderIds: string[];
+  actorUserId: string;
+  isAdmin: boolean;
+}) {
+  if (!input.orderIds.length) return [];
+  return runWithTenantContext({
+    restaurantId: input.restaurantId,
+    userId: input.actorUserId,
+    isAdmin: input.isAdmin,
+    fn: async (tx) =>
+      tx.order.findMany({
+        where: { id: { in: input.orderIds } },
+        include: { items: true },
+        orderBy: { createdAt: "desc" },
+      }),
   });
 }
 
@@ -486,6 +531,8 @@ function withIdleState(session: TableSessionRecord, idleThresholdMinutes: number
 export async function getFloorSnapshot(input: {
   restaurantId: string;
   branchId: string;
+  actorUserId: string;
+  isAdmin: boolean;
   idleThresholdMinutes?: number;
 }) {
   const idleThresholdMinutes = Math.max(10, Math.floor(Number(input.idleThresholdMinutes || 90)));
@@ -495,7 +542,12 @@ export async function getFloorSnapshot(input: {
     listTableSessions({ restaurantId: input.restaurantId, branchId: input.branchId }),
   ]);
   const orderIds = Array.from(new Set(sessions.flatMap((x: TableSessionRecord) => x.order_ids)));
-  const orders = await loadOrdersByIds(input.restaurantId, orderIds);
+  const orders = await loadOrdersByIds({
+    restaurantId: input.restaurantId,
+    orderIds,
+    actorUserId: input.actorUserId,
+    isAdmin: input.isAdmin,
+  });
   const orderById = new Map(orders.map((x) => [x.id, x]));
   const sessionsWithOrders = sessions.map((session: TableSessionRecord) => ({
     ...withIdleState(session, idleThresholdMinutes),

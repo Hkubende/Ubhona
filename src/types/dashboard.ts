@@ -19,6 +19,11 @@ export type Category = {
   restaurantId: string;
   name: string;
   sortOrder: number;
+  menuControl?: {
+    restaurantId: string;
+    categoryId: string;
+    isActive: boolean;
+  } | null;
 };
 
 export type Dish = {
@@ -37,6 +42,16 @@ export type Dish = {
     stock_quantity: number | null;
     low_stock_threshold: number;
     hidden_from_public_menu: boolean;
+  } | null;
+  menuControl?: {
+    branchId: string;
+    baseAvailability: boolean;
+    stockAvailability: "available" | "low_stock" | "unavailable";
+    hiddenFromPublicMenu: boolean;
+    status: "available" | "low_stock" | "paused" | "unavailable";
+    isVisibleOnPublicMenu: boolean;
+    isOrderable: boolean;
+    blockingReason: "dish_paused" | "branch_unavailable" | "hidden_from_public_menu" | null;
   } | null;
   popularityCount?: number;
 };
