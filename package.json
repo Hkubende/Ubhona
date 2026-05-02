@@ -29,6 +29,7 @@
     "preview": "vite preview",
     "codex": "codex",
     "check:all": "npm run validate:data && npm run validate:assets && npm run validate:dishes && npm run build && npm run validate:critical-regressions",
+    "check:ci": "npm run validate:data && npm run build && npm --prefix backend run prisma:generate && npm --prefix backend run build && npm --prefix backend run test",
     "precommit": "npm run check:all",
     "test:storefront-regression": "playwright test --config=playwright.storefront.config.mjs tests/storefront-category-visibility.spec.mjs",
     "test:billing-regression": "playwright test --config=playwright.storefront.config.mjs tests/billing-failed-timeout-truthfulness.spec.mjs",
