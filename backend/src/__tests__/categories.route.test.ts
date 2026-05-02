@@ -3,8 +3,9 @@ import request from "supertest";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const categoryCreateMock = vi.fn();
-const runWithDbRlsContextMock = vi.fn();
+const runWithTenantContextMock = vi.fn();
 const upsertCategoryMenuControlMock = vi.fn();
+const upsertCategoryMenuControlTxMock = vi.fn();
 
 vi.mock("../middleware/auth.js", () => ({
   requireAuth: (req: any, _res: any, next: any) => {
@@ -18,35 +19,33 @@ vi.mock("../middleware/auth.js", () => ({
   },
 }));
 
-vi.mock("../db-rls.js", () => ({
-  runWithDbRlsContext: runWithDbRlsContextMock,
-}));
-
 vi.mock("../prisma.js", () => ({
-  prisma: {
-    category: {
-      create: categoryCreateMock,
-    },
-  },
-  runWithTenantContext: vi.fn(),
+  runWithTenantContext: runWithTenantContextMock,
 }));
 
 vi.mock("../services/category-control.service.js", () => ({
   listCategoryMenuControls: vi.fn(),
   upsertCategoryMenuControl: upsertCategoryMenuControlMock,
+  upsertCategoryMenuControlTx: upsertCategoryMenuControlTxMock,
 }));
 
 describe("categoriesRouter POST /", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    runWithDbRlsContextMock.mockImplementation(async (_context, callback) => callback());
+    runWithTenantContextMock.mockImplementation(async ({ fn }) =>
+      fn({
+        category: {
+          create: categoryCreateMock,
+        },
+      })
+    );
     categoryCreateMock.mockResolvedValue({
       id: "cat-1",
       restaurantId: "restaurant-1",
       name: "Main",
       sortOrder: 0,
     });
-    upsertCategoryMenuControlMock.mockResolvedValue({
+    upsertCategoryMenuControlTxMock.mockResolvedValue({
       restaurantId: "restaurant-1",
       categoryId: "cat-1",
       isActive: true,
@@ -67,13 +66,13 @@ describe("categoriesRouter POST /", () => {
     });
 
     expect(response.status).toBe(200);
-    expect(runWithDbRlsContextMock).toHaveBeenCalledWith(
-      {
+    expect(runWithTenantContextMock).toHaveBeenCalledWith(
+      expect.objectContaining({
         userId: "user-1",
         restaurantId: "restaurant-1",
         isAdmin: false,
-      },
-      expect.any(Function)
+        fn: expect.any(Function),
+      })
     );
     expect(categoryCreateMock).toHaveBeenCalledWith({
       data: {
@@ -82,7 +81,7 @@ describe("categoriesRouter POST /", () => {
         sortOrder: 0,
       },
     });
-    expect(upsertCategoryMenuControlMock).toHaveBeenCalledWith({
+    expect(upsertCategoryMenuControlTxMock).toHaveBeenCalledWith(expect.any(Object), {
       restaurantId: "restaurant-1",
       categoryId: "cat-1",
       isActive: true,

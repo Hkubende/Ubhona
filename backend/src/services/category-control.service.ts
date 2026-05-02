@@ -1,5 +1,9 @@
-import { Prisma } from "@prisma/client";
+import { Prisma, type PrismaClient } from "@prisma/client";
 import { listRestaurantDocuments, findRestaurantDocumentByKey, upsertRestaurantDocument } from "./tenant-document.service.js";
+import {
+  findRestaurantDocumentByKeyTx,
+  upsertRestaurantDocumentTx,
+} from "./tenant-document.service.js";
 
 export type CategoryMenuControl = {
   restaurantId: string;
@@ -9,6 +13,7 @@ export type CategoryMenuControl = {
 };
 
 const CATEGORY_CONTROL_KEY_PREFIX = "category_control:";
+type CategoryControlClient = Pick<PrismaClient | Prisma.TransactionClient, "platformTrackerDocument">;
 
 function categoryControlKey(restaurantId: string, categoryId: string) {
   return `${CATEGORY_CONTROL_KEY_PREFIX}${restaurantId}:${categoryId}`;
@@ -53,6 +58,19 @@ export async function getCategoryMenuControl(input: { restaurantId: string; cate
   return toCategoryMenuControl(row.payload);
 }
 
+export async function getCategoryMenuControlTx(
+  client: CategoryControlClient,
+  input: { restaurantId: string; categoryId: string }
+) {
+  const row = await findRestaurantDocumentByKeyTx(client, {
+    restaurantId: input.restaurantId,
+    key: categoryControlKey(input.restaurantId, input.categoryId),
+    select: { payload: true },
+  });
+  if (!row) return null;
+  return toCategoryMenuControl(row.payload);
+}
+
 export async function upsertCategoryMenuControl(input: { restaurantId: string; categoryId: string; isActive?: boolean }) {
   const existing = await getCategoryMenuControl({
     restaurantId: input.restaurantId,
@@ -66,6 +84,29 @@ export async function upsertCategoryMenuControl(input: { restaurantId: string; c
   });
   if (!next) throw new Error("Invalid category control payload.");
   await upsertRestaurantDocument({
+    restaurantId: input.restaurantId,
+    key: categoryControlKey(input.restaurantId, input.categoryId),
+    payload: next as Prisma.InputJsonValue,
+  });
+  return next;
+}
+
+export async function upsertCategoryMenuControlTx(
+  client: CategoryControlClient,
+  input: { restaurantId: string; categoryId: string; isActive?: boolean }
+) {
+  const existing = await getCategoryMenuControlTx(client, {
+    restaurantId: input.restaurantId,
+    categoryId: input.categoryId,
+  });
+  const next = toCategoryMenuControl({
+    restaurantId: input.restaurantId,
+    categoryId: input.categoryId,
+    isActive: input.isActive ?? existing?.isActive ?? true,
+    updatedAt: new Date().toISOString(),
+  });
+  if (!next) throw new Error("Invalid category control payload.");
+  await upsertRestaurantDocumentTx(client, {
     restaurantId: input.restaurantId,
     key: categoryControlKey(input.restaurantId, input.categoryId),
     payload: next as Prisma.InputJsonValue,

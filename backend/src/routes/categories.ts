@@ -1,12 +1,12 @@
 import { Router } from "express";
 import { z } from "zod";
 import { requireAuth } from "../middleware/auth.js";
-import { runWithDbRlsContext } from "../db-rls.js";
 import type { AuthRequest } from "../types.js";
-import { prisma, runWithTenantContext } from "../prisma.js";
+import { runWithTenantContext } from "../prisma.js";
 import {
   listCategoryMenuControls,
   upsertCategoryMenuControl,
+  upsertCategoryMenuControlTx,
 } from "../services/category-control.service.js";
 
 export const categoriesRouter = Router();
@@ -66,21 +66,24 @@ categoriesRouter.post("/", async (req: AuthRequest, res) => {
       })
       .parse(req.body);
 
-    const payload = await runWithDbRlsContext(tenantContext, async () => {
-      const category = await prisma.category.create({
-        data: {
+    const payload = await runWithTenantContext({
+      ...tenantContext,
+      fn: async (tx) => {
+        const category = await tx.category.create({
+          data: {
+            restaurantId: tenantContext.restaurantId,
+            name: body.name.trim(),
+            sortOrder: body.sortOrder ?? 0,
+          },
+        });
+        const menuControl = await upsertCategoryMenuControlTx(tx, {
           restaurantId: tenantContext.restaurantId,
-          name: body.name.trim(),
-          sortOrder: body.sortOrder ?? 0,
-        },
-      });
-      const menuControl = await upsertCategoryMenuControl({
-        restaurantId: tenantContext.restaurantId,
-        categoryId: category.id,
-        isActive: body.isActive,
-      });
+          categoryId: category.id,
+          isActive: body.isActive,
+        });
 
-      return { ...category, menuControl };
+        return { ...category, menuControl };
+      },
     });
 
     res.json(payload);
