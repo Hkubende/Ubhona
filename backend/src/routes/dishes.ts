@@ -109,16 +109,16 @@ dishesRouter.post("/", async (req: AuthRequest, res) => {
       .parse(req.body);
     const resolvedThumbUrl = body.thumbnail_url?.trim() || body.thumbnailUrl?.trim() || body.thumbUrl?.trim() || "";
 
+    const dishLimit = await getRestaurantLimitStatus(restaurant as any, "dishes");
+    if (dishLimit.reached) {
+      throw new Error(`PLAN_LIMIT_REACHED:${dishLimit.usageLimit}`);
+    }
+
     const dish = await runWithTenantContext({
       userId: tenantContext.userId,
       restaurantId: tenantContext.restaurantId,
       isAdmin: tenantContext.isAdmin,
       fn: async (tx) => {
-        const dishLimit = await getRestaurantLimitStatus(restaurant as any, "dishes", tx);
-        if (dishLimit.reached) {
-          throw new Error(`PLAN_LIMIT_REACHED:${dishLimit.usageLimit}`);
-        }
-
         const created = await tx.dish.create({
           data: {
             restaurantId: tenantContext.restaurantId,
@@ -132,11 +132,11 @@ dishesRouter.post("/", async (req: AuthRequest, res) => {
           },
         });
 
-        await incrementRestaurantUsage(restaurant as any, "dishes", 1, tx);
         return created;
       },
     });
 
+    await incrementRestaurantUsage(restaurant as any, "dishes", 1);
     await recordActivityEvent({
       actorUserId: tenantContext.userId,
       actorRole: tenantContext.role,

@@ -122,7 +122,7 @@ describe("dishesRouter", () => {
     expect(String(mocks.tx.$executeRaw.mock.calls[0][0])).toContain("app.user_id");
     expect(String(mocks.tx.$executeRaw.mock.calls[1][0])).toContain("app.restaurant_id");
     expect(String(mocks.tx.$executeRaw.mock.calls[2][0])).toContain("app.is_admin");
-    expect(mocks.getRestaurantLimitStatus).toHaveBeenCalledWith(expect.objectContaining({ id: "restaurant-1" }), "dishes", mocks.tx);
+    expect(mocks.getRestaurantLimitStatus).toHaveBeenCalledWith(expect.objectContaining({ id: "restaurant-1" }), "dishes");
     expect(mocks.tx.dish.create).toHaveBeenCalledWith({
       data: {
         restaurantId: "restaurant-1",
@@ -138,8 +138,7 @@ describe("dishesRouter", () => {
     expect(mocks.incrementRestaurantUsage).toHaveBeenCalledWith(
       expect.objectContaining({ id: "restaurant-1" }),
       "dishes",
-      1,
-      mocks.tx
+      1
     );
   });
 });
