@@ -17,7 +17,7 @@ export function SidebarLogoutButton({
       onClick={onLogout}
       aria-label="Logout"
       className={cn(
-        "h-10 w-full rounded-xl border-transparent px-3 text-text-secondary/85 hover:border-border/70 hover:bg-white/[0.06] hover:text-text-primary",
+        "h-10 w-full rounded-xl border-transparent px-3 text-text-secondary/85 hover:border-border/70 hover:bg-[color:var(--ui-hover-surface)] hover:text-text-primary",
         collapsed ? "justify-center px-0" : "justify-start"
       )}
       variant="ghost"

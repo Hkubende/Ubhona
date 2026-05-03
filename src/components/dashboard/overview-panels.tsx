@@ -12,7 +12,7 @@ import {
   SectionHeader,
   StatusBadge,
 } from "./dashboard-primitives";
-import { Avatar } from "../ui/Avatar";
+import { AnimatedLayoutModalCard } from "../ui/AnimatedLayoutModalCard";
 import { cn } from "../../lib/utils";
 import { spacing, tokens, typography } from "../../design-system";
 
@@ -216,32 +216,27 @@ export function PopularDishesPanel({
       {popularDishes.length ? (
         <div className={spacing.stackSm}>
           {popularDishes.map((dish) => (
-            <div
+            <AnimatedLayoutModalCard
               key={dish.dishId}
+              id={`popular-dish-${dish.dishId}`}
+              title={dish.name}
+              subtitle="Popular dish"
+              description="A quick performance preview for menu reviews, weekly planning, and deciding what to feature next."
+              imageUrl={dishMetaById?.[dish.dishId]?.imageUrl}
+              stats={[
+                { label: "Orders", value: `${dish.count} this week` },
+                { label: "Price", value: formatKsh(dishMetaById?.[dish.dishId]?.price || 0) },
+                { label: "Revenue", value: formatKsh(dish.revenue || 0) },
+              ]}
               className={cn(tokens.classes.panelInset, "px-3 py-2.5")}
+              cta={
+                <Link to="/dashboard/menu" className={buttonVariants({ variant: "secondary", size: "sm" })}>
+                  Open Menu Editor
+                </Link>
+              }
             >
-              <div className="flex items-center justify-between gap-3">
-                <div className="flex items-center gap-2.5">
-                  <Avatar
-                    src={dishMetaById?.[dish.dishId]?.imageUrl}
-                    alt={dish.name}
-                    fallback={dish.name.slice(0, 2)}
-                    size="sm"
-                    className="rounded-lg border-border/80"
-                  />
-                  <div>
-                    <div className="font-semibold text-text-primary">{dish.name}</div>
-                    <div className="text-xs text-text-secondary/68">{dish.count} orders this week</div>
-                  </div>
-                </div>
-                <div className="text-right">
-                  <div className="text-sm font-semibold text-text-primary">
-                    {formatKsh(dishMetaById?.[dish.dishId]?.price || 0)}
-                  </div>
-                  <div className="text-[11px] text-text-secondary/60">{formatKsh(dish.revenue || 0)} revenue</div>
-                </div>
-              </div>
-            </div>
+              Use this dish preview to compare order pull, expected revenue, and visual quality before promoting it on the storefront.
+            </AnimatedLayoutModalCard>
           ))}
         </div>
       ) : (

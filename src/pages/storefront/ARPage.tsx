@@ -10,8 +10,11 @@ import { addStorefrontCartItem, loadStorefrontCart, saveStorefrontCart } from ".
 import { trackAnalyticsEvent } from "../../lib/analytics";
 import { BackButton } from "../../components/ui/back-button";
 import { Button } from "../../components/ui/Button";
+import { UbhonaLoader } from "../../components/ui/ubhona-loader";
 import { cn } from "../../lib/utils";
 import { tokens } from "../../design-system";
+import { applyDishImageFallback, getDishImageVariantUrl } from "../../lib/image-variants";
+import { getStorefrontBrandColors } from "../../lib/storefront-theme";
 
 export default function ARPage() {
   const navigate = useNavigate();
@@ -66,9 +69,9 @@ export default function ARPage() {
   }, [dishes, searchParams]);
 
   const selected = dishes[index];
-  const primary = restaurant?.themePrimary || "#FF6A1A";
   const logo = restaurant?.logoUrl || `${import.meta.env.BASE_URL}ubhona-logo.jpeg`;
   const tagline = restaurant?.shortDescription || "Visualize your meal before you order.";
+  const heroAccent = getStorefrontBrandColors(restaurant ?? {}).heroAccent;
 
   React.useEffect(() => {
     if (!selected) return;
@@ -146,12 +149,12 @@ export default function ARPage() {
   if (error) {
     const notFound = /not found/i.test(error);
     return (
-      <div className="min-h-screen bg-[#0b0b10] p-8 text-white">
+      <div className={cn(tokens.classes.storefrontShell, "p-8")}>
         <div className="ubhona-storefront-panel mx-auto max-w-4xl p-8 text-center">
-          <div className="text-2xl font-semibold tracking-[-0.03em] text-orange-300">
+          <div className="ubhona-storefront-text-accent text-2xl font-semibold tracking-[-0.03em]">
             {notFound ? "Restaurant not found" : "AR unavailable"}
           </div>
-          <p className="mt-2 text-sm text-white/65">
+          <p className="ubhona-storefront-text-secondary mt-2 text-sm">
             {notFound ? "Check the storefront link and try again." : error}
           </p>
         </div>
@@ -160,23 +163,24 @@ export default function ARPage() {
   }
 
   if (!restaurant) {
-    return <div className="ubhona-storefront-shell min-h-screen p-8 text-white/70">Loading AR...</div>;
+    return <UbhonaLoader fullScreen label="Loading AR" shellClassName={tokens.classes.storefrontShell} />;
   }
 
   if (!dishes.length || !selected) {
     return (
-      <div className="min-h-screen bg-[#0b0b10] p-8 text-white">
+      <div className={cn(tokens.classes.storefrontShell, "p-8")}>
         <div className="ubhona-storefront-panel mx-auto max-w-4xl p-8 text-center">
-          <div className="text-2xl font-semibold tracking-[-0.03em] text-orange-300">No AR dishes available</div>
-          <p className="mt-2 text-sm text-white/65">
+          <div className="ubhona-storefront-text-accent text-2xl font-semibold tracking-[-0.03em]">No AR dishes available</div>
+          <p className="ubhona-storefront-text-secondary mt-2 text-sm">
             This restaurant has no available dishes with AR previews right now.
           </p>
-          <button
+          <Button
             onClick={() => navigate(`/r/${slug}/menu`)}
-            className="mt-4 rounded-2xl border border-white/10 bg-white/[0.06] px-4 py-2 text-sm font-bold"
+            variant="secondary"
+            className="mt-4"
           >
             Back to Menu
-          </button>
+          </Button>
         </div>
       </div>
     );
@@ -193,8 +197,8 @@ export default function ARPage() {
           />
           <img src={logo} alt={restaurant.name} className="h-6 w-6 rounded-md object-cover" />
           <div className="leading-tight">
-            <div className="text-sm font-semibold tracking-[-0.02em]" style={{ color: primary }}>{restaurant.name}</div>
-            <div className="max-w-[220px] truncate text-[10px] text-white/65 sm:max-w-[320px]">{tagline}</div>
+            <div className="text-sm font-semibold tracking-[-0.02em]" style={{ color: heroAccent }}>{restaurant.name}</div>
+            <div className="ubhona-storefront-text-secondary max-w-[220px] truncate text-[10px] sm:max-w-[320px]">{tagline}</div>
           </div>
         </div>
         <Button
@@ -226,14 +230,21 @@ export default function ARPage() {
 
       {!isModelLoaded && !hasModelError ? (
         <div className="pointer-events-none absolute inset-0">
-          <img src={selected.thumbUrl} alt={selected.name} className="h-full w-full object-cover blur-xl" />
-          <div className="absolute inset-0 bg-black/45" />
+          <img
+            src={getDishImageVariantUrl(selected.thumbUrl, "medium")}
+            alt={selected.name}
+            loading="lazy"
+            decoding="async"
+            onError={(event) => applyDishImageFallback(event, selected.thumbUrl)}
+            className="h-full w-full object-cover blur-xl"
+          />
+          <div className="ubhona-storefront-overlay-backdrop absolute inset-0" />
         </div>
       ) : null}
 
       {hasModelError ? (
-        <div className="pointer-events-none absolute inset-0 grid place-items-center bg-black/35">
-          <div className="rounded-2xl border border-orange-300/35 bg-black/70 px-4 py-3 text-center text-sm text-orange-200">
+        <div className="ubhona-storefront-overlay-alert-layer pointer-events-none absolute inset-0 grid place-items-center">
+          <div className="ubhona-storefront-overlay-card ubhona-storefront-text-accent rounded-2xl px-4 py-3 text-center text-sm">
             Could not load this 3D model. Try another dish.
           </div>
         </div>
@@ -241,8 +252,8 @@ export default function ARPage() {
 
       <div className="ubhona-storefront-floating absolute inset-x-3 bottom-3 z-30 p-3">
         <div className="mb-2 flex items-center justify-between">
-          <div className="font-semibold tracking-[-0.02em]">{selected.name}</div>
-          <div className="font-semibold text-orange-300">KSh {selected.price.toLocaleString("en-KE")}</div>
+          <div className="ubhona-storefront-text-primary font-semibold tracking-[-0.02em]">{selected.name}</div>
+          <div className="ubhona-storefront-text-accent font-semibold">KSh {selected.price.toLocaleString("en-KE")}</div>
         </div>
         <div className="grid grid-cols-3 gap-2">
           <Button
@@ -263,7 +274,6 @@ export default function ARPage() {
             onClick={addToCart}
             variant="primary"
             size="lg"
-            style={{ backgroundColor: primary }}
           >
             Add
           </Button>
@@ -276,7 +286,7 @@ export default function ARPage() {
         >
           Checkout
         </Button>
-        <div className="mt-3 text-center text-[10px] font-semibold uppercase tracking-[0.14em] text-[#B8AEA3]/75">
+        <div className="ubhona-storefront-text-muted mt-3 text-center text-[10px] font-semibold uppercase tracking-[0.14em]">
           Powered by Ubhona
         </div>
       </div>

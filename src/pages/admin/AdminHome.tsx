@@ -19,17 +19,17 @@ export default function AdminHome() {
   }, []);
 
   return (
-    <div className="min-h-screen bg-[#0b0b10] text-white">
+    <div className="min-h-screen bg-app-bg text-text-primary">
       <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
-        <div className="mb-6 rounded-3xl border border-white/10 bg-black/35 p-5 backdrop-blur-xl">
+        <div className="ui-surface mb-6 rounded-3xl p-5 backdrop-blur-xl">
           <div className="flex items-center gap-2 text-xs font-black uppercase tracking-wide text-emerald-300">
             <ShieldCheck className="h-4 w-4" />
             Platform Admin
           </div>
           <div className="mt-2 text-3xl font-black">
-            <span className="text-orange-400">Ubhona</span> Control Center
+            <span className="text-primary">Ubhona</span> Control Center
           </div>
-          <div className="mt-1 text-sm text-white/60">
+          <div className="mt-1 text-sm text-text-secondary/70">
             Monitor restaurants, subscriptions, and support.
           </div>
         </div>
@@ -41,22 +41,22 @@ export default function AdminHome() {
         ) : null}
 
         <div className="mb-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <div className="rounded-3xl border border-white/10 bg-white/[0.04] p-4">
-            <div className="text-xs text-white/55">Restaurants</div>
+          <div className="ui-panel-inset rounded-3xl p-4">
+            <div className="text-xs text-text-secondary/60">Restaurants</div>
             <div className="mt-2 text-2xl font-black text-orange-300">{metrics?.restaurants ?? "-"}</div>
           </div>
-          <div className="rounded-3xl border border-white/10 bg-white/[0.04] p-4">
-            <div className="text-xs text-white/55">Orders</div>
+          <div className="ui-panel-inset rounded-3xl p-4">
+            <div className="text-xs text-text-secondary/60">Orders</div>
             <div className="mt-2 text-2xl font-black text-emerald-300">{metrics?.orders ?? "-"}</div>
           </div>
-          <div className="rounded-3xl border border-white/10 bg-white/[0.04] p-4">
-            <div className="text-xs text-white/55">Revenue</div>
+          <div className="ui-panel-inset rounded-3xl p-4">
+            <div className="text-xs text-text-secondary/60">Revenue</div>
             <div className="mt-2 text-2xl font-black text-cyan-300">
               {metrics ? formatKsh(metrics.totalRevenue) : "-"}
             </div>
           </div>
-          <div className="rounded-3xl border border-white/10 bg-white/[0.04] p-4">
-            <div className="text-xs text-white/55">Failed Payments</div>
+          <div className="ui-panel-inset rounded-3xl p-4">
+            <div className="text-xs text-text-secondary/60">Failed Payments</div>
             <div className="mt-2 text-2xl font-black text-red-300">{metrics?.failedPayments ?? "-"}</div>
           </div>
         </div>
@@ -64,35 +64,35 @@ export default function AdminHome() {
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
           <button
             onClick={() => navigate("/admin/restaurants")}
-            className="rounded-3xl border border-white/10 bg-white/[0.04] p-5 text-left hover:bg-white/[0.07]"
+            className="ui-panel-inset rounded-3xl p-5 text-left hover:bg-[color:var(--ui-hover-surface)]"
           >
             <Building2 className="h-6 w-6 text-orange-300" />
             <div className="mt-3 text-lg font-black">Restaurants</div>
-            <div className="text-sm text-white/60">Search, filter, suspend/reactivate, and inspect usage.</div>
+            <div className="text-sm text-text-secondary/70">Search, filter, suspend/reactivate, and inspect usage.</div>
           </button>
           <button
             onClick={() => navigate("/admin/billing")}
-            className="rounded-3xl border border-white/10 bg-white/[0.04] p-5 text-left hover:bg-white/[0.07]"
+            className="ui-panel-inset rounded-3xl p-5 text-left hover:bg-[color:var(--ui-hover-surface)]"
           >
             <CreditCard className="h-6 w-6 text-emerald-300" />
             <div className="mt-3 text-lg font-black">Billing</div>
-            <div className="text-sm text-white/60">Plan distribution, status mix, and renewal oversight.</div>
+            <div className="text-sm text-text-secondary/70">Plan distribution, status mix, and renewal oversight.</div>
           </button>
           <button
             onClick={() => navigate("/admin/support")}
-            className="rounded-3xl border border-white/10 bg-white/[0.04] p-5 text-left hover:bg-white/[0.07]"
+            className="ui-panel-inset rounded-3xl p-5 text-left hover:bg-[color:var(--ui-hover-surface)]"
           >
             <Headset className="h-6 w-6 text-cyan-300" />
             <div className="mt-3 text-lg font-black">Support</div>
-            <div className="text-sm text-white/60">Failed payments and subscription support signals.</div>
+            <div className="text-sm text-text-secondary/70">Failed payments and subscription support signals.</div>
           </button>
           <button
             onClick={() => navigate("/platform-tracker")}
-            className="rounded-3xl border border-white/10 bg-white/[0.04] p-5 text-left hover:bg-white/[0.07]"
+            className="ui-panel-inset rounded-3xl p-5 text-left hover:bg-[color:var(--ui-hover-surface)]"
           >
             <FolderKanban className="h-6 w-6 text-amber-300" />
             <div className="mt-3 text-lg font-black">Platform Tracker</div>
-            <div className="text-sm text-white/60">Track roadmap work across customer, dashboard, payments, and admin.</div>
+            <div className="text-sm text-text-secondary/70">Track roadmap work across customer, dashboard, payments, and admin.</div>
           </button>
         </div>
       </div>

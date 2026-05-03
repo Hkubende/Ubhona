@@ -7,9 +7,11 @@ import {
   syncRestaurantProfile,
   validateRestaurantSlug,
 } from "../lib/restaurant";
+import { trackLaunchFunnelEvent } from "../lib/analytics";
 import { getQrCodeImageUrl, getStorefrontMenuUrl } from "../lib/qr";
 
 const LOGO_SRC = `${import.meta.env.BASE_URL}ubhona-logo.jpeg`;
+const ONBOARDING_DEFAULT_DISH_THUMB = `${import.meta.env.BASE_URL}thumbs/burger.png`;
 const ONBOARDING_DRAFT_KEY = "mv_onboarding_draft_v2";
 
 type OnboardingStep = 1 | 2 | 3 | 4;
@@ -71,6 +73,12 @@ export default function Onboarding() {
   const [notice, setNotice] = React.useState("");
   const [isHydrating, setIsHydrating] = React.useState(true);
   const [saving, setSaving] = React.useState(false);
+  const onboardingStartTrackedRef = React.useRef(false);
+
+  const draftStorageKey = React.useMemo(() => {
+    const normalizedUserId = userId.trim();
+    return normalizedUserId ? `${ONBOARDING_DRAFT_KEY}:${normalizedUserId}` : ONBOARDING_DRAFT_KEY;
+  }, [userId]);
 
   const normalizedSlug = React.useMemo(() => slugify(slug || name), [slug, name]);
   const manualDishes = React.useMemo(() => parseManualDishes(manualMenuText), [manualMenuText]);
@@ -89,7 +97,7 @@ export default function Onboarding() {
 
   const loadDraft = React.useCallback(() => {
     try {
-      const raw = localStorage.getItem(ONBOARDING_DRAFT_KEY);
+      const raw = localStorage.getItem(draftStorageKey);
       if (!raw) return;
       const draft = JSON.parse(raw) as Record<string, unknown>;
       const rawStep = Number(draft.step || 1);
@@ -124,7 +132,7 @@ export default function Onboarding() {
     } catch {
       // Ignore malformed draft.
     }
-  }, [userEmail]);
+  }, [draftStorageKey, userEmail]);
 
   React.useEffect(() => {
     if (!userId) {
@@ -135,6 +143,13 @@ export default function Onboarding() {
       const remote = await syncRestaurantProfile();
       const existing = remote || getRestaurantProfile();
       if (!existing || allowPreviewMode) {
+        if (!onboardingStartTrackedRef.current) {
+          onboardingStartTrackedRef.current = true;
+          void trackLaunchFunnelEvent("onboarding_start", {
+            step: 1,
+            previewMode: allowPreviewMode,
+          });
+        }
         loadDraft();
         setIsHydrating(false);
         return;
@@ -165,7 +180,7 @@ export default function Onboarding() {
         manualMenuText,
         simulateFirstOrder,
       };
-      localStorage.setItem(ONBOARDING_DRAFT_KEY, JSON.stringify(payload));
+      localStorage.setItem(draftStorageKey, JSON.stringify(payload));
     }, 250);
     return () => window.clearTimeout(handle);
   }, [
@@ -186,6 +201,7 @@ export default function Onboarding() {
     simpleDishes,
     manualMenuText,
     simulateFirstOrder,
+    draftStorageKey,
   ]);
 
   const addSimpleDish = () => {
@@ -280,7 +296,7 @@ export default function Onboarding() {
           name: dish.name,
           desc: "Added during onboarding.",
           price: dish.price,
-          thumb: "",
+          thumb: ONBOARDING_DEFAULT_DISH_THUMB,
           model: "",
           isAvailable: true,
         });
@@ -315,7 +331,12 @@ export default function Onboarding() {
         });
       }
 
-      localStorage.removeItem(ONBOARDING_DRAFT_KEY);
+      localStorage.removeItem(draftStorageKey);
+      void trackLaunchFunnelEvent("onboarding_complete", {
+        step: 4,
+        slug: normalizedSlug,
+        dishCount: createdDishes.length,
+      });
       navigate("/dashboard");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to complete onboarding.");
@@ -325,19 +346,23 @@ export default function Onboarding() {
   };
 
   const stepClass = (target: OnboardingStep) =>
-    `rounded-full px-3 py-1 text-xs font-bold ${step >= target ? "bg-[#FF6A1A] text-[#120c08]" : "bg-white/10 text-white/65"}`;
+    `rounded-full px-3 py-1 text-xs font-bold ${
+      step >= target
+        ? "bg-primary text-[color:var(--color-primary-foreground)]"
+        : "border border-border bg-[color:var(--ui-note-icon-bg)] text-text-secondary/68"
+    }`;
 
   return (
-    <div className="min-h-screen bg-[#0b0b10] px-4 py-8 text-white">
-      <div className="mx-auto max-w-5xl rounded-3xl border border-white/10 bg-white/[0.04] p-6 backdrop-blur-xl">
+    <div className="min-h-screen bg-app-bg px-4 py-8 text-text-primary">
+      <div className="ui-surface mx-auto max-w-5xl rounded-3xl p-6 backdrop-blur-xl">
         <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-3">
             <img src={logo.trim() || LOGO_SRC} alt="Ubhona" className="h-11 w-11 rounded-2xl object-cover" />
             <div>
               <div className="text-xl font-black">
-                <span className="text-[#FF6A1A]">Fast</span> Onboarding
+                <span className="text-primary">Fast</span> Onboarding
               </div>
-              <div className="text-xs text-white/65">Operational in under 10 minutes</div>
+              <div className="text-xs text-text-secondary/68">Operational in under 10 minutes</div>
             </div>
           </div>
           <div className="flex items-center gap-2">
@@ -349,11 +374,11 @@ export default function Onboarding() {
         </div>
 
         <div className="grid gap-5 lg:grid-cols-[minmax(0,1.15fr)_minmax(290px,0.85fr)]">
-          <div className="rounded-2xl border border-white/10 bg-black/25 p-4">
+          <div className="ui-panel-inset rounded-2xl p-4">
             {step === 1 ? (
               <div className="grid gap-3 md:grid-cols-2">
                 <div className="md:col-span-2">
-                  <label htmlFor="onboarding-restaurant-name" className="mb-1 block text-xs text-white/65">Restaurant Name</label>
+                  <label htmlFor="onboarding-restaurant-name" className="mb-1 block text-xs text-text-secondary/68">Restaurant Name</label>
                   <input
                     id="onboarding-restaurant-name"
                     value={name}
@@ -361,69 +386,69 @@ export default function Onboarding() {
                       setName(event.target.value);
                       if (!slug.trim()) setSlug(slugify(event.target.value));
                     }}
-                    className="w-full rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-sm outline-none"
+                    className="ui-input-control w-full rounded-xl px-3 py-2 text-sm outline-none"
                     placeholder="Ubhona Bistro"
                   />
                 </div>
                 <div>
-                  <label htmlFor="onboarding-slug" className="mb-1 block text-xs text-white/65">Slug</label>
+                  <label htmlFor="onboarding-slug" className="mb-1 block text-xs text-text-secondary/68">Slug</label>
                   <input
                     id="onboarding-slug"
                     value={slug}
                     onChange={(event) => setSlug(slugify(event.target.value))}
-                    className="w-full rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-sm outline-none"
+                    className="ui-input-control w-full rounded-xl px-3 py-2 text-sm outline-none"
                     placeholder="ubhona-bistro"
                   />
                 </div>
                 <div>
-                  <label htmlFor="onboarding-logo" className="mb-1 block text-xs text-white/65">Logo URL</label>
+                  <label htmlFor="onboarding-logo" className="mb-1 block text-xs text-text-secondary/68">Logo URL</label>
                   <input
                     id="onboarding-logo"
                     value={logo}
                     onChange={(event) => setLogo(event.target.value)}
-                    className="w-full rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-sm outline-none"
+                    className="ui-input-control w-full rounded-xl px-3 py-2 text-sm outline-none"
                     placeholder="https://.../logo.jpg"
                   />
                 </div>
                 <div>
-                  <label htmlFor="onboarding-phone" className="mb-1 block text-xs text-white/65">Phone (optional)</label>
+                  <label htmlFor="onboarding-phone" className="mb-1 block text-xs text-text-secondary/68">Phone (optional)</label>
                   <input
                     id="onboarding-phone"
                     value={phone}
                     onChange={(event) => setPhone(event.target.value)}
-                    className="w-full rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-sm outline-none"
+                    className="ui-input-control w-full rounded-xl px-3 py-2 text-sm outline-none"
                     placeholder="+254..."
                   />
                 </div>
                 <div>
-                  <label htmlFor="onboarding-email" className="mb-1 block text-xs text-white/65">Email</label>
+                  <label htmlFor="onboarding-email" className="mb-1 block text-xs text-text-secondary/68">Email</label>
                   <input
                     id="onboarding-email"
                     type="email"
                     value={email}
                     onChange={(event) => setEmail(event.target.value)}
-                    className="w-full rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-sm outline-none"
+                    className="ui-input-control w-full rounded-xl px-3 py-2 text-sm outline-none"
                     placeholder="owner@restaurant.com"
                   />
                 </div>
                 <div className="md:col-span-2">
-                  <label htmlFor="onboarding-location" className="mb-1 block text-xs text-white/65">Location (optional)</label>
+                  <label htmlFor="onboarding-location" className="mb-1 block text-xs text-text-secondary/68">Location (optional)</label>
                   <input
                     id="onboarding-location"
                     value={location}
                     onChange={(event) => setLocation(event.target.value)}
-                    className="w-full rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-sm outline-none"
+                    className="ui-input-control w-full rounded-xl px-3 py-2 text-sm outline-none"
                     placeholder="Nairobi"
                   />
                 </div>
                 <div className="md:col-span-2">
-                  <label htmlFor="onboarding-description" className="mb-1 block text-xs text-white/65">Short Description</label>
+                  <label htmlFor="onboarding-description" className="mb-1 block text-xs text-text-secondary/68">Short Description</label>
                   <textarea
                     id="onboarding-description"
                     value={description}
                     onChange={(event) => setDescription(event.target.value)}
                     rows={3}
-                    className="w-full rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-sm outline-none"
+                    className="ui-input-control w-full rounded-xl px-3 py-2 text-sm outline-none"
                     placeholder="Bold flavors, fast service."
                   />
                 </div>
@@ -436,69 +461,77 @@ export default function Onboarding() {
                   <button
                     type="button"
                     onClick={() => setMenuMode("simple")}
-                    className={`rounded-xl px-3 py-2 text-sm font-semibold ${menuMode === "simple" ? "bg-[#FF6A1A] text-[#120c08]" : "border border-white/12 bg-white/5 text-white/80"}`}
+                    className={`rounded-xl px-3 py-2 text-sm font-semibold ${
+                      menuMode === "simple"
+                        ? "bg-primary text-[color:var(--color-primary-foreground)]"
+                        : "border border-border bg-[color:var(--ui-note-icon-bg)] text-text-secondary/80"
+                    }`}
                   >
                     Simple Form
                   </button>
                   <button
                     type="button"
                     onClick={() => setMenuMode("manual")}
-                    className={`rounded-xl px-3 py-2 text-sm font-semibold ${menuMode === "manual" ? "bg-[#FF6A1A] text-[#120c08]" : "border border-white/12 bg-white/5 text-white/80"}`}
+                    className={`rounded-xl px-3 py-2 text-sm font-semibold ${
+                      menuMode === "manual"
+                        ? "bg-primary text-[color:var(--color-primary-foreground)]"
+                        : "border border-border bg-[color:var(--ui-note-icon-bg)] text-text-secondary/80"
+                    }`}
                   >
                     Manual Upload
                   </button>
                 </div>
 
                 <div>
-                  <label htmlFor="onboarding-category-name" className="mb-1 block text-xs text-white/65">Category</label>
+                  <label htmlFor="onboarding-category-name" className="mb-1 block text-xs text-text-secondary/68">Category</label>
                   <input
                     id="onboarding-category-name"
                     value={categoryName}
                     onChange={(event) => setCategoryName(event.target.value)}
-                    className="w-full rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-sm outline-none"
+                    className="ui-input-control w-full rounded-xl px-3 py-2 text-sm outline-none"
                     placeholder="Main"
                   />
                 </div>
 
                 {menuMode === "simple" ? (
-                  <div className="space-y-2 rounded-xl border border-white/10 bg-black/20 p-3">
+                  <div className="space-y-2 rounded-xl border border-border bg-[color:var(--ui-note-icon-bg)] p-3">
                     <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_120px_auto]">
                       <input
                         value={simpleDishName}
                         onChange={(event) => setSimpleDishName(event.target.value)}
-                        className="rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-sm outline-none"
+                        className="ui-input-control rounded-xl px-3 py-2 text-sm outline-none"
                         placeholder="Dish name"
                       />
                       <input
                         value={simpleDishPrice}
                         onChange={(event) => setSimpleDishPrice(event.target.value)}
-                        className="rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-sm outline-none"
+                        className="ui-input-control rounded-xl px-3 py-2 text-sm outline-none"
                         placeholder="Price"
                       />
                       <button
                         type="button"
                         onClick={addSimpleDish}
-                        className="rounded-xl bg-[#FF6A1A] px-3 py-2 text-sm font-bold text-[#120c08]"
+                        className="ui-button-primary rounded-xl px-3 py-2 text-sm font-bold"
                       >
                         Add
                       </button>
                     </div>
                     {simpleDishes.length ? (
-                      <div className="space-y-1 text-sm text-white/80">
+                      <div className="space-y-1 text-sm text-text-primary">
                         {simpleDishes.map((dish, index) => (
-                          <div key={`${dish.name}-${index}`} className="flex items-center justify-between rounded-lg border border-white/8 bg-white/[0.03] px-2 py-1.5">
+                          <div key={`${dish.name}-${index}`} className="flex items-center justify-between rounded-lg border border-border bg-surface px-2 py-1.5">
                             <span>{dish.name}</span>
                             <span>KSh {dish.price.toLocaleString("en-KE")}</span>
                           </div>
                         ))}
                       </div>
                     ) : (
-                      <p className="text-xs text-white/60">No dishes added yet.</p>
+                      <p className="text-xs text-text-secondary/68">No dishes added yet.</p>
                     )}
                   </div>
                 ) : (
                   <div>
-                    <label htmlFor="onboarding-manual-menu" className="mb-1 block text-xs text-white/65">
+                    <label htmlFor="onboarding-manual-menu" className="mb-1 block text-xs text-text-secondary/68">
                       One dish per line, format: `Name - Price`
                     </label>
                     <textarea
@@ -506,10 +539,10 @@ export default function Onboarding() {
                       value={manualMenuText}
                       onChange={(event) => setManualMenuText(event.target.value)}
                       rows={8}
-                      className="w-full rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-sm outline-none"
+                      className="ui-input-control w-full rounded-xl px-3 py-2 text-sm outline-none"
                       placeholder={"Burger & Fries - 950\nRoxie Rootbeer - 320"}
                     />
-                    <div className="mt-2 text-xs text-white/65">
+                    <div className="mt-2 text-xs text-text-secondary/68">
                       Parsed dishes: {manualDishes.length}
                     </div>
                   </div>
@@ -519,17 +552,17 @@ export default function Onboarding() {
 
             {step === 3 ? (
               <div className="space-y-3">
-                <div className="text-sm text-white/75">Scan to open your live menu instantly.</div>
+                <div className="text-sm text-text-secondary/78">Scan to open your live menu instantly.</div>
                 {qrUrl ? (
-                  <img src={qrUrl} alt="Restaurant QR code" className="h-52 w-52 rounded-2xl border border-white/12 bg-white p-2" />
+                  <img src={qrUrl} alt="Restaurant QR code" className="h-52 w-52 rounded-2xl border border-border bg-white p-2" />
                 ) : null}
-                <div className="rounded-xl border border-white/10 bg-black/25 px-3 py-2 text-xs text-white/80 break-all">
+                <div className="rounded-xl border border-border bg-[color:var(--ui-note-icon-bg)] px-3 py-2 text-xs text-text-primary break-all">
                   {storefrontUrl || "Enter restaurant name first."}
                 </div>
                 <button
                   type="button"
                   onClick={() => void copyStorefrontLink()}
-                  className="rounded-xl border border-white/15 bg-white/[0.06] px-3 py-2 text-sm font-semibold"
+                  className="ui-button-secondary rounded-xl px-3 py-2 text-sm font-semibold"
                   disabled={!storefrontUrl}
                 >
                   Copy Link
@@ -539,26 +572,26 @@ export default function Onboarding() {
 
             {step === 4 ? (
               <div className="space-y-3">
-                <div className="rounded-2xl border border-white/10 bg-black/25 p-3">
+                <div className="rounded-2xl border border-border bg-[color:var(--ui-note-icon-bg)] p-3">
                   <div className="mb-2 flex items-center gap-2">
                     <img src={logo.trim() || LOGO_SRC} alt={name || "Restaurant"} className="h-9 w-9 rounded-xl object-cover" />
                     <div>
-                      <div className="font-semibold text-[#F7F1E8]">{name || "Your Restaurant"}</div>
-                      <div className="text-xs text-white/60">@{normalizedSlug || "restaurant-slug"}</div>
+                      <div className="font-semibold text-text-primary">{name || "Your Restaurant"}</div>
+                      <div className="text-xs text-text-secondary/68">@{normalizedSlug || "restaurant-slug"}</div>
                     </div>
                   </div>
-                  <p className="text-sm text-white/72">{description || "Your storefront is ready to receive orders."}</p>
+                  <p className="text-sm text-text-secondary/78">{description || "Your storefront is ready to receive orders."}</p>
                   <div className="mt-3 space-y-1">
                     {draftDishes.slice(0, 4).map((dish, index) => (
-                      <div key={`${dish.name}-${index}`} className="flex items-center justify-between text-sm text-white/82">
+                      <div key={`${dish.name}-${index}`} className="flex items-center justify-between text-sm text-text-primary">
                         <span>{dish.name}</span>
                         <span>KSh {dish.price.toLocaleString("en-KE")}</span>
                       </div>
                     ))}
-                    {!draftDishes.length ? <div className="text-xs text-white/60">No dishes yet.</div> : null}
+                    {!draftDishes.length ? <div className="text-xs text-text-secondary/68">No dishes yet.</div> : null}
                   </div>
                 </div>
-                <label className="flex items-center gap-2 rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-xs text-white/75">
+                <label className="flex items-center gap-2 rounded-xl border border-border bg-[color:var(--ui-note-icon-bg)] px-3 py-2 text-xs text-text-secondary/78">
                   <input
                     type="checkbox"
                     checked={simulateFirstOrder}
@@ -570,7 +603,11 @@ export default function Onboarding() {
                   href={storefrontUrl || "#"}
                   target="_blank"
                   rel="noreferrer"
-                  className={`inline-block rounded-xl px-3 py-2 text-sm font-semibold ${storefrontUrl ? "bg-white/[0.08] border border-white/15" : "pointer-events-none opacity-50 border border-white/10"}`}
+                  className={`inline-block rounded-xl px-3 py-2 text-sm font-semibold ${
+                    storefrontUrl
+                      ? "ui-button-secondary"
+                      : "pointer-events-none border border-border bg-[color:var(--ui-note-icon-bg)] opacity-50"
+                  }`}
                 >
                   Open Live Preview
                 </a>
@@ -578,12 +615,12 @@ export default function Onboarding() {
             ) : null}
 
             {error ? (
-              <div className="mt-4 rounded-xl border border-red-400/30 bg-red-500/10 px-3 py-2 text-xs text-red-200">
+              <div className="mt-4 rounded-xl border border-red-400/30 bg-red-500/10 px-3 py-2 text-xs text-red-700 dark:text-red-200">
                 {error}
               </div>
             ) : null}
             {notice ? (
-              <div className="mt-4 rounded-xl border border-emerald-400/30 bg-emerald-500/10 px-3 py-2 text-xs text-emerald-200">
+              <div className="mt-4 rounded-xl border border-emerald-400/30 bg-emerald-500/10 px-3 py-2 text-xs text-emerald-700 dark:text-emerald-200">
                 {notice}
               </div>
             ) : null}
@@ -592,7 +629,7 @@ export default function Onboarding() {
               <button
                 type="button"
                 onClick={goBack}
-                className="rounded-xl border border-white/15 bg-white/[0.05] px-3 py-2 text-sm font-semibold"
+                className="ui-button-secondary rounded-xl px-3 py-2 text-sm font-semibold"
                 disabled={step === 1 || saving}
               >
                 Back
@@ -601,7 +638,7 @@ export default function Onboarding() {
                 <button
                   type="button"
                   onClick={goNext}
-                  className="rounded-xl bg-[#FF6A1A] px-4 py-2 text-sm font-black text-[#120c08]"
+                  className="ui-button-primary rounded-xl px-4 py-2 text-sm font-black"
                 >
                   Continue
                 </button>
@@ -618,25 +655,25 @@ export default function Onboarding() {
             </div>
           </div>
 
-          <div className="rounded-2xl border border-white/10 bg-black/25 p-4">
-            <div className="text-xs font-bold uppercase tracking-[0.15em] text-white/55">Progress</div>
-            <div className="mt-2 space-y-2 text-sm text-white/80">
-              <div className={step >= 1 ? "text-[#F7F1E8]" : "text-white/45"}>1. Restaurant setup</div>
-              <div className={step >= 2 ? "text-[#F7F1E8]" : "text-white/45"}>2. Menu upload</div>
-              <div className={step >= 3 ? "text-[#F7F1E8]" : "text-white/45"}>3. QR generation</div>
-              <div className={step >= 4 ? "text-[#F7F1E8]" : "text-white/45"}>4. Live preview</div>
+          <div className="ui-panel-inset rounded-2xl p-4">
+            <div className="text-xs font-bold uppercase tracking-[0.15em] text-text-secondary/58">Progress</div>
+            <div className="mt-2 space-y-2 text-sm text-text-secondary/80">
+              <div className={step >= 1 ? "text-text-primary" : "text-text-secondary/45"}>1. Restaurant setup</div>
+              <div className={step >= 2 ? "text-text-primary" : "text-text-secondary/45"}>2. Menu upload</div>
+              <div className={step >= 3 ? "text-text-primary" : "text-text-secondary/45"}>3. QR generation</div>
+              <div className={step >= 4 ? "text-text-primary" : "text-text-secondary/45"}>4. Live preview</div>
             </div>
-            <div className="mt-4 rounded-xl border border-[#FF6A1A]/30 bg-[#FF6A1A]/10 px-3 py-2 text-xs text-[#F7F1E8]">
+            <div className="mt-4 rounded-xl border border-primary/25 bg-primary/10 px-3 py-2 text-xs text-text-primary">
               Time target: under 10 minutes.
             </div>
-            <div className="mt-4 text-xs text-white/62">
-              Dishes prepared: <span className="font-semibold text-white">{draftDishes.length}</span>
+            <div className="mt-4 text-xs text-text-secondary/68">
+              Dishes prepared: <span className="font-semibold text-text-primary">{draftDishes.length}</span>
             </div>
-            <div className="mt-1 text-xs text-white/62">
-              Storefront link: <span className="font-semibold text-white">{normalizedSlug ? "Ready" : "Pending"}</span>
+            <div className="mt-1 text-xs text-text-secondary/68">
+              Storefront link: <span className="font-semibold text-text-primary">{normalizedSlug ? "Ready" : "Pending"}</span>
             </div>
-            <div className="mt-1 text-xs text-white/62">
-              Preview status: <span className="font-semibold text-white">{step >= 4 ? "Ready" : "Pending"}</span>
+            <div className="mt-1 text-xs text-text-secondary/68">
+              Preview status: <span className="font-semibold text-text-primary">{step >= 4 ? "Ready" : "Pending"}</span>
             </div>
           </div>
         </div>

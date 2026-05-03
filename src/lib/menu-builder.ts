@@ -3,6 +3,7 @@ import type { Category, Dish } from "../types/dashboard";
 export type MenuCategoryInput = {
   name: string;
   sortOrder?: number;
+  isActive?: boolean;
 };
 
 export type MenuDishInput = {
@@ -44,7 +45,6 @@ export function validateDishInput(input: MenuDishInput) {
   if (!input.name) return "Dish name is required.";
   if (!input.description) return "Dish description is required.";
   if (!Number.isFinite(input.price) || input.price <= 0) return "Price must be greater than zero.";
-  if (!input.imageUrl) return "Image URL is required.";
   return null;
 }
 

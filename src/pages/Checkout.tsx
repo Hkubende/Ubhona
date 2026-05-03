@@ -18,6 +18,7 @@ import {
 } from "../lib/orders";
 import { getEffectivePrice, loadOverrides, type PriceOverrides } from "../lib/price-overrides";
 import { BackButton } from "../components/ui/back-button";
+import { UbhonaLoader } from "../components/ui/ubhona-loader";
 import { appConfig, isStkApiConfigured } from "../lib/config";
 
 const LOGO_SRC = `${import.meta.env.BASE_URL}ubhona-logo.jpeg`;
@@ -251,11 +252,7 @@ export default function Checkout() {
           <BackButton label="Back" fallbackHref="/" />
         </div>
 
-        {loading ? (
-          <div className="rounded-3xl border border-white/10 bg-white/[0.03] p-8 text-center text-white/60">
-            Loading checkout...
-          </div>
-        ) : null}
+        {loading ? <UbhonaLoader variant="inline" label="Loading checkout" /> : null}
 
         {!loading && error ? (
           <div className="rounded-3xl border border-red-400/20 bg-red-500/10 p-6 text-sm text-red-200">{error}</div>

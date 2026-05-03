@@ -347,7 +347,7 @@ export default function InventoryPage() {
                   {Object.entries(movementReport.byType || {}).map(([type, row]) => (
                     <div key={type} className="flex items-center justify-between rounded-lg border border-white/10 px-3 py-2">
                       <div className="flex items-center gap-2">{movementBadge(type)}</div>
-                      <div className="text-xs text-white/65">{row.count} events â€¢ {row.totalAbsDelta.toFixed(2)} units</div>
+                      <div className="text-xs text-white/65">{row.count} events • {row.totalAbsDelta.toFixed(2)} units</div>
                     </div>
                   ))}
                 </div>
@@ -362,7 +362,7 @@ export default function InventoryPage() {
             {wastageReport ? (
               <div className="mt-3 space-y-2">
                 <div className="rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2 text-sm text-white/75">
-                  {wastageReport.totalWastageEvents} wastage events â€¢ {wastageReport.totalWastageQuantity.toFixed(2)} units
+                  {wastageReport.totalWastageEvents} wastage events • {wastageReport.totalWastageQuantity.toFixed(2)} units
                 </div>
                 {(wastageReport.timeline || []).slice(-7).map((point) => (
                   <div key={point.date} className="flex items-center justify-between rounded-lg border border-white/10 px-3 py-2 text-xs text-white/75">
@@ -443,13 +443,13 @@ export default function InventoryPage() {
               {purchases.slice(0, 10).map((row) => (
                 <div key={row.id} className="rounded-lg border border-white/10 px-3 py-2 text-xs text-white/76">
                   <div className="font-medium text-text-primary">Purchase {row.id}</div>
-                  <div>{new Date(row.createdAt).toLocaleString()} â€¢ {asCurrency(Number(row.totalCost || 0))}</div>
+                  <div>{new Date(row.createdAt).toLocaleString()} • {asCurrency(Number(row.totalCost || 0))}</div>
                 </div>
               ))}
               {transfers.slice(0, 10).map((row) => (
                 <div key={row.id} className="rounded-lg border border-white/10 px-3 py-2 text-xs text-white/76">
                   <div className="font-medium text-text-primary">Transfer {row.id}</div>
-                  <div>{row.fromBranchId} â†’ {row.toBranchId} â€¢ {Number(row.quantity).toFixed(2)} units</div>
+                  <div>{row.fromBranchId} ? {row.toBranchId} • {Number(row.quantity).toFixed(2)} units</div>
                 </div>
               ))}
               {!purchases.length && !transfers.length && !loading ? (

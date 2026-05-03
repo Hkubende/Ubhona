@@ -7,7 +7,7 @@ type AvatarProps = {
   fallback?: string;
   size?: "sm" | "md" | "lg";
   className?: string;
-};
+} & React.HTMLAttributes<HTMLElement>;
 
 const sizeMap = {
   sm: "h-8 w-8 text-xs",
@@ -21,6 +21,7 @@ export function Avatar({
   fallback = "U",
   size = "md",
   className,
+  ...props
 }: AvatarProps) {
   if (src) {
     return (
@@ -28,6 +29,7 @@ export function Avatar({
         src={src}
         alt={alt}
         className={cn("rounded-full border border-border object-cover", sizeMap[size], className)}
+        {...props}
       />
     );
   }
@@ -35,10 +37,11 @@ export function Avatar({
   return (
     <div
       className={cn(
-        "inline-flex items-center justify-center rounded-full border border-border bg-white/10 font-semibold text-text-secondary",
+        "inline-flex items-center justify-center rounded-full border border-border bg-[color:var(--ui-note-icon-bg)] font-semibold text-text-secondary",
         sizeMap[size],
         className
       )}
+      {...props}
     >
       {fallback.slice(0, 1).toUpperCase()}
     </div>

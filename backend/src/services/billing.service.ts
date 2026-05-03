@@ -1,5 +1,9 @@
+import { runWithPublicStorefrontDbContext } from "../db-rls.js";
 import { prisma } from "../prisma.js";
+import { findRestaurantDocumentByKey, upsertRestaurantDocument } from "./tenant-document.service.js";
 import { getBillingProvider } from "./billing-provider.service.js";
+import { recordActivityEvent } from "./activity.service.js";
+import { BILLING_PROVIDER_CALLBACK_SYSTEM_ACTOR_KEY, BILLING_PROVIDER_CALLBACK_SYSTEM_ROLE } from "./system-actors.js";
 import type {
   BillingCycle,
   BillingEvent,
@@ -149,32 +153,42 @@ function parseBillingState(value: unknown): RestaurantBillingState | null {
 }
 
 async function loadBillingState(restaurantId: string) {
-  const doc = await prisma.platformTrackerDocument.findUnique({ where: { key: billingKey(restaurantId) } });
-  return doc ? parseBillingState(doc.payload) : null;
+  return runWithPublicStorefrontDbContext(restaurantId, async () => {
+    const doc = await findRestaurantDocumentByKey({
+      restaurantId,
+      key: billingKey(restaurantId),
+    });
+    return doc ? parseBillingState(doc.payload) : null;
+  });
 }
 
 async function saveBillingState(state: RestaurantBillingState) {
-  await prisma.platformTrackerDocument.upsert({
-    where: { key: billingKey(state.restaurantId) },
-    create: { key: billingKey(state.restaurantId), payload: state as unknown as object },
-    update: { payload: state as unknown as object },
+  await runWithPublicStorefrontDbContext(state.restaurantId, async () => {
+    await upsertRestaurantDocument({
+      restaurantId: state.restaurantId,
+      key: billingKey(state.restaurantId),
+      payload: state as unknown as object,
+    });
   });
 }
 
 async function computeUsage(restaurantId: string) {
-  const [dishes, ordersThisMonth] = await Promise.all([
-    prisma.dish.count({ where: { restaurantId } }),
-    prisma.order.count({
-      where: {
-        restaurantId,
-        createdAt: {
-          gte: monthStart(),
-          lte: monthEnd(),
+  // Billing recomputation runs as a system aggregate job, so it uses a
+  // synthetic tenant-bound context rather than an authenticated app actor.
+  return runWithPublicStorefrontDbContext(restaurantId, async () => {
+    const [dishes, ordersThisMonth] = await Promise.all([
+      prisma.dish.count(),
+      prisma.order.count({
+        where: {
+          createdAt: {
+            gte: monthStart(),
+            lte: monthEnd(),
+          },
         },
-      },
-    }),
-  ]);
-  return { dishes, ordersPerMonth: ordersThisMonth } satisfies Record<PlanLimitKey, number>;
+      }),
+    ]);
+    return { dishes, ordersPerMonth: ordersThisMonth } satisfies Record<PlanLimitKey, number>;
+  });
 }
 
 function buildEntitlements(restaurantId: string, planId: string, usage: Record<PlanLimitKey, number>) {
@@ -706,6 +720,23 @@ export async function applyBillingEvent(input: {
   return state;
 }
 
+function buildProviderCallbackEventKey(input: {
+  provider: PaymentProvider;
+  eventType: BillingEventType;
+  callbackEventKey?: string | null;
+  paymentId?: string | null;
+  invoiceId?: string | null;
+  transactionReference?: string | null;
+  checkoutRequestId?: string | null;
+}) {
+  if (input.callbackEventKey) return input.callbackEventKey;
+  return [
+    input.provider,
+    input.eventType,
+    input.paymentId || input.invoiceId || input.transactionReference || input.checkoutRequestId || "callback",
+  ].join(":");
+}
+
 export async function applyProviderCallback(input: {
   provider: PaymentProvider;
   payload: Record<string, unknown>;
@@ -729,26 +760,19 @@ export async function applyProviderCallback(input: {
     });
   }
   if (!restaurant) {
-    const maybePayment = await prisma.platformTrackerDocument.findFirst({
-      where: { key: { startsWith: BILLING_DOC_PREFIX } },
-      select: { payload: true },
-    });
-    if (maybePayment && typeof maybePayment.payload === "object") {
-      // Fallback if provider callback lacks restaurantId. Keep safe and explicit.
-      const payloadRestaurantId = String((input.payload.restaurantId as string) || "").trim();
-      if (payloadRestaurantId) {
-        restaurant = await prisma.restaurant.findUnique({
-          where: { id: payloadRestaurantId },
-          select: {
-            id: true,
-            subscriptionPlan: true,
-            subscriptionStatus: true,
-            createdAt: true,
-            trialEndsAt: true,
-            renewalDate: true,
-          },
-        });
-      }
+    const payloadRestaurantId = String((input.payload.restaurantId as string) || "").trim();
+    if (payloadRestaurantId) {
+      restaurant = await prisma.restaurant.findUnique({
+        where: { id: payloadRestaurantId },
+        select: {
+          id: true,
+          subscriptionPlan: true,
+          subscriptionStatus: true,
+          createdAt: true,
+          trialEndsAt: true,
+          renewalDate: true,
+        },
+      });
     }
   }
   if (!restaurant) throw new Error("Restaurant not found for callback.");
@@ -771,23 +795,66 @@ export async function applyProviderCallback(input: {
           : callback.internalStatus === "failed"
             ? "payment_failed"
             : "payment_reconciled";
-  return applyBillingEvent({
+  const eventKey = buildProviderCallbackEventKey({
+    provider: input.provider,
+    eventType,
+    callbackEventKey: callback.eventKey,
+    paymentId: payment?.id,
+    invoiceId: resolvedInvoiceId || null,
+    transactionReference: callback.transactionReference,
+    checkoutRequestId: callback.checkoutRequestId,
+  });
+  const eventPayload = {
+    ...callback.payload,
+    paymentId: payment?.id,
+    invoiceId: resolvedInvoiceId || undefined,
+    transactionReference: callback.transactionReference,
+    providerReference: callback.providerReference,
+    merchantRequestId: callback.merchantRequestId,
+    checkoutRequestId: callback.checkoutRequestId,
+    resultCode: callback.resultCode,
+    resultDescription: callback.resultDescription,
+  };
+  const alreadyRecorded = state.events.some((row) => row.eventKey === eventKey);
+
+  // Only the top-level provider callback ingress gets explicit system audit coverage.
+  // The lower-level billing projector stays audit-free to avoid duplicate rows for
+  // the same billing event being persisted through different call sites.
+  const nextState = await applyBillingEvent({
     restaurant,
     provider: input.provider,
     eventType,
-    eventKey: callback.eventKey,
-    payload: {
-      ...callback.payload,
-      paymentId: payment?.id,
-      invoiceId: resolvedInvoiceId || undefined,
-      transactionReference: callback.transactionReference,
-      providerReference: callback.providerReference,
-      merchantRequestId: callback.merchantRequestId,
-      checkoutRequestId: callback.checkoutRequestId,
-      resultCode: callback.resultCode,
-      resultDescription: callback.resultDescription,
-    },
+    eventKey,
+    payload: eventPayload,
   });
+
+  if (!alreadyRecorded) {
+    await recordActivityEvent({
+      systemActorKey: BILLING_PROVIDER_CALLBACK_SYSTEM_ACTOR_KEY,
+      actorRole: BILLING_PROVIDER_CALLBACK_SYSTEM_ROLE,
+      action: "billing_provider_callback_processed",
+      entityType: payment?.id ? "billing_payment" : resolvedInvoiceId ? "billing_invoice" : "billing_event",
+      entityId: payment?.id || resolvedInvoiceId || eventKey,
+      organizationId: restaurant.id,
+      restaurantId: restaurant.id,
+      source: "billing_provider_callback",
+      metadata: {
+        provider: input.provider,
+        billingEventType: eventType,
+        paymentId: payment?.id || null,
+        invoiceId: resolvedInvoiceId || null,
+        transactionReference: callback.transactionReference || null,
+        providerReference: callback.providerReference || null,
+        merchantRequestId: callback.merchantRequestId || null,
+        checkoutRequestId: callback.checkoutRequestId || null,
+        resultCode: callback.resultCode || null,
+        resultDescription: callback.resultDescription || null,
+        eventKey,
+      },
+    });
+  }
+
+  return nextState;
 }
 
 export async function markInvoiceManualPayment(input: {

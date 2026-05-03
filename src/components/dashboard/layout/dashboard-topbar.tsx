@@ -3,7 +3,7 @@ import { Topbar } from "../../layout/Topbar";
 
 export function DashboardTopbar({ children }: { children: React.ReactNode }) {
   return (
-    <Topbar retractOnScroll className="p-4 sm:p-5 lg:px-7 lg:py-5">
+    <Topbar retractOnScroll>
       {children}
     </Topbar>
   );

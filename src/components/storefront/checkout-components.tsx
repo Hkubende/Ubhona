@@ -9,16 +9,7 @@ import { cn } from "../../lib/utils";
 import { tokens, typography } from "../../design-system";
 import type { PublicDish, PublicRestaurant } from "../../lib/storefront";
 import type { StorefrontPaymentMethod } from "../../lib/storefront-payments";
-
-function resolveDishImageSrc(url: string) {
-  const fallback = `${import.meta.env.BASE_URL}ubhona-logo.jpeg`;
-  const value = String(url || "").trim();
-  if (!value) return fallback;
-  if (/^(blob:|data:)/i.test(value)) return value;
-  if (/^\//.test(value)) return value;
-  if (/^https?:\/\//i.test(value)) return value;
-  return fallback;
-}
+import { applyDishImageFallback, getDishImageVariantUrl } from "../../lib/image-variants";
 
 // eslint-disable-next-line react-refresh/only-export-components
 export function formatKsh(value: number) {
@@ -36,7 +27,7 @@ export function CartCheckoutTopBar({
     <div className={cn(tokens.classes.storefrontFloating, "mb-4 flex items-center justify-between gap-3 px-3 py-2 sm:px-4 sm:py-3")}>
       <Link
         to={`/r/${slug}/menu`}
-        className="inline-flex min-h-10 items-center gap-2 rounded-xl border border-white/12 bg-black/25 px-3 text-sm font-semibold text-text-primary transition hover:border-white/24"
+        className="ubhona-storefront-control inline-flex min-h-10 items-center gap-2 rounded-xl px-3 text-sm font-semibold text-text-primary transition"
       >
         <ArrowLeft className="h-4 w-4" />
         Back to Menu
@@ -64,16 +55,19 @@ export function CartItemsCard({
     <section className={cn(tokens.classes.storefrontPanel, "p-4 sm:p-5")}>
       <h2 className="text-lg font-semibold tracking-[-0.03em] text-text-primary">Cart Review</h2>
       {lines.length === 0 ? (
-        <div className="mt-3 rounded-xl border border-white/10 bg-black/20 p-4 text-sm text-text-secondary/75">Your cart is empty.</div>
+        <div className="ubhona-storefront-inline-surface mt-3 rounded-xl p-4 text-sm text-text-secondary/75">Your cart is empty.</div>
       ) : (
         <div className="mt-3 space-y-3">
           {lines.map((line) => (
-            <div key={line.dish.id} className="rounded-2xl border border-white/10 bg-black/20 p-3 sm:p-4">
+            <div key={line.dish.id} className="ubhona-storefront-inline-surface rounded-2xl p-3 sm:p-4">
               <div className="flex gap-3">
                 <img
-                  src={resolveDishImageSrc(line.dish.thumbUrl)}
+                  src={getDishImageVariantUrl(line.dish.thumbUrl, "small")}
                   alt={line.dish.name}
-                  className="h-16 w-16 rounded-xl border border-white/10 object-cover sm:h-20 sm:w-20"
+                  loading="lazy"
+                  decoding="async"
+                  onError={(event) => applyDishImageFallback(event, line.dish.thumbUrl)}
+                  className="ubhona-storefront-media-frame h-16 w-16 rounded-xl object-cover sm:h-20 sm:w-20"
                 />
                 <div className="min-w-0 flex-1">
                   <div className="flex items-start justify-between gap-2">
@@ -87,7 +81,7 @@ export function CartItemsCard({
                     <button
                       type="button"
                       onClick={() => onDecrease(line.dish.id)}
-                      className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-white/12 bg-black/30 text-text-primary transition hover:border-white/24"
+                      className="ubhona-storefront-control inline-flex h-9 w-9 items-center justify-center rounded-lg text-text-primary transition"
                       aria-label="Decrease quantity"
                     >
                       <Minus className="h-4 w-4" />
@@ -96,7 +90,7 @@ export function CartItemsCard({
                     <button
                       type="button"
                       onClick={() => onIncrease(line.dish.id)}
-                      className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-white/12 bg-black/30 text-text-primary transition hover:border-white/24"
+                      className="ubhona-storefront-control inline-flex h-9 w-9 items-center justify-center rounded-lg text-text-primary transition"
                       aria-label="Increase quantity"
                     >
                       <Plus className="h-4 w-4" />
@@ -104,7 +98,7 @@ export function CartItemsCard({
                     <button
                       type="button"
                       onClick={() => onRemove(line.dish.id)}
-                      className="ml-auto inline-flex h-9 items-center gap-1 rounded-lg border border-white/12 bg-black/30 px-2.5 text-xs font-semibold text-text-secondary transition hover:border-red-400/40 hover:text-red-200"
+                      className="ubhona-storefront-control ml-auto inline-flex h-9 items-center gap-1 rounded-lg px-2.5 text-xs font-semibold text-text-secondary transition hover:border-red-400/40 hover:text-red-200"
                     >
                       <Trash2 className="h-3.5 w-3.5" />
                       Remove
@@ -175,7 +169,7 @@ export function OrderDetailsCard(props: {
                 "rounded-xl border px-3 py-2 text-sm font-semibold transition",
                 selected
                   ? "border-primary/45 bg-primary/12 text-text-primary"
-                  : "border-white/10 bg-black/20 text-text-secondary hover:border-white/20"
+                  : "ubhona-storefront-inline-surface text-text-secondary hover:border-border"
               )}
             >
               {option.label}
@@ -211,7 +205,7 @@ export function OrderDetailsCard(props: {
         />
         {errors.phone ? <div className="text-xs text-red-300">{errors.phone}</div> : null}
       </div>
-      <div className="mt-3 rounded-xl border border-white/10 bg-black/20 p-3">
+      <div className="ubhona-storefront-inline-surface mt-3 rounded-xl p-3">
         <label className="inline-flex items-center gap-2 text-sm font-semibold text-text-primary">
           <input
             type="checkbox"
@@ -295,7 +289,7 @@ export function OrderSummaryCard({
           <span>{serviceFee > 0 ? formatKsh(serviceFee) : "Free"}</span>
         </div>
       </div>
-      <div className="mt-3 border-t border-white/10 pt-3">
+      <div className="mt-3 border-t border-border/70 pt-3">
         <div className="flex items-end justify-between">
           <span className="text-sm text-text-secondary/80">Total</span>
           <span className="text-2xl font-semibold tracking-[-0.03em] text-primary">{formatKsh(total)}</span>
@@ -330,7 +324,7 @@ export function PaymentMethodCard({
               key={method.id}
               className={cn(
                 "block rounded-xl border px-3 py-2 transition",
-                selected ? "border-primary/45 bg-primary/12" : "border-white/10 bg-black/20"
+                selected ? "border-primary/45 bg-primary/12" : "ubhona-storefront-inline-surface"
               )}
             >
               <div className="flex items-start gap-2">
@@ -365,7 +359,7 @@ export function PaymentMethodCard({
           />
         </div>
       ) : null}
-      <div className="mt-3 rounded-xl border border-white/10 bg-black/20 p-3 text-xs text-text-secondary/75">
+      <div className="ubhona-storefront-inline-surface mt-3 rounded-xl p-3 text-xs text-text-secondary/75">
         {selectedMethod === "stk_push"
           ? "M-Pesa prompt will be initiated after order confirmation."
           : "Manual payment will be marked as pending until confirmed by the restaurant."}
@@ -498,7 +492,7 @@ export function CheckoutSuccessPage({
           </div>
           <h1 className="mt-2 text-2xl font-bold tracking-[-0.04em] text-text-primary sm:text-3xl">Reference: {orderReference}</h1>
           <div className="mt-2 flex flex-wrap gap-2 text-xs">
-            <span className="rounded-full border border-white/12 bg-black/20 px-2.5 py-1 text-text-secondary/80">Status: {orderStatus}</span>
+            <span className="ubhona-storefront-chip px-2.5 py-1 text-text-secondary/80">Status: {orderStatus}</span>
             <span className={cn(
               "rounded-full border px-2.5 py-1",
               paymentPending ? "border-primary/40 bg-primary/10 text-primary" : "border-success/40 bg-success/10 text-success"
@@ -507,7 +501,7 @@ export function CheckoutSuccessPage({
             </span>
           </div>
           <div className="mt-4 grid gap-4 lg:grid-cols-2">
-            <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
+            <div className="ubhona-storefront-inline-surface rounded-2xl p-4">
               <h2 className="text-sm font-semibold text-text-primary">Order Details</h2>
               <div className="mt-2 space-y-1 text-sm text-text-secondary/82">
                 <div>Method: {paymentMethodLabel}</div>
@@ -519,7 +513,7 @@ export function CheckoutSuccessPage({
                 {customerNotes ? <div>Note: {customerNotes}</div> : null}
               </div>
             </div>
-            <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
+            <div className="ubhona-storefront-inline-surface rounded-2xl p-4">
               <h2 className="text-sm font-semibold text-text-primary">Next Step</h2>
               <p className="mt-2 text-sm text-text-secondary/82">
                 {paymentPending
@@ -528,7 +522,7 @@ export function CheckoutSuccessPage({
               </p>
             </div>
           </div>
-          <div className="mt-4 rounded-2xl border border-white/10 bg-black/20 p-4">
+          <div className="ubhona-storefront-inline-surface mt-4 rounded-2xl p-4">
             <h2 className="text-sm font-semibold text-text-primary">Order Summary</h2>
             <div className="mt-2 space-y-2">
               {items.map((item) => (
@@ -538,7 +532,7 @@ export function CheckoutSuccessPage({
                 </div>
               ))}
             </div>
-            <div className="mt-3 border-t border-white/10 pt-3 text-right text-xl font-semibold text-primary">{formatKsh(total)}</div>
+            <div className="mt-3 border-t border-border/70 pt-3 text-right text-xl font-semibold text-primary">{formatKsh(total)}</div>
           </div>
           <div className="mt-4 flex flex-wrap gap-2">
             <Button variant="primary" onClick={onPrimary}>Track / Home</Button>

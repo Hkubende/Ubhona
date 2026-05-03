@@ -47,19 +47,31 @@ export default function Login() {
   };
 
   return (
-    <div className="min-h-screen bg-[#0b0b10] px-4 py-8 text-white">
+    <div className="min-h-screen bg-app-bg px-4 py-8 text-text-primary">
       <Card className="mx-auto max-w-md p-6 backdrop-blur-xl">
+        <div className="mb-5 flex items-center justify-between gap-3 rounded-2xl border border-border bg-[color:var(--ui-note-icon-bg)] p-1.5">
+          <div className="inline-flex min-h-11 flex-1 items-center justify-center rounded-[14px] border border-primary/20 bg-primary/12 px-4 text-sm font-semibold text-text-primary">
+            Sign in
+          </div>
+          <Link
+            to="/signup"
+            className="inline-flex min-h-11 flex-1 items-center justify-center rounded-[14px] px-4 text-sm font-medium text-text-secondary/75 transition-colors duration-200 hover:text-text-primary"
+          >
+            Get started
+          </Link>
+        </div>
+
         <div className="mb-6 flex items-center gap-3">
           <img src={LOGO_SRC} alt="Ubhona" className="h-10 w-10 rounded-2xl object-cover" />
           <div>
-            <div className="text-xl font-black"><span className="text-orange-400">Ubhona</span> Login</div>
-            <div className="text-xs text-white/60">Restaurant access</div>
+            <div className="text-xl font-black"><span className="text-primary">Ubhona</span> Sign in</div>
+            <div className="text-xs text-text-secondary/68">Restaurant access</div>
           </div>
         </div>
 
         <form className="space-y-4" onSubmit={onSubmit}>
           <div>
-            <div className="mb-1 text-xs text-white/60">Email</div>
+            <div className="mb-1 text-xs text-text-secondary/68">Email</div>
             <Input
               id="login-email"
               name="email"
@@ -72,7 +84,7 @@ export default function Login() {
             />
           </div>
           <div>
-            <div className="mb-1 text-xs text-white/60">Password</div>
+            <div className="mb-1 text-xs text-text-secondary/68">Password</div>
             <Input
               id="login-password"
               name="password"
@@ -84,18 +96,23 @@ export default function Login() {
               required
             />
           </div>
+          <div className="text-right text-xs">
+            <Link className="font-semibold text-primary transition-colors hover:text-primary/80" to="/reset-password">
+              Forgot password?
+            </Link>
+          </div>
           {error ? (
-            <div className="rounded-2xl border border-red-400/25 bg-red-500/10 px-3 py-2 text-xs text-red-200">
+            <div className="rounded-2xl border border-red-400/25 bg-red-500/10 px-3 py-2 text-xs text-red-700 dark:text-red-200">
               {error}
             </div>
           ) : null}
           <Button type="submit" variant="success" size="lg" className="w-full">
-            Login
+            Sign in
           </Button>
         </form>
 
-        <div className="mt-4 rounded-2xl border border-orange-400/30 bg-orange-500/10 px-3 py-2 text-xs text-orange-100">
-          <div className="font-semibold text-orange-200">Demo account</div>
+        <div className="mt-4 rounded-2xl border border-primary/25 bg-primary/10 px-3 py-2 text-xs text-text-primary">
+          <div className="font-semibold text-primary">Demo account</div>
           <div>Email: {DEMO_EMAIL}</div>
           <div>Password: {DEMO_PASSWORD}</div>
           <Button
@@ -109,10 +126,10 @@ export default function Login() {
           </Button>
         </div>
 
-        <div className="mt-4 text-center text-sm text-white/65">
+        <div className="mt-4 text-center text-sm text-text-secondary/72">
           No account yet?{" "}
-          <Link className="font-bold text-orange-300 hover:text-orange-200" to="/signup">
-            Create one
+          <Link className="font-bold text-primary transition-colors hover:text-primary/80" to="/signup">
+            Get started
           </Link>
         </div>
       </Card>

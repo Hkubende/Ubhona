@@ -1,6 +1,6 @@
 # Ubhona Environment Variable Matrix
 
-Last updated: 2026-03-21
+Last updated: 2026-04-18
 
 This matrix defines strict env values for local, staging/preview, and production.
 
@@ -22,11 +22,15 @@ This matrix defines strict env values for local, staging/preview, and production
 | `VITE_SUPABASE_ANON_KEY` | `<anon-key>` | `<anon-key>` | `<anon-key>` | Yes (uploads) |
 | `VITE_LOG_API_INFO` | `true` or `false` | `false` | `false` | Optional |
 | `VITE_PUBLIC_APP_URL` | `http://localhost:5173` | `https://app-staging.ubhona.com` | `https://app.ubhona.com` | Recommended |
+| `VITE_SITE_URL` | `http://localhost:5173` | `https://app-staging.ubhona.com` | `https://app.ubhona.com` | Recommended |
+| `VITE_UPLOAD_PROVIDER` | `api` | `api` | `api` | Recommended |
 | `VITE_APP_NAME` | `Ubhona` | `Ubhona` | `Ubhona` | Optional |
 | `VITE_APP_SLOGAN` | `Visualize` | `Visualize` | `Visualize` | Optional |
 
 Notes:
 - `VITE_PUBLIC_APP_URL` is used for QR/share URL generation fallback safety.
+- `VITE_SITE_URL` is used for SEO canonical tags and social metadata.
+- `VITE_UPLOAD_PROVIDER=api` keeps uploads on the backend-controlled path in production.
 - If `VITE_API_BASE` is empty, frontend runs in demo/static mode by design.
 
 ## 2) Backend
@@ -40,7 +44,10 @@ Notes:
 | `APP_PUBLIC_BASE_URL` | `http://localhost:5173` | `https://app-staging.ubhona.com` | `https://app.ubhona.com` | Yes (order links) |
 | `QR_BASE_URL` | `http://localhost:5173` | `https://app-staging.ubhona.com` | `https://app.ubhona.com` | Optional |
 | `PUBLIC_APP_URL` | `http://localhost:5173` | `https://app-staging.ubhona.com` | `https://app.ubhona.com` | Optional |
-| `DATABASE_URL` | `<local-postgres-url>` | `<staging-postgres-url>` | `<prod-postgres-url>` | Yes |
+| `APP_RUNTIME_DATABASE_URL` | `<local-app-runtime-postgres-url>` | `<staging-app-runtime-postgres-url>` | `<prod-app-runtime-postgres-url>` | Required for runtime-equivalent RLS validation |
+| `DATABASE_URL` | `<local-postgres-url>` | optional apply/migration URL | optional apply/migration URL | Apply/migration path |
+| `RLS_VALIDATE_DATABASE_URL` | leave empty unless doing controlled diagnostics | leave empty unless doing controlled diagnostics | leave empty unless doing controlled diagnostics | Legacy diagnostic override only; ignored by standard validation commands |
+| `RLS_APPLY_DATABASE_URL` | optional apply role URL | optional apply role URL | optional apply role URL | Required when apply role differs |
 | `JWT_SECRET` | `<dev-secret>` | `<strong-secret>` | `<strong-secret>` | Yes |
 | `ORDER_TRACKING_SECRET` | `<dev-strong-secret>` | `<strong-secret>` | `<strong-secret>` | Yes (public tracking links) |
 | `SUPABASE_URL` | `https://<project>.supabase.co` | `https://<staging-project>.supabase.co` | `https://<prod-project>.supabase.co` | Yes |
@@ -104,6 +111,12 @@ Backward-compatible aliases (if already used): `WHATSAPP_META_ACCESS_TOKEN`, `WH
 - Set all non-`VITE_*` backend vars.
 - Keep `SUPABASE_SERVICE_ROLE_KEY`, `JWT_SECRET`, payment tokens, and WhatsApp tokens secret.
 - Ensure callback URLs are reachable over HTTPS.
+- For staging and production, set `APP_RUNTIME_DATABASE_URL` to the non-privileged runtime-equivalent Postgres role.
+- Standard runtime-equivalent rollout checks must use `APP_RUNTIME_DATABASE_URL`.
+- Do not rely on plain `DATABASE_URL` for RLS validation or runtime-equivalent rollout checks.
+- `rls:audit:validate` must report `usesRequiredRuntimeEnv=true`, `rolsuper=false`, `rolbypassrls=false`, and `appSafeForValidation=true`.
+- If rollout apply uses a stronger DB identity, set `RLS_APPLY_DATABASE_URL` separately.
+- Leave `RLS_VALIDATE_DATABASE_URL` unset for normal rollout validation unless you are doing controlled diagnostics outside the standard commands.
 
 ## 6) Validation Checklist (before go-live)
 

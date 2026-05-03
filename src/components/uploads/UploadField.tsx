@@ -3,9 +3,10 @@ import { AlertCircle, CheckCircle2, FileUp, Image as ImageIcon, Package } from "
 import {
   explainUploadFailure,
   getUploadProviderStatus,
-  uploadDishModel,
+  uploadDishModelAsset,
   uploadFileAsset,
-  uploadThumbnail,
+  uploadThumbnailAsset,
+  type UploadedMediaAsset,
   type UploadAssetType,
 } from "../../lib/uploads";
 import { Button } from "../ui/Button";
@@ -17,6 +18,7 @@ type UploadFieldProps = {
   accept: string;
   value: string;
   onUploaded: (url: string) => void;
+  onUploadedAsset?: (asset: UploadedMediaAsset) => void;
   linkedFieldLabel?: string;
   className?: string;
   disabled?: boolean;
@@ -31,6 +33,7 @@ export default function UploadField({
   accept,
   value,
   onUploaded,
+  onUploadedAsset,
   linkedFieldLabel,
   className,
   disabled = false,
@@ -88,12 +91,18 @@ export default function UploadField({
     setNotice("");
     setStatus("uploading");
     try {
-      const url =
-        assetType === "thumb"
-          ? await uploadThumbnail(file, restaurantId, dishId)
-          : assetType === "model"
-            ? await uploadDishModel(file, restaurantId, dishId)
-            : await uploadFileAsset(file, assetType);
+      let url = "";
+      if (assetType === "thumb") {
+        const result = await uploadThumbnailAsset(file, restaurantId, dishId);
+        url = result.url;
+        if (result.asset && onUploadedAsset) onUploadedAsset(result.asset);
+      } else if (assetType === "model") {
+        const result = await uploadDishModelAsset(file, restaurantId, dishId);
+        url = result.url;
+        if (result.asset && onUploadedAsset) onUploadedAsset(result.asset);
+      } else {
+        url = await uploadFileAsset(file, assetType);
+      }
       onUploaded(url);
       const linkedText = linkedFieldLabel ? ` and linked to ${linkedFieldLabel}` : "";
       setNotice(
@@ -118,7 +127,7 @@ export default function UploadField({
   };
 
   return (
-    <div className={cn("rounded-2xl border border-white/10 bg-black/20 p-3", className)}>
+    <div className={cn("ui-panel-inset rounded-2xl p-3", className)}>
       <div className="mb-1 text-xs font-semibold uppercase tracking-[0.08em] text-text-secondary/72">{label}</div>
       <p className="mb-2 text-[11px] text-text-secondary/70">{acceptedSummary}</p>
       <div className="grid gap-2 md:grid-cols-[1fr_auto] md:items-center">
@@ -137,7 +146,7 @@ export default function UploadField({
             }}
             className="sr-only"
           />
-          <span className="inline-flex min-h-10 w-full cursor-pointer items-center gap-2 rounded-xl border border-border bg-[linear-gradient(180deg,rgba(20,16,16,0.98),rgba(13,11,11,0.97))] px-3 py-2 text-sm text-text-primary transition hover:border-primary/35">
+          <span className="ui-input-control inline-flex min-h-10 w-full cursor-pointer items-center gap-2 rounded-xl px-3 py-2 text-sm text-text-primary transition hover:border-primary/35">
             <FileUp className="h-4 w-4 text-primary/80" />
             {file ? `Replace ${assetLabel}` : `Choose ${assetLabel}`}
           </span>
@@ -154,7 +163,7 @@ export default function UploadField({
         </Button>
       </div>
       {file ? (
-        <div className="mt-2 flex flex-wrap items-center gap-2 rounded-xl border border-white/8 bg-black/25 px-2.5 py-2 text-xs text-text-secondary/78">
+        <div className="mt-2 flex flex-wrap items-center gap-2 rounded-xl border border-border bg-[color:var(--ui-note-icon-bg)] px-2.5 py-2 text-xs text-text-secondary/78">
           {supportsImagePreview ? <ImageIcon className="h-3.5 w-3.5 text-primary/80" /> : <Package className="h-3.5 w-3.5 text-primary/80" />}
           <span className="truncate">{file.name}</span>
           <span className="text-text-secondary/55">({(file.size / (1024 * 1024)).toFixed(2)} MB)</span>
@@ -170,14 +179,14 @@ export default function UploadField({
                 ? "bg-red-300"
                 : status === "uploading"
                   ? "bg-primary"
-                  : "bg-white/35"
+                  : "bg-border-strong"
           )}
         />
         Status: {status}
       </div>
       {value ? (
         supportsImagePreview ? (
-          <div className="mt-2 rounded-xl border border-white/8 bg-black/25 p-2">
+          <div className="mt-2 rounded-xl border border-border bg-[color:var(--ui-note-icon-bg)] p-2">
             <div className="mb-1 text-[11px] uppercase tracking-[0.08em] text-text-secondary/62">Current asset</div>
             <img
               src={value}
@@ -186,7 +195,7 @@ export default function UploadField({
             />
           </div>
         ) : (
-          <div className="mt-2 rounded-xl border border-white/8 bg-black/25 px-2.5 py-2 text-xs text-text-secondary/72">
+          <div className="mt-2 rounded-xl border border-border bg-[color:var(--ui-note-icon-bg)] px-2.5 py-2 text-xs text-text-secondary/72">
             <div className="mb-1 uppercase tracking-[0.08em] text-text-secondary/62">Current model</div>
             <div className="truncate font-medium text-text-primary">
               {value.split("/").pop() || "Model linked"}
@@ -201,13 +210,13 @@ export default function UploadField({
         </div>
       ) : null}
       {notice ? (
-        <div className="mt-2 inline-flex items-center gap-1.5 rounded-lg border border-emerald-400/30 bg-emerald-500/10 px-2.5 py-1 text-xs text-emerald-200">
+        <div className="mt-2 inline-flex items-center gap-1.5 rounded-lg border border-emerald-400/30 bg-emerald-500/10 px-2.5 py-1 text-xs text-emerald-700 dark:text-emerald-200">
           <CheckCircle2 className="h-3.5 w-3.5" />
           {notice}
         </div>
       ) : null}
       {error ? (
-        <div className="mt-2 inline-flex items-center gap-1.5 rounded-lg border border-red-400/30 bg-red-500/10 px-2.5 py-1 text-xs text-red-200">
+        <div className="mt-2 inline-flex items-center gap-1.5 rounded-lg border border-red-400/30 bg-red-500/10 px-2.5 py-1 text-xs text-red-700 dark:text-red-200">
           <AlertCircle className="h-3.5 w-3.5" />
           Upload failed: {error}
         </div>

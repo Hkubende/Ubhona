@@ -4,6 +4,7 @@ import { addToCart as addDishToCart, loadCart, saveCart } from "../lib/cart";
 import { fetchDishes, type Dish } from "../lib/dishes";
 import { getEffectivePrice, loadOverrides, type PriceOverrides } from "../lib/price-overrides";
 import { BackButton } from "../components/ui/back-button";
+import { UbhonaLoader } from "../components/ui/ubhona-loader";
 
 function formatKsh(value: number) {
   return `KSh ${value.toLocaleString("en-KE")}`;
@@ -73,13 +74,7 @@ export default function MenuItemPage() {
   };
 
   if (loading) {
-    return (
-      <div className="min-h-screen bg-[#0b0b10] p-8 text-white">
-        <div className="mx-auto max-w-5xl rounded-3xl border border-white/10 bg-white/[0.04] p-8 text-center text-white/65">
-          Loading menu item...
-        </div>
-      </div>
-    );
+    return <UbhonaLoader fullScreen label="Loading menu item" />;
   }
 
   if (error) {

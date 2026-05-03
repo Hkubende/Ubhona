@@ -4,6 +4,7 @@ import { PlusCircle, ShoppingBag } from "lucide-react";
 import { DashboardLayout } from "../components/dashboard/dashboard-layout";
 import {
   PageContainer,
+  DashboardPanel,
 } from "../components/dashboard/dashboard-primitives";
 import { Button } from "../components/ui/Button";
 import { spacing } from "../design-system";
@@ -11,6 +12,7 @@ import { useRestaurantDashboard } from "../hooks/use-restaurant-dashboard";
 import { getCurrentPlan, getRestaurantProfile, type RestaurantProfile } from "../lib/restaurant";
 import { isFeatureAvailable } from "../lib/plan-gates";
 import { getRemainingStarterAllowance, getRestaurantUsage } from "../lib/growth";
+import { getLaunchSignupFunnel, type LaunchSignupFunnel } from "../lib/analytics";
 import { canPerformAction, getPrimaryDashboardRole } from "../lib/roles";
 import { getActivityHistory, type ActivityItem } from "../lib/activity";
 import {
@@ -20,6 +22,7 @@ import { RecentOrdersCard } from "../components/dashboard/overview/recent-orders
 import { PopularDishesCard } from "../components/dashboard/overview/popular-dishes-card";
 import { RestaurantSummaryStrip } from "../components/dashboard/overview/restaurant-summary-strip";
 import { ActivityFeed } from "../components/dashboard/activity-feed";
+import { OnboardingChecklist } from "../components/dashboard/onboarding-checklist";
 
 function OverviewHeaderActions({
   storefrontPath,
@@ -68,6 +71,7 @@ export default function Dashboard() {
   const { data, loading, error } = useRestaurantDashboard();
   const [activityLoading, setActivityLoading] = React.useState(true);
   const [activityItems, setActivityItems] = React.useState<ActivityItem[]>([]);
+  const [launchFunnel, setLaunchFunnel] = React.useState<LaunchSignupFunnel | null>(null);
   const storefrontPath = data?.restaurant.slug ? `/r/${data.restaurant.slug}` : "/r/demo";
   const persistedProfile = React.useMemo(() => getRestaurantProfile(), []);
 
@@ -148,6 +152,62 @@ export default function Dashboard() {
     role === "owner" || role === "admin"
       ? "Business-wide operations, growth signals, and revenue visibility."
       : "Operational control center for service flow, team performance, and shift execution.";
+  const onboardingItems = React.useMemo(() => {
+    const hasProfileBasics = Boolean(
+      data?.restaurant.name &&
+      (data?.restaurant.location || data?.restaurant.phone)
+    );
+    const hasCategories = (data?.categories.length || 0) > 0;
+    const hasDishes = (data?.dishes.length || 0) > 0;
+    const hasStorefront = Boolean(data?.restaurant.slug && hasDishes);
+    const hasOrders = (data?.orders.length || 0) > 0;
+
+    return [
+      {
+        id: "profile",
+        title: "Confirm restaurant details",
+        description: hasProfileBasics
+          ? "Restaurant name and basic contact details are already in place."
+          : "Add location and contact details so staff and customers know where and how to reach you.",
+        complete: hasProfileBasics,
+        to: "/dashboard/settings",
+        ctaLabel: hasProfileBasics ? "Review" : "Complete",
+      },
+      {
+        id: "menu",
+        title: "Build your menu",
+        description: hasDishes
+          ? `${data?.dishes.length || 0} dishes are already available to manage.`
+          : hasCategories
+            ? "Categories are ready. Add the first live dish next."
+            : "Create categories and add the first dish customers will see.",
+        complete: hasDishes,
+        to: "/dashboard/menu",
+        ctaLabel: hasDishes ? "Manage Menu" : "Add Dishes",
+      },
+      {
+        id: "storefront",
+        title: "Verify customer ordering path",
+        description: hasStorefront
+          ? "Your storefront link is ready for sharing and testing."
+          : "Publish at least one dish so the storefront can accept real customer traffic.",
+        complete: hasStorefront,
+        to: storefrontPath,
+        ctaLabel: hasStorefront ? "Open Storefront" : "Preview Storefront",
+      },
+      {
+        id: "orders",
+        title: "Run the first order workflow",
+        description: hasOrders
+          ? `${data?.orders.length || 0} order${(data?.orders.length || 0) === 1 ? "" : "s"} recorded so far.`
+          : "Create a manual order or place a test storefront order to verify kitchen and payment flow.",
+        complete: hasOrders,
+        to: canPerformAction("create_order") ? "/dashboard/orders/new" : "/dashboard/orders",
+        ctaLabel: hasOrders ? "Open Orders" : "Start Order",
+      },
+    ];
+  }, [data, storefrontPath]);
+  const showOnboardingChecklist = onboardingItems.some((item) => !item.complete);
 
   React.useEffect(() => {
     let mounted = true;
@@ -166,6 +226,10 @@ export default function Dashboard() {
       mounted = false;
     };
   }, [data?.restaurant.id]);
+
+  React.useEffect(() => {
+    setLaunchFunnel(getLaunchSignupFunnel(30));
+  }, []);
 
   return (
     <DashboardLayout
@@ -231,6 +295,48 @@ export default function Dashboard() {
             Upgrade plan
           </Link>
         </div>
+      ) : null}
+      {showOnboardingChecklist ? (
+        <DashboardPanel>
+          <OnboardingChecklist items={onboardingItems} />
+        </DashboardPanel>
+      ) : null}
+      {launchFunnel && Object.values(launchFunnel.totals).some((value) => value > 0) ? (
+        <DashboardPanel className="p-5">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <div className="text-sm font-black text-text-primary">Launch Funnel</div>
+              <div className="mt-1 text-sm text-text-secondary/72">
+                Marketing-to-signup flow from the last {launchFunnel.periodDays} days.
+              </div>
+            </div>
+            <div className="rounded-full border border-border bg-white/[0.04] px-3 py-1 text-xs text-text-secondary/72">
+              Local prelaunch readout
+            </div>
+          </div>
+          <div className="mt-4 grid gap-3 md:grid-cols-3 xl:grid-cols-6">
+            <MetricCard label="Landing Visits" value={String(launchFunnel.totals.landingVisits)} />
+            <MetricCard label="CTA Clicks" value={String(launchFunnel.totals.ctaClicks)} tone="sand" />
+            <MetricCard label="Signup Starts" value={String(launchFunnel.totals.signupStarts)} tone="orange" />
+            <MetricCard label="Signups" value={String(launchFunnel.totals.signupCompletions)} tone="emerald" />
+            <MetricCard label="Onboarding Starts" value={String(launchFunnel.totals.onboardingStarts)} tone="sand" />
+            <MetricCard label="Onboarding Complete" value={String(launchFunnel.totals.onboardingCompletions)} tone="emerald" />
+          </div>
+          <div className="mt-4 flex flex-wrap gap-2 text-xs text-white/72">
+            <span className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1">
+              Visit to CTA: {Math.round(launchFunnel.rates.ctaClickRate)}%
+            </span>
+            <span className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1">
+              CTA to signup start: {Math.round(launchFunnel.rates.signupStartRate)}%
+            </span>
+            <span className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1">
+              Signup completion: {Math.round(launchFunnel.rates.signupCompletionRate)}%
+            </span>
+            <span className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1">
+              Onboarding completion: {Math.round(launchFunnel.rates.onboardingCompletionRate)}%
+            </span>
+          </div>
+        </DashboardPanel>
       ) : null}
       <KpiRow
         ordersToday={data?.analyticsSummary.ordersToday ?? 0}

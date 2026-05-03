@@ -8,6 +8,7 @@ import {
   MobileStickyOrderBar,
   RelatedDishesSection,
 } from "../../components/storefront/dish-public-components";
+import { UbhonaLoader } from "../../components/ui/ubhona-loader";
 import { tokens } from "../../design-system";
 import { trackAnalyticsEvent } from "../../lib/analytics";
 import { getDishUrl } from "../../lib/qr";
@@ -180,15 +181,15 @@ export default function DishPage() {
     return (
       <div className={`${tokens.classes.storefrontShell} p-6 sm:p-8`}>
         <div className={`${tokens.classes.storefrontPanel} mx-auto max-w-3xl p-6 text-center`}>
-          <h1 className="text-2xl font-semibold tracking-[-0.03em] text-orange-300">Dish unavailable</h1>
-          <p className="mt-2 text-sm text-white/65">{error}</p>
+          <h1 className="ubhona-storefront-text-accent text-2xl font-semibold tracking-[-0.03em]">Dish unavailable</h1>
+          <p className="ubhona-storefront-text-secondary mt-2 text-sm">{error}</p>
         </div>
       </div>
     );
   }
 
   if (!restaurant || !dish) {
-    return <div className={`${tokens.classes.storefrontShell} p-8 text-white/70`}>Loading dish...</div>;
+    return <UbhonaLoader fullScreen label="Loading dish" shellClassName={tokens.classes.storefrontShell} />;
   }
 
   return (
@@ -226,9 +227,9 @@ export default function DishPage() {
           <section className={`${tokens.classes.storefrontPanel} p-4 sm:p-5`}>
             <h2 className="text-xl font-semibold tracking-[-0.03em] text-text-primary">About This Dish</h2>
             <ul className="mt-3 space-y-2 text-sm text-text-secondary/84">
-              <li className="rounded-xl border border-white/10 bg-black/20 px-3 py-2">Chef-prepared portion for one order.</li>
-              <li className="rounded-xl border border-white/10 bg-black/20 px-3 py-2">Fresh ingredients based on current kitchen stock.</li>
-              <li className="rounded-xl border border-white/10 bg-black/20 px-3 py-2">Pricing and availability update in real time.</li>
+              <li className="ubhona-storefront-inline-surface rounded-xl px-3 py-2">Chef-prepared portion for one order.</li>
+              <li className="ubhona-storefront-inline-surface rounded-xl px-3 py-2">Fresh ingredients based on current kitchen stock.</li>
+              <li className="ubhona-storefront-inline-surface rounded-xl px-3 py-2">Pricing and availability update in real time.</li>
             </ul>
           </section>
           <RelatedDishesSection restaurantSlug={restaurantSlug} dishes={relatedDishes} />

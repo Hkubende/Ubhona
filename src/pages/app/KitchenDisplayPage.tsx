@@ -3,6 +3,7 @@ import { Clock3, Printer, Volume2, VolumeX } from "lucide-react";
 import { DashboardLayout } from "../../components/dashboard/dashboard-layout";
 import { Badge } from "../../components/ui/Badge";
 import { Button } from "../../components/ui/Button";
+import { UbhonaLoader } from "../../components/ui/ubhona-loader";
 import { EmptyStateCard, PageContainer, SectionHeader } from "../../components/dashboard/dashboard-primitives";
 import { useRestaurantOrders } from "../../hooks/use-restaurant-orders";
 import { getSharedStatusLabel, normalizeOrderStatus } from "../../lib/order-status";
@@ -346,9 +347,7 @@ export default function KitchenDisplayPage() {
           }
         />
 
-        {loading ? (
-          <div className="rounded-3xl border border-white/10 bg-black/20 p-4 text-sm text-text-secondary/72">Loading kitchen tickets...</div>
-        ) : null}
+        {loading ? <UbhonaLoader variant="inline" label="Loading kitchen tickets" /> : null}
         {error ? <EmptyStateCard message={error} /> : null}
 
         {!loading && !error ? (

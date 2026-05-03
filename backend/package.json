@@ -11,7 +11,15 @@
     "test:watch": "vitest",
     "prisma:generate": "prisma generate --schema src/prisma/schema.prisma",
     "prisma:migrate": "prisma migrate dev --schema src/prisma/schema.prisma",
-    "prisma:migrate:deploy": "prisma migrate deploy --schema src/prisma/schema.prisma"
+    "prisma:migrate:deploy": "prisma migrate deploy --schema src/prisma/schema.prisma",
+    "rls:audit:apply": "node scripts/rls-role-audit.mjs --mode=apply",
+    "rls:audit:validate": "node scripts/rls-role-audit.mjs --mode=validate",
+    "rls:preflight": "node scripts/rls-rollout.mjs preflight",
+    "rls:apply": "node scripts/rls-rollout.mjs apply",
+    "rls:validate": "node scripts/rls-rollout.mjs validate",
+    "rls:validate:backend": "npm run build && node scripts/rls-backend-contract.mjs",
+    "rls:validate:callback": "npm run build && node scripts/rls-payment-callback-validate.mjs",
+    "rls:validate:full": "npm run rls:validate && npm run rls:validate:backend"
   },
   "dependencies": {
     "@prisma/client": "^6.7.0",
@@ -22,6 +30,8 @@
     "express": "^4.21.2",
     "jsonwebtoken": "^9.0.2",
     "multer": "^1.4.5-lts.2",
+    "pg": "^8.20.0",
+    "sharp": "^0.34.4",
     "zod": "^3.24.4"
   },
   "devDependencies": {

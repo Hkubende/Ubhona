@@ -1,5 +1,6 @@
 import { resolveLocalAssetPath } from "./localAssets";
 import { api, isApiReachable } from "./api";
+import { hasRemoteAuthSession } from "./auth";
 import { isApiConfigured } from "./config";
 
 export type Dish = {
@@ -115,6 +116,7 @@ export async function loadFallbackDishes(): Promise<Dish[]> {
 
 export async function loadRestaurantDishes(): Promise<Dish[]> {
   if (!isApiConfigured) return [];
+  if (!hasRemoteAuthSession()) return [];
   if (!(await isApiReachable())) return [];
 
   const [categories, rawDishes] = await Promise.all([

@@ -112,6 +112,12 @@ export default function FloorManagerPage() {
   const selectedTable = tables.find((x) => x.id === selectedTableId) || null;
   const reservations = snapshot?.reservations || [];
   const activeSession: FloorSession | null = selectedTable?.active_session || null;
+  const floorErrorTitle = error.includes("static/demo mode")
+    ? "Live floor sync is unavailable"
+    : "Floor data unavailable";
+  const floorErrorMessage = error.includes("static/demo mode")
+    ? "You can continue planning tables in demo mode. Live floor sync will appear here once the floor service is connected."
+    : error;
 
   async function run(action: string, fn: () => Promise<void>) {
     setBusy(action);
@@ -164,7 +170,14 @@ export default function FloorManagerPage() {
       }
     >
       <PageContainer>
-        {error ? <div className="rounded-xl border border-rose-400/35 bg-rose-500/10 px-3 py-2 text-sm text-rose-100">{error}</div> : null}
+        {error ? (
+          <EmptyStateCard
+            title={floorErrorTitle}
+            message={floorErrorMessage}
+            actionLabel="Retry"
+            onAction={() => void load()}
+          />
+        ) : null}
         <ContentGrid className="xl:grid-cols-[minmax(0,1.2fr)_minmax(0,0.8fr)]">
           <DashboardPanel>
             <SectionHeader title="Floor Canvas" subtitle="Drag tables to reposition. Click a table for live dine-in controls." />
@@ -174,7 +187,12 @@ export default function FloorManagerPage() {
             >
               {!tables.length && !loading ? (
                 <div className="absolute inset-0 grid place-items-center p-4">
-                  <EmptyStateCard message="No tables yet. Add one from the side panel to begin floor operations." />
+                  <EmptyStateCard
+                    title="No tables configured"
+                    message="Add the first table from the side panel to begin dine-in sessions, waiter order entry, and reservation assignment."
+                    actionLabel="Focus Add Table"
+                    onAction={() => document.getElementById("new-table-name")?.focus()}
+                  />
                 </div>
               ) : null}
               {tables.map((table) => (
@@ -231,7 +249,10 @@ export default function FloorManagerPage() {
             <DashboardPanel>
               <SectionHeader title="Table Panel" subtitle="Selected table session, waiter assignment, and order linkage." />
               {!selectedTable ? (
-                <EmptyStateCard message="Select a table on the floor to manage it." />
+                <EmptyStateCard
+                  title="No table selected"
+                  message="Select a table from the floor canvas to open sessions, attach orders, and update table status."
+                />
               ) : (
                 <div className="mt-3 space-y-3">
                   <div className="flex items-center justify-between">
@@ -430,7 +451,12 @@ export default function FloorManagerPage() {
                   </div>
                 </div>
               ))}
-              {!reservations.length && !loading ? <EmptyStateCard message="No reservations yet for this branch." /> : null}
+              {!reservations.length && !loading ? (
+                <EmptyStateCard
+                  title="No reservations yet"
+                  message="Reservations will appear here after your host team books a dine-in slot for this branch."
+                />
+              ) : null}
             </div>
           </DashboardPanel>
 
@@ -450,7 +476,12 @@ export default function FloorManagerPage() {
                   {session.idle_flag ? <div className="mt-1 text-amber-300">Idle session alert</div> : null}
                 </div>
               ))}
-              {!snapshot?.sessions?.length && !loading ? <EmptyStateCard message="No table sessions yet." /> : null}
+              {!snapshot?.sessions?.length && !loading ? (
+                <EmptyStateCard
+                  title="No active sessions"
+                  message="Open a table session when guests arrive so dine-in orders, elapsed time, and service ownership stay visible."
+                />
+              ) : null}
             </div>
           </DashboardPanel>
         </ContentGrid>

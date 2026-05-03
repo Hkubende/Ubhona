@@ -11,7 +11,7 @@ type AppLayoutProps = {
 
 export function AppLayout({ sidebar, topbar, children, className }: AppLayoutProps) {
   return (
-    <div className={cn(tokens.classes.appShell, className)}>
+    <div className={cn(tokens.classes.appShell, "overscroll-y-contain", className)}>
       <div className={cn(tokens.classes.pageShell, spacing.gapLg)}>
         {sidebar}
         <main className={cn("min-w-0 flex-1", spacing.stackLg)}>

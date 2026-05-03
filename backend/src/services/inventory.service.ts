@@ -1,6 +1,14 @@
 import { Prisma } from "@prisma/client";
 import { prisma } from "../prisma.js";
 import { getBranchDishStockOverride, upsertBranchDishStockOverride } from "./stock.service.js";
+import {
+  findRestaurantDocumentByKey,
+  findRestaurantDocumentByKeyTx,
+  listRestaurantDocuments,
+  listRestaurantDocumentsTx,
+  upsertRestaurantDocument,
+  upsertRestaurantDocumentTx,
+} from "./tenant-document.service.js";
 
 export type InventoryRole = "platform_admin" | "restaurant_owner" | "restaurant_manager" | "staff";
 export type StockMovementType =
@@ -249,8 +257,9 @@ async function syncDishStockFromRecipeTx(
     dishId: string;
   }
 ) {
-  const row = await tx.platformTrackerDocument.findUnique({
-    where: { key: recKey(input.restaurantId, input.dishId) },
+  const row = await findRestaurantDocumentByKeyTx(tx, {
+    restaurantId: input.restaurantId,
+    key: recKey(input.restaurantId, input.dishId),
     select: { payload: true },
   });
   const recipe = row ? mapRecipe(row.payload) : null;
@@ -292,8 +301,9 @@ async function syncDishStockForIngredientTx(
     ingredientId: string;
   }
 ) {
-  const recipeRows = await tx.platformTrackerDocument.findMany({
-    where: { key: { startsWith: `${K.rec}${input.restaurantId}:` } },
+  const recipeRows = await listRestaurantDocumentsTx(tx, {
+    restaurantId: input.restaurantId,
+    keyPrefix: `${K.rec}${input.restaurantId}:`,
     select: { payload: true },
   });
   const dishIds = recipeRows
@@ -311,16 +321,20 @@ async function syncDishStockForIngredientTx(
 }
 
 async function upsertDoc(tx: Tx, key: string, payload: unknown) {
-  await tx.platformTrackerDocument.upsert({
-    where: { key },
-    create: { key, payload: payload as Prisma.InputJsonValue },
-    update: { payload: payload as Prisma.InputJsonValue },
+  const payloadRecord = asObj(payload);
+  const restaurantId = String(payloadRecord.restaurantId || payloadRecord.restaurant_id || "");
+  if (!restaurantId) throw new Error("Tenant inventory document payload requires restaurantId.");
+  await upsertRestaurantDocumentTx(tx, {
+    restaurantId,
+    key,
+    payload: payload as Prisma.InputJsonValue,
   });
 }
 
 async function getIngredientTx(tx: Tx, restaurantId: string, branchId: string, ingredientId: string) {
-  const row = await tx.platformTrackerDocument.findUnique({
-    where: { key: ingKey(restaurantId, branchId, ingredientId) },
+  const row = await findRestaurantDocumentByKeyTx(tx, {
+    restaurantId,
+    key: ingKey(restaurantId, branchId, ingredientId),
     select: { payload: true },
   });
   return row ? mapIngredient(row.payload) : null;
@@ -404,8 +418,9 @@ async function adjustStockTx(
 }
 
 export async function listIngredients(input: { restaurantId: string; branchId: string }) {
-  const rows = await prisma.platformTrackerDocument.findMany({
-    where: { key: { startsWith: `${K.ing}${input.restaurantId}:${input.branchId}:` } },
+  const rows = await listRestaurantDocuments({
+    restaurantId: input.restaurantId,
+    keyPrefix: `${K.ing}${input.restaurantId}:${input.branchId}:`,
     orderBy: { updatedAt: "desc" },
   });
   return rows.map((row) => mapIngredient(row.payload)).filter((row): row is Ingredient => !!row);
@@ -423,7 +438,11 @@ export async function upsertIngredient(input: {
 }) {
   const id = input.ingredientId || rid("ing");
   const key = ingKey(input.restaurantId, input.branchId, id);
-  const existing = await prisma.platformTrackerDocument.findUnique({ where: { key }, select: { payload: true } });
+  const existing = await findRestaurantDocumentByKey({
+    restaurantId: input.restaurantId,
+    key,
+    select: { payload: true },
+  });
   const prev = existing ? mapIngredient(existing.payload) : null;
   const next: Ingredient = {
     id,
@@ -437,10 +456,10 @@ export async function upsertIngredient(input: {
     createdAt: prev?.createdAt || nowIso(),
     updatedAt: nowIso(),
   };
-  await prisma.platformTrackerDocument.upsert({
-    where: { key },
-    create: { key, payload: next as Prisma.InputJsonValue },
-    update: { payload: next as Prisma.InputJsonValue },
+  await upsertRestaurantDocument({
+    restaurantId: input.restaurantId,
+    key,
+    payload: next as Prisma.InputJsonValue,
   });
   return next;
 }
@@ -451,8 +470,9 @@ export async function upsertDishRecipe(input: {
   yieldServings?: number;
   items: Array<{ ingredientId: string; quantity: number }>;
 }) {
-  const existing = await prisma.platformTrackerDocument.findUnique({
-    where: { key: recKey(input.restaurantId, input.dishId) },
+  const existing = await findRestaurantDocumentByKey({
+    restaurantId: input.restaurantId,
+    key: recKey(input.restaurantId, input.dishId),
     select: { payload: true },
   });
   const prev = existing ? mapRecipe(existing.payload) : null;
@@ -467,10 +487,10 @@ export async function upsertDishRecipe(input: {
     createdAt: prev?.createdAt || nowIso(),
     updatedAt: nowIso(),
   };
-  await prisma.platformTrackerDocument.upsert({
-    where: { key: recKey(input.restaurantId, input.dishId) },
-    create: { key: recKey(input.restaurantId, input.dishId), payload: next as Prisma.InputJsonValue },
-    update: { payload: next as Prisma.InputJsonValue },
+  await upsertRestaurantDocument({
+    restaurantId: input.restaurantId,
+    key: recKey(input.restaurantId, input.dishId),
+    payload: next as Prisma.InputJsonValue,
   });
   await prisma.$transaction(async (tx) => {
     await syncDishStockFromRecipeTx(tx, {
@@ -483,8 +503,9 @@ export async function upsertDishRecipe(input: {
 }
 
 export async function listRecipes(input: { restaurantId: string }) {
-  const rows = await prisma.platformTrackerDocument.findMany({
-    where: { key: { startsWith: `${K.rec}${input.restaurantId}:` } },
+  const rows = await listRestaurantDocuments({
+    restaurantId: input.restaurantId,
+    keyPrefix: `${K.rec}${input.restaurantId}:`,
     orderBy: { updatedAt: "desc" },
   });
   return rows.map((row) => mapRecipe(row.payload)).filter((row): row is DishRecipe => !!row);
@@ -500,7 +521,11 @@ export async function upsertSupplier(input: {
 }) {
   const id = input.supplierId || rid("sup");
   const key = supKey(input.restaurantId, id);
-  const existing = await prisma.platformTrackerDocument.findUnique({ where: { key }, select: { payload: true } });
+  const existing = await findRestaurantDocumentByKey({
+    restaurantId: input.restaurantId,
+    key,
+    select: { payload: true },
+  });
   const prev = existing ? (asObj(existing.payload) as Supplier) : null;
   const next: Supplier = {
     id,
@@ -512,17 +537,18 @@ export async function upsertSupplier(input: {
     createdAt: String(prev?.createdAt || nowIso()),
     updatedAt: nowIso(),
   };
-  await prisma.platformTrackerDocument.upsert({
-    where: { key },
-    create: { key, payload: next as Prisma.InputJsonValue },
-    update: { payload: next as Prisma.InputJsonValue },
+  await upsertRestaurantDocument({
+    restaurantId: input.restaurantId,
+    key,
+    payload: next as Prisma.InputJsonValue,
   });
   return next;
 }
 
 export async function listSuppliers(input: { restaurantId: string }) {
-  const rows = await prisma.platformTrackerDocument.findMany({
-    where: { key: { startsWith: `${K.sup}${input.restaurantId}:` } },
+  const rows = await listRestaurantDocuments({
+    restaurantId: input.restaurantId,
+    keyPrefix: `${K.sup}${input.restaurantId}:`,
     orderBy: { updatedAt: "desc" },
   });
   return rows
@@ -714,8 +740,9 @@ export async function listMovements(input: {
   const prefix = input.branchId
     ? `${K.mov}${input.restaurantId}:${input.branchId}:`
     : `${K.mov}${input.restaurantId}:`;
-  const rows = await prisma.platformTrackerDocument.findMany({
-    where: { key: { startsWith: prefix } },
+  const rows = await listRestaurantDocuments({
+    restaurantId: input.restaurantId,
+    keyPrefix: prefix,
     orderBy: { updatedAt: "desc" },
     take: Math.max(1, Math.min(500, Number(input.limit || 100))),
   });
@@ -734,8 +761,9 @@ export async function listPurchases(input: {
   const prefix = input.branchId
     ? `${K.pur}${input.restaurantId}:${input.branchId}:`
     : `${K.pur}${input.restaurantId}:`;
-  const rows = await prisma.platformTrackerDocument.findMany({
-    where: { key: { startsWith: prefix } },
+  const rows = await listRestaurantDocuments({
+    restaurantId: input.restaurantId,
+    keyPrefix: prefix,
     orderBy: { updatedAt: "desc" },
     take: Math.max(1, Math.min(500, Number(input.limit || 100))),
   });
@@ -747,8 +775,9 @@ export async function listTransfers(input: {
   branchId?: string;
   limit?: number;
 }) {
-  const rows = await prisma.platformTrackerDocument.findMany({
-    where: { key: { startsWith: `${K.trf}${input.restaurantId}:` } },
+  const rows = await listRestaurantDocuments({
+    restaurantId: input.restaurantId,
+    keyPrefix: `${K.trf}${input.restaurantId}:`,
     orderBy: { updatedAt: "desc" },
     take: Math.max(1, Math.min(500, Number(input.limit || 100))),
   });
@@ -840,18 +869,18 @@ export async function deductInventoryForOrderTransition(input: {
   return prisma.$transaction(
     async (tx) => {
       const marker = dedKey(input.restaurantId, input.orderId, input.toStatus);
-      const priorMarkers = await tx.platformTrackerDocument.findMany({
-        where: {
-          key: { startsWith: `${K.ded}${input.restaurantId}:${input.orderId}:` },
-        },
+      const priorMarkers = await listRestaurantDocumentsTx(tx, {
+        restaurantId: input.restaurantId,
+        keyPrefix: `${K.ded}${input.restaurantId}:${input.orderId}:`,
         select: { key: true },
         take: 1,
       });
       if (priorMarkers.length) {
         return { deducted: false, reason: "already_deducted" as const };
       }
-      const existingMarker = await tx.platformTrackerDocument.findUnique({
-        where: { key: marker },
+      const existingMarker = await findRestaurantDocumentByKeyTx(tx, {
+        restaurantId: input.restaurantId,
+        key: marker,
         select: { id: true },
       });
       if (existingMarker) {
@@ -871,8 +900,9 @@ export async function deductInventoryForOrderTransition(input: {
       }> = [];
 
       for (const orderItem of order.items) {
-        const recipeRow = await tx.platformTrackerDocument.findUnique({
-          where: { key: recKey(input.restaurantId, orderItem.dishId) },
+        const recipeRow = await findRestaurantDocumentByKeyTx(tx, {
+          restaurantId: input.restaurantId,
+          key: recKey(input.restaurantId, orderItem.dishId),
           select: { payload: true },
         });
         const recipe = recipeRow ? mapRecipe(recipeRow.payload) : null;

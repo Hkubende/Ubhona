@@ -28,6 +28,7 @@ import {
   printPaymentReceipt,
 } from "../lib/print";
 import { ActivityFeed } from "../components/dashboard/activity-feed";
+import { getSharedStatusLabel } from "../lib/order-status";
 
 const FILTER_OPTIONS: Array<OrderStatus | "all"> = [
   "all",
@@ -50,6 +51,11 @@ const STATUS_FLOW: Record<OrderStatus, OrderStatus | null> = {
 
 function formatKsh(value: number) {
   return `KSh ${value.toLocaleString("en-KE")}`;
+}
+
+function getOrderFilterLabel(status: OrderStatus | "all") {
+  if (status === "all") return "All Orders";
+  return getSharedStatusLabel(status);
 }
 
 function toPrintOrder(order: Order, restaurantName: string): PrintOrder {
@@ -219,7 +225,7 @@ export default function OrdersDashboard() {
                 onClick={() => setStatusFilter(status)}
                 className="capitalize"
               >
-                {status}
+                {getOrderFilterLabel(status)}
               </Button>
             );
           })}
@@ -261,7 +267,7 @@ export default function OrdersDashboard() {
                         className="h-7 rounded-lg px-2.5 py-1 text-[11px] capitalize"
                         disabled={!canUpdateOrders}
                       >
-                        Mark {STATUS_FLOW[order.status]}
+                        Mark {getSharedStatusLabel(STATUS_FLOW[order.status])}
                       </Button>
                     ) : (
                       <Badge variant="success">Completed</Badge>
@@ -362,7 +368,7 @@ export default function OrdersDashboard() {
                               className="h-7 rounded-lg px-2.5 py-1 text-[11px] capitalize"
                               disabled={!canUpdateOrders}
                             >
-                              Mark {STATUS_FLOW[order.status]}
+                              Mark {getSharedStatusLabel(STATUS_FLOW[order.status])}
                             </Button>
                           ) : (
                             <Badge variant="success" className="h-7">Completed</Badge>
@@ -413,9 +419,22 @@ export default function OrdersDashboard() {
         ) : null}
         {!loading && !error && !orders.length ? (
           <EmptyStateCard
-            message="No orders for this filter."
-            actionLabel="Create New Order"
-            onAction={() => navigate("/dashboard/orders/new")}
+            title={statusFilter === "all" ? "No orders yet" : `No ${getOrderFilterLabel(statusFilter).toLowerCase()} orders`}
+            message={
+              statusFilter === "all"
+                ? "Orders will appear here after the first storefront checkout or manual order entry. Use this queue to track service progress and receipt printing."
+                : "This fulfillment stage is currently clear. Switch back to all orders or check another stage."
+            }
+            actionLabel={statusFilter === "all" ? "Create New Order" : "Show All Orders"}
+            onAction={() => {
+              if (statusFilter === "all") {
+                navigate("/dashboard/orders/new");
+                return;
+              }
+              setStatusFilter("all");
+            }}
+            secondaryActionLabel={statusFilter === "all" ? "Open Menu" : undefined}
+            onSecondaryAction={statusFilter === "all" ? (() => navigate("/dashboard/menu")) : undefined}
           />
         ) : null}
       </DashboardPanel>

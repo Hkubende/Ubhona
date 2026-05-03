@@ -160,13 +160,19 @@ export function StatusBadge({ status }: { status: string }) {
 }
 
 export function EmptyStateCard({
+  title,
   message,
   actionLabel,
   onAction,
+  secondaryActionLabel,
+  onSecondaryAction,
 }: {
+  title?: string;
   message: string;
   actionLabel?: string;
   onAction?: () => void;
+  secondaryActionLabel?: string;
+  onSecondaryAction?: () => void;
 }) {
   return (
     <div
@@ -174,12 +180,18 @@ export function EmptyStateCard({
         `${radius.panel} border border-dashed border-border bg-background/30 p-4 text-sm leading-6 text-text-secondary/75`
       )}
     >
-      <div>{message}</div>
-      {actionLabel && onAction ? (
-        <div className="mt-3">
+      {title ? <div className="text-sm font-semibold text-text-primary">{title}</div> : null}
+      <div className={cn(title && "mt-1")}>{message}</div>
+      {((actionLabel && onAction) || (secondaryActionLabel && onSecondaryAction)) ? (
+        <div className="mt-3 flex flex-wrap gap-2">
           <Button size="sm" variant="secondary" onClick={onAction}>
             {actionLabel}
           </Button>
+          {secondaryActionLabel && onSecondaryAction ? (
+            <Button size="sm" variant="ghost" onClick={onSecondaryAction}>
+              {secondaryActionLabel}
+            </Button>
+          ) : null}
         </div>
       ) : null}
     </div>

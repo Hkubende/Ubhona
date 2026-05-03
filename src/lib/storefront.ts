@@ -1,6 +1,6 @@
 import { ApiError, api } from "./api";
 import { isApiConfigured } from "./config";
-import { fetchDishes } from "./dishes";
+import { fetchDishes, loadFallbackDishes } from "./dishes";
 import { getCategories } from "./categories";
 import { getRestaurantDishes } from "./restaurant-dishes";
 import { getRestaurantProfile } from "./restaurant";
@@ -158,7 +158,11 @@ async function getLocalFallback(slug: string) {
 
   const localCategories = canUseProfile ? await getCategories() : [];
   const localRestaurantDishes = canUseProfile ? await getRestaurantDishes() : [];
-  const dishes = !localRestaurantDishes.length ? await fetchDishes() : [];
+  const dishes = canUseDemo
+    ? await loadFallbackDishes()
+    : !localRestaurantDishes.length
+      ? await fetchDishes()
+      : [];
   const categoryNameById = new Map<string, string>();
   const categories: PublicCategory[] = localCategories.map((category) => ({
     id: category.id,
@@ -249,6 +253,10 @@ function getLocalFallbackCached(slug: string) {
 export async function getRestaurantBySlug(slug: string) {
   assertSlug(slug);
   const normalizedSlug = normalizeSlug(slug);
+  if (DEMO_SLUGS.has(normalizedSlug)) {
+    const fallback = await getLocalFallbackCached(normalizedSlug);
+    return fallback.restaurant;
+  }
   if (isApiConfigured) {
     try {
       const row = await api.get<unknown>(`/restaurants/${encodeURIComponent(normalizedSlug)}`);
@@ -261,12 +269,18 @@ export async function getRestaurantBySlug(slug: string) {
   return fallback.restaurant;
 }
 
-export async function getRestaurantCategoriesBySlug(slug: string) {
+export async function getRestaurantCategoriesBySlug(slug: string, options?: { branchId?: string }) {
   assertSlug(slug);
   const normalizedSlug = normalizeSlug(slug);
+  const branchId = String(options?.branchId || "").trim();
+  if (DEMO_SLUGS.has(normalizedSlug)) {
+    const fallback = await getLocalFallbackCached(normalizedSlug);
+    return [...fallback.categories].sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name));
+  }
   if (isApiConfigured) {
     try {
-      const rows = await api.get<unknown[]>(`/restaurants/${encodeURIComponent(normalizedSlug)}/categories`);
+      const suffix = branchId ? `?branchId=${encodeURIComponent(branchId)}` : "";
+      const rows = await api.get<unknown[]>(`/restaurants/${encodeURIComponent(normalizedSlug)}/categories${suffix}`);
       return rows.map(mapApiCategory).sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name));
     } catch (error) {
       if (!isNotFoundError(error) && !isApiUnavailable(error)) throw error;
@@ -280,6 +294,28 @@ export async function getRestaurantDishesBySlug(slug: string, options?: { branch
   assertSlug(slug);
   const normalizedSlug = normalizeSlug(slug);
   const branchId = String(options?.branchId || "").trim();
+  if (DEMO_SLUGS.has(normalizedSlug)) {
+    const fallback = await getLocalFallbackCached(normalizedSlug);
+    return fallback.dishes
+      .map((dish) => {
+        const localStock = getLocalDishStockOverride({
+          restaurantId: dish.restaurantId,
+          dishId: dish.id,
+          branchId: branchId || "main",
+        });
+        if (!localStock) return dish;
+        return {
+          ...dish,
+          availability_status: localStock.availability_status,
+          stock_quantity: localStock.stock_quantity,
+          low_stock_threshold: localStock.low_stock_threshold,
+          hidden_from_public_menu: localStock.hidden_from_public_menu,
+          branchId: localStock.branchId,
+          isAvailable: dish.isAvailable && localStock.availability_status !== "unavailable",
+        };
+      })
+      .filter((dish) => !dish.hidden_from_public_menu);
+  }
   if (isApiConfigured) {
     try {
       const suffix = branchId ? `?branchId=${encodeURIComponent(branchId)}` : "";
@@ -312,12 +348,58 @@ export async function getRestaurantDishesBySlug(slug: string, options?: { branch
 }
 
 export async function getStorefrontDataBySlug(slug: string, options?: { branchId?: string }): Promise<PublicStorefrontData> {
-  const [restaurant, categories, dishes] = await Promise.all([
-    getRestaurantBySlug(slug),
-    getRestaurantCategoriesBySlug(slug),
-    getRestaurantDishesBySlug(slug, options),
-  ]);
-  return { restaurant, categories, dishes };
+  assertSlug(slug);
+  const normalizedSlug = normalizeSlug(slug);
+  const branchId = String(options?.branchId || "").trim();
+  if (DEMO_SLUGS.has(normalizedSlug)) {
+    const fallback = await getLocalFallbackCached(normalizedSlug);
+    return {
+      restaurant: fallback.restaurant,
+      categories: [...fallback.categories].sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name)),
+      dishes: fallback.dishes
+        .map((dish) => {
+          const localStock = getLocalDishStockOverride({
+            restaurantId: dish.restaurantId,
+            dishId: dish.id,
+            branchId: branchId || "main",
+          });
+          if (!localStock) return dish;
+          return {
+            ...dish,
+            availability_status: localStock.availability_status,
+            stock_quantity: localStock.stock_quantity,
+            low_stock_threshold: localStock.low_stock_threshold,
+            hidden_from_public_menu: localStock.hidden_from_public_menu,
+            branchId: localStock.branchId,
+            isAvailable: dish.isAvailable && localStock.availability_status !== "unavailable",
+          };
+        })
+        .filter((dish) => !dish.hidden_from_public_menu),
+    };
+  }
+  if (isApiConfigured) {
+    try {
+      const suffix = branchId ? `?branchId=${encodeURIComponent(branchId)}` : "";
+      const payload = await api.get<{
+        restaurant: unknown;
+        categories: unknown[];
+        dishes: unknown[];
+      }>(`/restaurants/${encodeURIComponent(normalizedSlug)}/storefront${suffix}`);
+      return {
+        restaurant: mapApiRestaurant(payload.restaurant),
+        categories: (payload.categories || []).map(mapApiCategory).sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name)),
+        dishes: (payload.dishes || []).map(mapApiDish).filter((dish) => !dish.hidden_from_public_menu),
+      };
+    } catch (error) {
+      if (!isNotFoundError(error) && !isApiUnavailable(error)) throw error;
+    }
+  }
+  const fallback = await getLocalFallbackCached(normalizedSlug);
+  return {
+    restaurant: fallback.restaurant,
+    categories: [...fallback.categories].sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name)),
+    dishes: fallback.dishes,
+  };
 }
 
 export async function getRestaurantArDishesBySlug(slug: string, options?: { branchId?: string }) {
