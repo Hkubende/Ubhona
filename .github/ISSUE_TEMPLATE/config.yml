@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Production smoke QA protocol
+    url: https://github.com/Hkubende/Ubhona/blob/main/docs/qa-smoke-test-protocol.md
+    about: Review the QA protocol before opening production smoke reports or blockers.

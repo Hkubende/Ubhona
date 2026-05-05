@@ -1,0 +1,84 @@
+name: Production Smoke QA
+description: Record a production smoke QA pass for the deployed Ubhona system.
+title: "Production Smoke QA: "
+labels:
+  - qa:smoke
+  - production
+body:
+  - type: input
+    id: commit
+    attributes:
+      label: Commit / deployment checked
+      description: Commit SHA, Render deploy ID, or deployment version.
+      placeholder: "05b95ef..."
+    validations:
+      required: true
+  - type: input
+    id: frontend_url
+    attributes:
+      label: Frontend URL
+      placeholder: "https://ubhona.onrender.com"
+    validations:
+      required: true
+  - type: input
+    id: backend_url
+    attributes:
+      label: Backend URL
+      placeholder: "https://ubhona-api.onrender.com"
+    validations:
+      required: true
+  - type: input
+    id: test_account
+    attributes:
+      label: Test account used
+      description: Use a non-sensitive identifier. Do not paste passwords or tokens.
+      placeholder: "qa.smoke@example.com"
+    validations:
+      required: true
+  - type: checkboxes
+    id: smoke_checklist
+    attributes:
+      label: Smoke checklist
+      options:
+        - label: Homepage loads latest frontend
+        - label: Signup/login use real backend auth
+        - label: Onboarding completes to dashboard
+        - label: Upload thumbnail/model works via API provider
+        - label: Overview page loads without runtime crash
+        - label: Menu page loads without runtime crash
+        - label: Orders page loads without runtime crash
+        - label: Kitchen page loads without runtime crash
+        - label: Payments page loads without runtime crash
+        - label: Settings page loads without runtime crash
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Evidence
+      description: Include screenshots, console errors, network request URLs/statuses, and relevant runtime identity.
+      placeholder: "Evidence..."
+    validations:
+      required: true
+  - type: dropdown
+    id: final_result
+    attributes:
+      label: Final result
+      options:
+        - PASS
+        - FAIL
+        - BLOCKED
+    validations:
+      required: true
+  - type: textarea
+    id: next_atomic_task
+    attributes:
+      label: Next atomic task
+      description: Required if result is FAIL or BLOCKED.
+      placeholder: |
+        Title:
+        Problem:
+        Reproduction Steps:
+        Expected Result:
+        Actual Result:
+        Suspected Layer:
+        Files Likely Involved:
+        Acceptance Criteria:

@@ -34,7 +34,10 @@
     "test:storefront-regression": "playwright test --config=playwright.storefront.config.mjs tests/storefront-category-visibility.spec.mjs",
     "test:billing-regression": "playwright test --config=playwright.storefront.config.mjs tests/billing-failed-timeout-truthfulness.spec.mjs",
     "validate:critical-regressions": "playwright test --config=playwright.storefront.config.mjs tests/storefront-category-visibility.spec.mjs tests/billing-failed-timeout-truthfulness.spec.mjs",
-    "validate:mobile-launch-qa": "playwright test --config=playwright.storefront.config.mjs tests/mobile-launch-qa.spec.mjs"
+    "validate:mobile-launch-qa": "playwright test --config=playwright.storefront.config.mjs tests/mobile-launch-qa.spec.mjs",
+    "test:smoke:prod": "playwright test tests/smoke/production-smoke.spec.ts",
+    "test:smoke:prod:headed": "playwright test tests/smoke/production-smoke.spec.ts --headed",
+    "test:smoke:report": "playwright show-report"
   },
   "dependencies": {
     "@gsap/react": "^2.1.2",
