@@ -1,0 +1,50 @@
+name: Production Smoke QA
+
+on:
+  workflow_dispatch:
+    inputs:
+      frontend_url:
+        description: Production frontend URL
+        required: false
+        type: string
+      backend_url:
+        description: Production backend URL
+        required: false
+        type: string
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  production-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      UBHONA_FRONTEND_URL: ${{ github.event_name == 'workflow_dispatch' && inputs.frontend_url || secrets.UBHONA_FRONTEND_URL }}
+      UBHONA_BACKEND_URL: ${{ github.event_name == 'workflow_dispatch' && inputs.backend_url || secrets.UBHONA_BACKEND_URL }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps
+
+      - name: Run production smoke tests
+        run: npx playwright test tests/smoke/production-smoke.spec.ts --reporter=line,html
+
+      - name: Upload Playwright report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-production-smoke-report
+          path: playwright-report
+          retention-days: 7
