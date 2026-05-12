@@ -13,6 +13,7 @@ export const appConfig = {
   slogan: import.meta.env.VITE_APP_SLOGAN || "Visualize",
   apiUrl: normalizeUrl(import.meta.env.VITE_API_BASE),
   stkApiUrl: normalizeUrl(import.meta.env.VITE_STK_API_BASE),
+  googleClientId: String(import.meta.env.VITE_GOOGLE_CLIENT_ID || "").trim(),
   enableAnalytics: parseBoolean(import.meta.env.VITE_ENABLE_ANALYTICS, false),
   enableOrders: parseBoolean(import.meta.env.VITE_ENABLE_ORDERS, false),
 } as const;

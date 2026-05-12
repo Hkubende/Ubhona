@@ -3,7 +3,7 @@ import { z } from "zod";
 import { requireAuth } from "../middleware/auth.js";
 import { createRateLimiter } from "../middleware/rate-limit.js";
 import type { AuthRequest } from "../types.js";
-import { login, me, requestPasswordReset, resetPassword, signup } from "../services/auth.service.js";
+import { googleLogin, login, me, requestPasswordReset, resetPassword, signup } from "../services/auth.service.js";
 
 export const authRouter = Router();
 const signupLimiter = createRateLimiter({
@@ -59,6 +59,20 @@ authRouter.post("/login", loginLimiter, async (req, res) => {
     res.json(response);
   } catch (error) {
     res.status(400).json({ error: error instanceof Error ? error.message : "Login failed." });
+  }
+});
+
+authRouter.post("/google", loginLimiter, async (req, res) => {
+  try {
+    const body = z
+      .object({
+        credential: z.string().min(1),
+      })
+      .parse(req.body);
+    const response = await googleLogin(body);
+    res.json(response);
+  } catch (error) {
+    res.status(400).json({ error: error instanceof Error ? error.message : "Google Sign-In failed." });
   }
 });
 

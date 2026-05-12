@@ -26,7 +26,7 @@ export default defineConfig({
       timeout: 120_000,
     },
     {
-      command: `npm run dev -- --host 127.0.0.1 --port ${FRONTEND_PORT}`,
+      command: `npx cross-env VITE_ALLOW_OFFLINE_DEMO_FALLBACK=false npm run dev -- --host 127.0.0.1 --port ${FRONTEND_PORT}`,
       url: FRONTEND_URL,
       reuseExistingServer: true,
       timeout: 120_000,

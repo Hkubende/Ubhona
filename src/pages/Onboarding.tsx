@@ -376,8 +376,13 @@ export default function Onboarding() {
         <div className="grid gap-5 lg:grid-cols-[minmax(0,1.15fr)_minmax(290px,0.85fr)]">
           <div className="ui-panel-inset rounded-2xl p-4">
             {step === 1 ? (
-              <div className="grid gap-3 md:grid-cols-2">
-                <div className="md:col-span-2">
+              <div className="space-y-4">
+                <div className="rounded-2xl border border-primary/20 bg-primary/10 px-3 py-2 text-xs text-text-primary">
+                  Start with the two details guests and staff need first. Slug, branding, email, and location can be
+                  refined later from settings.
+                </div>
+                <div className="grid gap-3 md:grid-cols-2">
+                  <div>
                   <label htmlFor="onboarding-restaurant-name" className="mb-1 block text-xs text-text-secondary/68">Restaurant Name</label>
                   <input
                     id="onboarding-restaurant-name"
@@ -391,27 +396,7 @@ export default function Onboarding() {
                   />
                 </div>
                 <div>
-                  <label htmlFor="onboarding-slug" className="mb-1 block text-xs text-text-secondary/68">Slug</label>
-                  <input
-                    id="onboarding-slug"
-                    value={slug}
-                    onChange={(event) => setSlug(slugify(event.target.value))}
-                    className="ui-input-control w-full rounded-xl px-3 py-2 text-sm outline-none"
-                    placeholder="ubhona-bistro"
-                  />
-                </div>
-                <div>
-                  <label htmlFor="onboarding-logo" className="mb-1 block text-xs text-text-secondary/68">Logo URL</label>
-                  <input
-                    id="onboarding-logo"
-                    value={logo}
-                    onChange={(event) => setLogo(event.target.value)}
-                    className="ui-input-control w-full rounded-xl px-3 py-2 text-sm outline-none"
-                    placeholder="https://.../logo.jpg"
-                  />
-                </div>
-                <div>
-                  <label htmlFor="onboarding-phone" className="mb-1 block text-xs text-text-secondary/68">Phone (optional)</label>
+                  <label htmlFor="onboarding-phone" className="mb-1 block text-xs text-text-secondary/68">Phone</label>
                   <input
                     id="onboarding-phone"
                     value={phone}
@@ -420,38 +405,76 @@ export default function Onboarding() {
                     placeholder="+254..."
                   />
                 </div>
-                <div>
-                  <label htmlFor="onboarding-email" className="mb-1 block text-xs text-text-secondary/68">Email</label>
-                  <input
-                    id="onboarding-email"
-                    type="email"
-                    value={email}
-                    onChange={(event) => setEmail(event.target.value)}
-                    className="ui-input-control w-full rounded-xl px-3 py-2 text-sm outline-none"
-                    placeholder="owner@restaurant.com"
-                  />
                 </div>
-                <div className="md:col-span-2">
-                  <label htmlFor="onboarding-location" className="mb-1 block text-xs text-text-secondary/68">Location (optional)</label>
-                  <input
-                    id="onboarding-location"
-                    value={location}
-                    onChange={(event) => setLocation(event.target.value)}
-                    className="ui-input-control w-full rounded-xl px-3 py-2 text-sm outline-none"
-                    placeholder="Nairobi"
-                  />
-                </div>
-                <div className="md:col-span-2">
-                  <label htmlFor="onboarding-description" className="mb-1 block text-xs text-text-secondary/68">Short Description</label>
-                  <textarea
-                    id="onboarding-description"
-                    value={description}
-                    onChange={(event) => setDescription(event.target.value)}
-                    rows={3}
-                    className="ui-input-control w-full rounded-xl px-3 py-2 text-sm outline-none"
-                    placeholder="Bold flavors, fast service."
-                  />
-                </div>
+                <details className="rounded-2xl border border-border bg-[color:var(--ui-note-icon-bg)] p-3">
+                  <summary className="cursor-pointer text-sm font-semibold text-text-primary">
+                    Optional profile details
+                  </summary>
+                  <div className="mt-3 grid gap-3 md:grid-cols-2">
+                    <div>
+                      <label htmlFor="onboarding-slug" className="mb-1 block text-xs text-text-secondary/68">
+                        Slug
+                      </label>
+                      <input
+                        id="onboarding-slug"
+                        value={slug}
+                        onChange={(event) => setSlug(slugify(event.target.value))}
+                        className="ui-input-control w-full rounded-xl px-3 py-2 text-sm outline-none"
+                        placeholder="ubhona-bistro"
+                      />
+                    </div>
+                    <div>
+                      <label htmlFor="onboarding-logo" className="mb-1 block text-xs text-text-secondary/68">
+                        Logo URL
+                      </label>
+                      <input
+                        id="onboarding-logo"
+                        value={logo}
+                        onChange={(event) => setLogo(event.target.value)}
+                        className="ui-input-control w-full rounded-xl px-3 py-2 text-sm outline-none"
+                        placeholder="https://.../logo.jpg"
+                      />
+                    </div>
+                    <div>
+                      <label htmlFor="onboarding-email" className="mb-1 block text-xs text-text-secondary/68">
+                        Email
+                      </label>
+                      <input
+                        id="onboarding-email"
+                        type="email"
+                        value={email}
+                        onChange={(event) => setEmail(event.target.value)}
+                        className="ui-input-control w-full rounded-xl px-3 py-2 text-sm outline-none"
+                        placeholder="owner@restaurant.com"
+                      />
+                    </div>
+                    <div>
+                      <label htmlFor="onboarding-location" className="mb-1 block text-xs text-text-secondary/68">
+                        Location
+                      </label>
+                      <input
+                        id="onboarding-location"
+                        value={location}
+                        onChange={(event) => setLocation(event.target.value)}
+                        className="ui-input-control w-full rounded-xl px-3 py-2 text-sm outline-none"
+                        placeholder="Nairobi"
+                      />
+                    </div>
+                    <div className="md:col-span-2">
+                      <label htmlFor="onboarding-description" className="mb-1 block text-xs text-text-secondary/68">
+                        Short Description
+                      </label>
+                      <textarea
+                        id="onboarding-description"
+                        value={description}
+                        onChange={(event) => setDescription(event.target.value)}
+                        rows={3}
+                        className="ui-input-control w-full rounded-xl px-3 py-2 text-sm outline-none"
+                        placeholder="Bold flavors, fast service."
+                      />
+                    </div>
+                  </div>
+                </details>
               </div>
             ) : null}
 

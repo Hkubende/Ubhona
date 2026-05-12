@@ -1,11 +1,12 @@
 import * as React from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { DEMO_EMAIL, DEMO_PASSWORD, loginUser } from "../lib/auth";
+import { DEMO_EMAIL, DEMO_PASSWORD, googleSignIn, loginUser, type AuthUser } from "../lib/auth";
 import { hasRestaurantProfile, syncRestaurantProfile } from "../lib/restaurant";
 import { getDefaultRouteForRole, getPrimaryDashboardRole } from "../lib/roles";
 import { Button } from "../components/ui/Button";
 import { Card } from "../components/ui/Card";
 import { Input } from "../components/ui/Input";
+import { GoogleSignInButton } from "../components/auth/GoogleSignInButton";
 
 const LOGO_SRC = `${import.meta.env.BASE_URL}ubhona-logo.jpeg`;
 
@@ -15,15 +16,8 @@ export default function Login() {
   const [password, setPassword] = React.useState("");
   const [error, setError] = React.useState("");
 
-  const onSubmit = async (event: React.FormEvent) => {
-    event.preventDefault();
-    setError("");
-    const result = await loginUser(email, password);
-    if (!result.ok) {
-      setError(result.error);
-      return;
-    }
-    if (result.user.role === "platform_admin") {
+  const routeAfterAuth = async (user: AuthUser) => {
+    if (user.role === "platform_admin") {
       navigate("/admin");
       return;
     }
@@ -32,7 +26,28 @@ export default function Login() {
       navigate("/onboarding");
       return;
     }
-    navigate(getDefaultRouteForRole(getPrimaryDashboardRole(result.user)));
+    navigate(getDefaultRouteForRole(getPrimaryDashboardRole(user)));
+  };
+
+  const onSubmit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    setError("");
+    const result = await loginUser(email, password);
+    if (!result.ok) {
+      setError(result.error);
+      return;
+    }
+    await routeAfterAuth(result.user);
+  };
+
+  const onGoogleCredential = async (credential: string) => {
+    setError("");
+    const result = await googleSignIn(credential);
+    if (!result.ok) {
+      setError(result.error);
+      return;
+    }
+    await routeAfterAuth(result.user);
   };
 
   const loginAsDemo = async () => {
@@ -67,6 +82,16 @@ export default function Login() {
             <div className="text-xl font-black"><span className="text-primary">Ubhona</span> Sign in</div>
             <div className="text-xs text-text-secondary/68">Restaurant access</div>
           </div>
+        </div>
+
+        <div className="mb-4">
+          <GoogleSignInButton label="signin_with" onCredential={onGoogleCredential} onError={setError} />
+        </div>
+
+        <div className="mb-4 flex items-center gap-3 text-xs uppercase tracking-[0.18em] text-text-secondary/50">
+          <span className="h-px flex-1 bg-border" />
+          <span>Email</span>
+          <span className="h-px flex-1 bg-border" />
         </div>
 
         <form className="space-y-4" onSubmit={onSubmit}>
