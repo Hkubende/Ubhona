@@ -1,6 +1,7 @@
 import * as React from "react";
 import { Clock3, Printer, Volume2, VolumeX } from "lucide-react";
 import { DashboardLayout } from "../../components/dashboard/dashboard-layout";
+import { NewOrderAlert } from "../../components/dashboard/new-order-alert";
 import { Badge } from "../../components/ui/Badge";
 import { Button } from "../../components/ui/Button";
 import { UbhonaLoader } from "../../components/ui/ubhona-loader";
@@ -219,7 +220,17 @@ function KitchenTicketCard({
 }
 
 export default function KitchenDisplayPage() {
-  const { restaurant, orders, loading, error, refresh, updateStatus } = useRestaurantOrders();
+  const {
+    restaurant,
+    orders,
+    loading,
+    error,
+    refresh,
+    updateStatus,
+    newOrderIds,
+    acknowledgeNewOrders,
+    lastSyncedAt,
+  } = useRestaurantOrders();
   const [submittingOrderId, setSubmittingOrderId] = React.useState("");
   const [soundEnabled, setSoundEnabled] = React.useState(false);
   const [highlightedIds, setHighlightedIds] = React.useState<Record<string, true>>({});
@@ -335,6 +346,12 @@ export default function KitchenDisplayPage() {
       }
     >
       <PageContainer className="space-y-4">
+        <NewOrderAlert
+          count={newOrderIds.length}
+          lastSyncedAt={lastSyncedAt}
+          onView={acknowledgeNewOrders}
+          onDismiss={acknowledgeNewOrders}
+        />
         <SectionHeader
           title="Kitchen Queue"
           subtitle="Tickets update live. Move tickets across states to keep service moving."

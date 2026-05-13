@@ -2,6 +2,7 @@ import * as React from "react";
 import { CheckCheck, Eye, Search, SquareArrowOutUpRight } from "lucide-react";
 import { Link } from "react-router-dom";
 import { DashboardLayout } from "../../components/dashboard/dashboard-layout";
+import { NewOrderAlert } from "../../components/dashboard/new-order-alert";
 import { Badge } from "../../components/ui/Badge";
 import { Button, buttonVariants } from "../../components/ui/Button";
 import { Input } from "../../components/ui/Input";
@@ -56,7 +57,18 @@ function paymentBadgeVariant(status: string | undefined) {
 }
 
 export default function StaffOrdersBoardPage() {
-  const { restaurant, orders, loading, error, refresh, updateStatus, overdueOrderIds } = useRestaurantOrders();
+  const {
+    restaurant,
+    orders,
+    loading,
+    error,
+    refresh,
+    updateStatus,
+    overdueOrderIds,
+    newOrderIds,
+    acknowledgeNewOrders,
+    lastSyncedAt,
+  } = useRestaurantOrders();
   const [query, setQuery] = React.useState("");
   const [statusFilter, setStatusFilter] = React.useState<(typeof FILTER_OPTIONS)[number]>("all");
   const [tableFilter, setTableFilter] = React.useState("all");
@@ -157,6 +169,12 @@ export default function StaffOrdersBoardPage() {
       }
     >
       <PageContainer className="space-y-4">
+        <NewOrderAlert
+          count={newOrderIds.length}
+          lastSyncedAt={lastSyncedAt}
+          onView={acknowledgeNewOrders}
+          onDismiss={acknowledgeNewOrders}
+        />
         <section className="ui-surface rounded-3xl p-4">
           <SectionHeader title="Live Controls" subtitle="Search by order, customer, table, or dish. Filter to focus active service states." />
           <div className="mt-3 grid gap-3 md:grid-cols-[minmax(0,1fr)_auto_auto] md:items-start">
