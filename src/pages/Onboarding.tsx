@@ -357,7 +357,7 @@ export default function Onboarding() {
       <div className="ui-surface mx-auto max-w-5xl rounded-3xl p-6 backdrop-blur-xl">
         <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-3">
-            <img src={logo.trim() || LOGO_SRC} alt="Ubhona" className="h-11 w-11 rounded-2xl object-cover" />
+            <img src={LOGO_SRC} alt="Ubhona" className="h-11 w-11 rounded-2xl object-cover" />
             <div>
               <div className="text-xl font-black">
                 <span className="text-primary">Fast</span> Onboarding
