@@ -526,6 +526,22 @@ export async function loginUser(
   }
 }
 
+export async function googleSignIn(credential: string): Promise<AuthSuccess | AuthFailure> {
+  const token = credential.trim();
+  if (!token) {
+    return { ok: false, error: "Google Sign-In did not return a credential." };
+  }
+  try {
+    const response = await api.post<{ token: string; user: AuthUser }>("/auth/google", {
+      credential: token,
+    });
+    createRemoteSession(response.user, response.token);
+    return { ok: true, user: response.user };
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : "Google Sign-In failed." };
+  }
+}
+
 export async function requestPasswordReset(email: string): Promise<{ ok: true; message: string; resetUrl?: string } | AuthFailure> {
   const normalizedEmail = email.trim().toLowerCase();
   try {

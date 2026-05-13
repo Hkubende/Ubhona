@@ -8,18 +8,28 @@ const mocks = vi.hoisted(() => ({
       create: vi.fn(),
     },
   },
+  googleVerifyIdToken: vi.fn(),
 }));
 
 vi.mock("../prisma.js", () => ({
   prisma: mocks.prisma,
 }));
 
-import { requestPasswordReset, resetPassword } from "../services/auth.service.js";
+vi.mock("google-auth-library", () => ({
+  OAuth2Client: vi.fn(function OAuth2Client() {
+    return {
+    verifyIdToken: mocks.googleVerifyIdToken,
+    };
+  }),
+}));
+
+import { googleLogin, requestPasswordReset, resetPassword } from "../services/auth.service.js";
 
 describe("auth.service password reset", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     process.env.FRONTEND_URL = "https://app.ubhona.test";
+    process.env.GOOGLE_CLIENT_ID = "google-client-id.apps.googleusercontent.com";
   });
 
   it("returns a generic response when the account does not exist", async () => {
@@ -89,5 +99,80 @@ describe("auth.service password reset", () => {
     await expect(resetPassword({ token, password: "new-password-123" })).rejects.toThrow(
       "This password reset link has already been used or has expired."
     );
+  });
+
+  it("creates a user and app JWT from a verified Google ID token", async () => {
+    mocks.googleVerifyIdToken.mockResolvedValue({
+      getPayload: () => ({
+        sub: "google-sub-1",
+        email: "Owner@Ubhona.com",
+        email_verified: true,
+        name: "Google Owner",
+      }),
+    });
+    mocks.prisma.user.findUnique.mockResolvedValue(null);
+    mocks.prisma.user.create.mockResolvedValue({
+      id: "user-google-1",
+      name: "Google Owner",
+      email: "owner@ubhona.com",
+      role: "restaurant_owner",
+      createdAt: new Date("2026-05-05T00:00:00.000Z"),
+    });
+
+    const response = await googleLogin({ credential: "google-id-token" });
+
+    expect(mocks.googleVerifyIdToken).toHaveBeenCalledWith({
+      idToken: "google-id-token",
+      audience: "google-client-id.apps.googleusercontent.com",
+    });
+    expect(mocks.prisma.user.create).toHaveBeenCalledWith({
+      data: {
+        name: "Google Owner",
+        email: "owner@ubhona.com",
+        passwordHash: "oauth:google:google-sub-1",
+      },
+    });
+    expect(response.token).toBeTruthy();
+    expect(response.user.email).toBe("owner@ubhona.com");
+  });
+
+  it("reuses an existing user for a verified Google ID token", async () => {
+    const existingUser = {
+      id: "user-existing",
+      name: "Existing Owner",
+      email: "existing@ubhona.com",
+      role: "restaurant_owner",
+      createdAt: new Date("2026-05-05T00:00:00.000Z"),
+    };
+    mocks.googleVerifyIdToken.mockResolvedValue({
+      getPayload: () => ({
+        sub: "google-sub-existing",
+        email: existingUser.email,
+        email_verified: true,
+        name: "Google Owner",
+      }),
+    });
+    mocks.prisma.user.findUnique.mockResolvedValue(existingUser);
+
+    const response = await googleLogin({ credential: "google-id-token" });
+
+    expect(mocks.prisma.user.create).not.toHaveBeenCalled();
+    expect(response.user.id).toBe(existingUser.id);
+  });
+
+  it("rejects Google tokens without a verified email", async () => {
+    mocks.googleVerifyIdToken.mockResolvedValue({
+      getPayload: () => ({
+        sub: "google-sub-1",
+        email: "owner@ubhona.com",
+        email_verified: false,
+        name: "Google Owner",
+      }),
+    });
+
+    await expect(googleLogin({ credential: "google-id-token" })).rejects.toThrow(
+      "Google account email could not be verified."
+    );
+    expect(mocks.prisma.user.create).not.toHaveBeenCalled();
   });
 });

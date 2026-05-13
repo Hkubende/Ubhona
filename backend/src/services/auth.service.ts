@@ -1,5 +1,6 @@
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
+import { OAuth2Client } from "google-auth-library";
 import { prisma } from "../prisma.js";
 import type { UserRole } from "@prisma/client";
 
@@ -11,6 +12,22 @@ const PASSWORD_RESET_SECRET = String(process.env.PASSWORD_RESET_SECRET || JWT_SE
 const PASSWORD_RESET_TTL = "30m";
 const PASSWORD_RESET_PURPOSE = "password_reset";
 const RESET_MESSAGE = "If an account exists for that email, password reset instructions have been prepared.";
+const GOOGLE_PASSWORD_HASH_PREFIX = "oauth:google:";
+const googleOAuthClient = new OAuth2Client();
+
+function getGoogleClientId() {
+  return String(process.env.GOOGLE_CLIENT_ID || process.env.GOOGLE_OAUTH_CLIENT_ID || "").trim();
+}
+
+function toPublicUser(user: { id: string; name: string; email: string; role: UserRole; createdAt: Date }) {
+  return {
+    id: user.id,
+    name: user.name,
+    email: user.email,
+    role: user.role,
+    createdAt: user.createdAt.toISOString(),
+  };
+}
 
 function signToken(user: { id: string; email: string; role: UserRole }) {
   return jwt.sign({ sub: user.id, email: user.email, role: user.role }, JWT_SECRET, { expiresIn: "7d" });
@@ -121,13 +138,44 @@ export async function signup(input: { name: string; email: string; password: str
   });
   return {
     token: signToken(user),
-    user: {
-      id: user.id,
-      name: user.name,
-      email: user.email,
-      role: user.role,
-      createdAt: user.createdAt.toISOString(),
-    },
+    user: toPublicUser(user),
+  };
+}
+
+export async function googleLogin(input: { credential: string }) {
+  const googleClientId = getGoogleClientId();
+  if (!googleClientId) {
+    throw new Error("Google Sign-In is not configured.");
+  }
+
+  const ticket = await googleOAuthClient.verifyIdToken({
+    idToken: input.credential,
+    audience: googleClientId,
+  });
+  const payload = ticket.getPayload();
+  const email = String(payload?.email || "").trim().toLowerCase();
+  const emailVerified = Boolean(payload?.email_verified);
+  const googleSub = String(payload?.sub || "").trim();
+  const name = String(payload?.name || payload?.given_name || email.split("@")[0] || "Restaurant Owner").trim();
+
+  if (!googleSub || !email || !emailVerified) {
+    throw new Error("Google account email could not be verified.");
+  }
+
+  const existing = await prisma.user.findUnique({ where: { email } });
+  const user =
+    existing ||
+    (await prisma.user.create({
+      data: {
+        name,
+        email,
+        passwordHash: `${GOOGLE_PASSWORD_HASH_PREFIX}${googleSub}`,
+      },
+    }));
+
+  return {
+    token: signToken(user),
+    user: toPublicUser(user),
   };
 }
 
@@ -139,13 +187,7 @@ export async function login(input: { email: string; password: string }) {
   if (!ok) throw new Error("Invalid password.");
   return {
     token: signToken(user),
-    user: {
-      id: user.id,
-      name: user.name,
-      email: user.email,
-      role: user.role,
-      createdAt: user.createdAt.toISOString(),
-    },
+    user: toPublicUser(user),
   };
 }
 
@@ -153,10 +195,6 @@ export async function me(userId: string) {
   const user = await prisma.user.findUnique({ where: { id: userId } });
   if (!user) return null;
   return {
-    id: user.id,
-    name: user.name,
-    email: user.email,
-    role: user.role,
-    createdAt: user.createdAt.toISOString(),
+    ...toPublicUser(user),
   };
 }

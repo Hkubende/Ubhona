@@ -1,6 +1,7 @@
 import * as React from "react";
 import { Building2, CreditCard, FolderKanban, Headset, ShieldCheck } from "lucide-react";
 import { useNavigate } from "react-router-dom";
+import { LaunchFunnelPanel } from "../../components/admin/LaunchFunnelPanel";
 import { getAdminMetrics, type AdminMetrics } from "../../lib/admin";
 
 function formatKsh(value: number) {
@@ -60,6 +61,8 @@ export default function AdminHome() {
             <div className="mt-2 text-2xl font-black text-red-300">{metrics?.failedPayments ?? "-"}</div>
           </div>
         </div>
+
+        <LaunchFunnelPanel />
 
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
           <button

@@ -52,6 +52,8 @@ test.describe("mobile launch QA", () => {
   test("signup page stays usable on mobile", async ({ page }) => {
     await page.goto("/signup");
     await expect(page.getByRole("button", { name: "Create Account" })).toBeVisible();
+    await expect(page.getByText("Google Sign-In is not configured for this environment.")).toBeVisible();
+    await expect(page.locator("#signup-confirm-password")).toHaveCount(0);
     await expect(page.getByText("Terms of Service")).toBeVisible();
     await expectNoHorizontalOverflow(page);
   });
@@ -59,6 +61,7 @@ test.describe("mobile launch QA", () => {
   test("login page stays usable on mobile", async ({ page }) => {
     await page.goto("/login");
     await expect(page.getByRole("button", { name: "Sign in" })).toBeVisible();
+    await expect(page.getByText("Google Sign-In is not configured for this environment.")).toBeVisible();
     await expect(page.getByRole("link", { name: "Forgot password?" })).toBeVisible();
     await expect(page.getByRole("button", { name: "Enter Demo Mode" })).toBeVisible();
     await expectNoHorizontalOverflow(page);
@@ -74,6 +77,10 @@ test.describe("mobile launch QA", () => {
 
     await page.goto("/onboarding?previewOnboarding=1");
     await expect(page.getByText("Fast Onboarding", { exact: true })).toBeVisible();
+    await expect(page.locator("#onboarding-restaurant-name")).toBeVisible();
+    await expect(page.locator("#onboarding-phone")).toBeVisible();
+    await expect(page.locator("#onboarding-slug")).not.toBeVisible();
+    await expect(page.getByText("Optional profile details")).toBeVisible();
     await expect(page.getByRole("button", { name: "Continue" })).toBeVisible();
     await expect(page.getByText("1. Restaurant setup")).toBeVisible();
     await expectNoHorizontalOverflow(page);

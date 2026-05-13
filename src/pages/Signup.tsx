@@ -1,12 +1,13 @@
 import * as React from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { signupUser } from "../lib/auth";
+import { googleSignIn, signupUser, type AuthUser } from "../lib/auth";
 import { trackLaunchFunnelEvent } from "../lib/analytics";
 import { hasRestaurantProfile, syncRestaurantProfile } from "../lib/restaurant";
 import { getDefaultRouteForRole, getPrimaryDashboardRole } from "../lib/roles";
 import { Button } from "../components/ui/Button";
 import { Card } from "../components/ui/Card";
 import { Input } from "../components/ui/Input";
+import { GoogleSignInButton } from "../components/auth/GoogleSignInButton";
 
 const LOGO_SRC = `${import.meta.env.BASE_URL}ubhona-logo.jpeg`;
 
@@ -15,7 +16,6 @@ export default function Signup() {
   const [name, setName] = React.useState("");
   const [email, setEmail] = React.useState("");
   const [password, setPassword] = React.useState("");
-  const [confirm, setConfirm] = React.useState("");
   const [error, setError] = React.useState("");
   const signupStartTrackedRef = React.useRef(false);
 
@@ -27,15 +27,24 @@ export default function Signup() {
     });
   };
 
+  const routeAfterAuth = async (user: AuthUser) => {
+    if (user.role === "platform_admin") {
+      navigate("/admin");
+      return;
+    }
+    await syncRestaurantProfile();
+    if (!hasRestaurantProfile()) {
+      navigate("/onboarding");
+      return;
+    }
+    navigate(getDefaultRouteForRole(getPrimaryDashboardRole(user)));
+  };
+
   const onSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
     setError("");
     if (password.length < 6) {
       setError("Password must be at least 6 characters.");
-      return;
-    }
-    if (password !== confirm) {
-      setError("Passwords do not match.");
       return;
     }
     const result = await signupUser(name, email, password);
@@ -48,16 +57,22 @@ export default function Signup() {
       hasName: Boolean(name.trim()),
       emailDomain: email.includes("@") ? email.split("@")[1] : "",
     });
-    if (result.user.role === "platform_admin") {
-      navigate("/admin");
+    await routeAfterAuth(result.user);
+  };
+
+  const onGoogleCredential = async (credential: string) => {
+    setError("");
+    markSignupStart();
+    const result = await googleSignIn(credential);
+    if (!result.ok) {
+      setError(result.error);
       return;
     }
-    await syncRestaurantProfile();
-    if (!hasRestaurantProfile()) {
-      navigate("/onboarding");
-      return;
-    }
-    navigate(getDefaultRouteForRole(getPrimaryDashboardRole(result.user)));
+    void trackLaunchFunnelEvent("signup_complete", {
+      page: "signup",
+      provider: "google",
+    });
+    await routeAfterAuth(result.user);
   };
 
   return (
@@ -81,6 +96,16 @@ export default function Signup() {
             <div className="text-xl font-black"><span className="text-primary">Ubhona</span> Sign up</div>
             <div className="text-xs text-text-secondary/68">Create your restaurant account</div>
           </div>
+        </div>
+
+        <div className="mb-4">
+          <GoogleSignInButton label="signup_with" onCredential={onGoogleCredential} onError={setError} />
+        </div>
+
+        <div className="mb-4 flex items-center gap-3 text-xs uppercase tracking-[0.18em] text-text-secondary/50">
+          <span className="h-px flex-1 bg-border" />
+          <span>Email</span>
+          <span className="h-px flex-1 bg-border" />
         </div>
 
         <form className="space-y-4" onSubmit={onSubmit}>
@@ -124,21 +149,6 @@ export default function Signup() {
               name="password"
               value={password}
               onChange={(event) => setPassword(event.target.value)}
-              onFocus={markSignupStart}
-              type="password"
-              autoComplete="new-password"
-              required
-            />
-          </div>
-          <div>
-            <label htmlFor="signup-confirm-password" className="mb-1 block text-xs text-text-secondary/68">
-              Confirm Password
-            </label>
-            <Input
-              id="signup-confirm-password"
-              name="confirmPassword"
-              value={confirm}
-              onChange={(event) => setConfirm(event.target.value)}
               onFocus={markSignupStart}
               type="password"
               autoComplete="new-password"
