@@ -13,6 +13,7 @@ import {
 import { Badge } from "../components/ui/Badge";
 import { Button, buttonVariants } from "../components/ui/Button";
 import { UbhonaActionMenu } from "../components/ui/ubhona-action-menu";
+import { NewOrderAlert } from "../components/dashboard/new-order-alert";
 import { useRestaurantOrders } from "../hooks/use-restaurant-orders";
 import { spacing, tokens } from "../design-system";
 import { cn } from "../lib/utils";
@@ -99,6 +100,9 @@ export default function OrdersDashboard() {
     statusFilter,
     setStatusFilter,
     updateStatus,
+    newOrderIds,
+    acknowledgeNewOrders,
+    lastSyncedAt,
   } = useRestaurantOrders();
 
   const profile = React.useMemo<RestaurantProfile | null>(() => {
@@ -151,6 +155,12 @@ export default function OrdersDashboard() {
       setSelectedOrderId(orders[0].id);
     }
   }, [orders, selectedOrderId]);
+
+  React.useEffect(() => {
+    if (!newOrderIds.length) return;
+    setStatusFilter("all");
+    setSelectedOrderId(newOrderIds[0]);
+  }, [newOrderIds, setStatusFilter]);
 
   React.useEffect(() => {
     if (!selectedOrderId) {
@@ -212,6 +222,16 @@ export default function OrdersDashboard() {
       }
     >
       <PageContainer>
+      <NewOrderAlert
+        count={newOrderIds.length}
+        lastSyncedAt={lastSyncedAt}
+        onView={() => {
+          setStatusFilter("all");
+          if (newOrderIds[0]) setSelectedOrderId(newOrderIds[0]);
+          acknowledgeNewOrders();
+        }}
+        onDismiss={acknowledgeNewOrders}
+      />
       <DashboardPanel className="space-y-3">
         <SectionHeader title="Order Filters" subtitle="Filter by fulfillment stage." />
         <div className={`flex flex-wrap ${spacing.gapSm}`}>

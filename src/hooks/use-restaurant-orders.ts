@@ -20,6 +20,10 @@ type UseRestaurantOrdersState = {
   refresh: () => Promise<void>;
   updateStatus: (orderId: string, status: OrderStatus) => Promise<void>;
   overdueOrderIds: string[];
+  newOrderIds: string[];
+  hasNewOrders: boolean;
+  acknowledgeNewOrders: () => void;
+  lastSyncedAt: string;
 };
 
 type UseRestaurantOrdersOptions = {
@@ -29,7 +33,7 @@ type UseRestaurantOrdersOptions = {
 };
 
 export function useRestaurantOrders(options: UseRestaurantOrdersOptions = {}): UseRestaurantOrdersState {
-  const { enableRealtime = true, pollingIntervalMs = 5000, trackOverdue = true } = options;
+  const { enableRealtime = true, pollingIntervalMs = 2000, trackOverdue = true } = options;
   const [restaurantId, setRestaurantId] = React.useState("");
   const [restaurant, setRestaurant] = React.useState<Restaurant | null>(null);
   const [allOrders, setAllOrders] = React.useState<Order[]>([]);
@@ -37,34 +41,71 @@ export function useRestaurantOrders(options: UseRestaurantOrdersOptions = {}): U
   const [error, setError] = React.useState("");
   const [statusFilter, setStatusFilter] = React.useState<OrderStatus | "all">("all");
   const [overdueOrderIds, setOverdueOrderIds] = React.useState<string[]>([]);
+  const [newOrderIds, setNewOrderIds] = React.useState<string[]>([]);
+  const [lastSyncedAt, setLastSyncedAt] = React.useState("");
   const overdueEventGuard = React.useRef<Record<string, true>>({});
+  const knownOrderIdsRef = React.useRef<Set<string>>(new Set());
+  const initializedOrdersRef = React.useRef(false);
+  const refreshInFlightRef = React.useRef<Promise<void> | null>(null);
+  const restaurantRef = React.useRef<Restaurant | null>(null);
+
+  React.useEffect(() => {
+    restaurantRef.current = restaurant;
+  }, [restaurant]);
 
   const refresh = React.useCallback(async (options?: { silent?: boolean }) => {
+    if (refreshInFlightRef.current) return refreshInFlightRef.current;
     if (!options?.silent) setLoading(true);
     if (!options?.silent) setError("");
-    try {
-      const activeRestaurantId = await getActiveRestaurantId();
-      setRestaurantId(activeRestaurantId);
-      const [restaurantData, ordersData] = await Promise.all([
-        getDashboardRestaurant(activeRestaurantId),
-        getOrders(activeRestaurantId),
-      ]);
-      setRestaurant(restaurantData);
-      setAllOrders(ordersData);
-      platformStore.setSessionContext({
-        restaurantId: activeRestaurantId,
-        role: getPrimaryDashboardRole() || "manager",
-      });
-      for (const order of ordersData) {
-        platformStore.upsertOrderStatus(order.id, order.status);
+    const pending = (async () => {
+      try {
+        const activeRestaurantId = await getActiveRestaurantId();
+        setRestaurantId(activeRestaurantId);
+        const currentRestaurant = restaurantRef.current;
+        const shouldLoadRestaurant = !options?.silent || !currentRestaurant;
+        const [restaurantData, ordersData] = await Promise.all([
+          shouldLoadRestaurant ? getDashboardRestaurant(activeRestaurantId) : Promise.resolve(currentRestaurant),
+          getOrders(activeRestaurantId),
+        ]);
+        if (restaurantData) setRestaurant(restaurantData);
+        setAllOrders(ordersData);
+        setLastSyncedAt(new Date().toISOString());
+        platformStore.setSessionContext({
+          restaurantId: activeRestaurantId,
+          role: getPrimaryDashboardRole() || "manager",
+        });
+        for (const order of ordersData) {
+          platformStore.upsertOrderStatus(order.id, order.status);
+        }
+
+        const nextIds = new Set(ordersData.map((order) => order.id));
+        if (initializedOrdersRef.current && options?.silent) {
+          const unseen = ordersData
+            .filter((order) => !knownOrderIdsRef.current.has(order.id))
+            .map((order) => order.id);
+          if (unseen.length) {
+            setNewOrderIds((current) => [...new Set([...unseen, ...current])]);
+          }
+        }
+        knownOrderIdsRef.current = nextIds;
+        initializedOrdersRef.current = true;
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Failed to load orders.");
+        if (!options?.silent) {
+          setRestaurant(null);
+          setAllOrders([]);
+        }
+      } finally {
+        if (!options?.silent) setLoading(false);
+        refreshInFlightRef.current = null;
       }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load orders.");
-      setRestaurant(null);
-      setAllOrders([]);
-    } finally {
-      if (!options?.silent) setLoading(false);
-    }
+    })();
+    refreshInFlightRef.current = pending;
+    return pending;
+  }, []);
+
+  const acknowledgeNewOrders = React.useCallback(() => {
+    setNewOrderIds([]);
   }, []);
 
   const updateStatus = React.useCallback(
@@ -109,6 +150,13 @@ export function useRestaurantOrders(options: UseRestaurantOrdersOptions = {}): U
           }, pollingIntervalMs)
         : null;
 
+    const onVisibilityOrFocus = () => {
+      if (document.visibilityState !== "visible") return;
+      void refresh({ silent: true });
+    };
+    document.addEventListener("visibilitychange", onVisibilityOrFocus);
+    window.addEventListener("focus", onVisibilityOrFocus);
+
     let unsubscribeSupabase: (() => void) | null = null;
     if (enableRealtime && isSupabaseConfigured && supabase) {
       const channel = supabase
@@ -136,6 +184,8 @@ export function useRestaurantOrders(options: UseRestaurantOrdersOptions = {}): U
       unsubscribeRealtimeEvents();
       if (timer != null) window.clearInterval(timer);
       if (unsubscribeSupabase) unsubscribeSupabase();
+      document.removeEventListener("visibilitychange", onVisibilityOrFocus);
+      window.removeEventListener("focus", onVisibilityOrFocus);
     };
   }, [enableRealtime, pollingIntervalMs, refresh, restaurantId]);
 
@@ -218,5 +268,9 @@ export function useRestaurantOrders(options: UseRestaurantOrdersOptions = {}): U
     refresh,
     updateStatus,
     overdueOrderIds,
+    newOrderIds,
+    hasNewOrders: newOrderIds.length > 0,
+    acknowledgeNewOrders,
+    lastSyncedAt,
   };
 }

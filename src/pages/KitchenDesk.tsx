@@ -1,6 +1,7 @@
 import * as React from "react";
 import { Clock3, Printer } from "lucide-react";
 import { DashboardLayout } from "../components/dashboard/dashboard-layout";
+import { NewOrderAlert } from "../components/dashboard/new-order-alert";
 import {
   ActionBar,
   ContentGrid,
@@ -58,7 +59,18 @@ function getNextKitchenStatus(status: OrderStatus): OrderStatus {
 }
 
 export default function KitchenDeskPage() {
-  const { restaurant, orders, loading, error, refresh, updateStatus, overdueOrderIds } = useRestaurantOrders();
+  const {
+    restaurant,
+    orders,
+    loading,
+    error,
+    refresh,
+    updateStatus,
+    overdueOrderIds,
+    newOrderIds,
+    acknowledgeNewOrders,
+    lastSyncedAt,
+  } = useRestaurantOrders();
   const [submittingOrderId, setSubmittingOrderId] = React.useState("");
   const canPrintKitchen = canCurrentUser("printKitchenTicket");
   const autoPrintedRef = React.useRef<Record<string, true>>({});
@@ -126,6 +138,12 @@ export default function KitchenDeskPage() {
       }
     >
       <PageContainer>
+      <NewOrderAlert
+        count={newOrderIds.length}
+        lastSyncedAt={lastSyncedAt}
+        onView={acknowledgeNewOrders}
+        onDismiss={acknowledgeNewOrders}
+      />
       <DashboardPanel>
         <SectionHeader
           title="Kitchen Queue"
