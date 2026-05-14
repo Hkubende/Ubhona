@@ -1,3 +1,5 @@
+import { getApiBaseUrl, getAuthToken, isApiReachable } from "./api";
+
 type OrderRealtimeEvent = {
   restaurantId?: string;
   orderId?: string;
@@ -96,3 +98,86 @@ export function subscribeOrderRealtimeEvents(
   };
 }
 
+function parseEventStreamChunk(
+  buffer: string,
+  onMessage: (event: OrderRealtimeEvent) => void
+) {
+  const frames = buffer.split("\n\n");
+  const remainder = frames.pop() || "";
+  for (const frame of frames) {
+    const dataLines = frame
+      .split("\n")
+      .map((line) => line.trimEnd())
+      .filter((line) => line.startsWith("data:"))
+      .map((line) => line.slice(5).trim());
+    if (!dataLines.length) continue;
+    const parsed = safeParse(dataLines.join("\n"));
+    if (!parsed) continue;
+    onMessage(parsed);
+  }
+  return remainder;
+}
+
+export function subscribeBackendOrderEvents(
+  callback: (event: OrderRealtimeEvent) => void,
+  options?: { restaurantId?: string }
+) {
+  if (typeof window === "undefined") return () => undefined;
+
+  const apiBase = getApiBaseUrl();
+  const token = getAuthToken();
+  if (!apiBase || !token) return () => undefined;
+
+  const { restaurantId } = options || {};
+  const controller = new AbortController();
+  let stopped = false;
+  let reconnectTimer: number | null = null;
+
+  const connect = async () => {
+    if (stopped) return;
+    if (!(await isApiReachable().catch(() => false))) {
+      reconnectTimer = window.setTimeout(connect, 5_000);
+      return;
+    }
+
+    try {
+      const response = await fetch(`${apiBase}/orders/events`, {
+        method: "GET",
+        cache: "no-store",
+        headers: {
+          Accept: "text/event-stream",
+          Authorization: `Bearer ${token}`,
+        },
+        signal: controller.signal,
+      });
+      if (!response.ok || !response.body) return;
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      while (!stopped) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        buffer = parseEventStreamChunk(buffer, (event) => {
+          if (!isForRestaurant(event, restaurantId)) return;
+          callback(event);
+        });
+      }
+    } catch {
+      // Existing short polling remains the authoritative fallback when streaming is unavailable.
+    } finally {
+      if (!stopped) {
+        reconnectTimer = window.setTimeout(connect, 5_000);
+      }
+    }
+  };
+
+  void connect();
+
+  return () => {
+    stopped = true;
+    controller.abort();
+    if (reconnectTimer != null) window.clearTimeout(reconnectTimer);
+  };
+}

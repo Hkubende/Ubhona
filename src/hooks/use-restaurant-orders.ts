@@ -3,7 +3,7 @@ import { getActiveRestaurantId, getDashboardRestaurant, getOrders } from "../lib
 import type { Order, OrderStatus, Restaurant } from "../types/dashboard";
 import { platformStore } from "../state/platform-store";
 import { updateOrderStatusWorkflow } from "../services";
-import { subscribeOrderRealtimeEvents } from "../lib/orders-realtime";
+import { subscribeBackendOrderEvents, subscribeOrderRealtimeEvents } from "../lib/orders-realtime";
 import { isSupabaseConfigured, supabase } from "../lib/supabase";
 import { getPrimaryDashboardRole } from "../lib/roles";
 import { emitAutomationEvent, getAutomationSettings, getCurrentBranchId, getOrderOverdueState } from "../services/automation-engine";
@@ -140,6 +140,11 @@ export function useRestaurantOrders(options: UseRestaurantOrdersOptions = {}): U
           void refresh({ silent: true });
         }, { restaurantId })
       : () => undefined;
+    const unsubscribeBackendEvents = enableRealtime
+      ? subscribeBackendOrderEvents(() => {
+          void refresh({ silent: true });
+        }, { restaurantId })
+      : () => undefined;
 
     // Fallback short polling keeps remote changes fresh where push events are unavailable.
     const timer =
@@ -182,6 +187,7 @@ export function useRestaurantOrders(options: UseRestaurantOrdersOptions = {}): U
 
     return () => {
       unsubscribeRealtimeEvents();
+      unsubscribeBackendEvents();
       if (timer != null) window.clearInterval(timer);
       if (unsubscribeSupabase) unsubscribeSupabase();
       document.removeEventListener("visibilitychange", onVisibilityOrFocus);

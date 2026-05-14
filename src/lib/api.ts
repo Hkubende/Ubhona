@@ -93,6 +93,14 @@ export async function isApiReachable(): Promise<boolean> {
   return canReachApi();
 }
 
+export function getApiBaseUrl() {
+  return API_BASE;
+}
+
+export function getAuthToken() {
+  return localStorage.getItem(AUTH_TOKEN_KEY) || "";
+}
+
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   if (!isApiConfigured || !API_BASE) {
     if (!hasWarnedApiNotConfigured && SHOULD_LOG_INFO) {

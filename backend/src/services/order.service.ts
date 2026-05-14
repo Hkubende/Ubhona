@@ -18,6 +18,7 @@ import {
 import { getOrderBranchContext, setOrderBranchContext } from "./order-context.service.js";
 import { createOrderLifecycleNotifications } from "./notification.service.js";
 import { getEffectiveDishMenuState } from "./menu-control.service.js";
+import { publishOrderRealtimeEvent } from "./order-events.service.js";
 
 export type StorefrontOrderInput = {
   restaurantId: string;
@@ -186,6 +187,15 @@ export async function createStorefrontOrder(input: StorefrontOrderInput) {
     });
   });
 
+  await publishOrderRealtimeEvent({
+    type: "order.created",
+    restaurantId: input.restaurantId,
+    orderId: order.id,
+    status: order.status,
+    source: "storefront",
+    createdAt: new Date().toISOString(),
+  });
+
   return { order, totalAmount };
 }
 
@@ -325,6 +335,15 @@ export async function updateRestaurantOrderStatus(input: {
       });
     }
   })();
+
+  await publishOrderRealtimeEvent({
+    type: "order.status_updated",
+    restaurantId: input.restaurantId,
+    orderId: order.id,
+    status: order.status,
+    source: "orders_api",
+    createdAt: new Date().toISOString(),
+  });
 
   return order;
 }

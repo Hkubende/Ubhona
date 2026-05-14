@@ -31,6 +31,7 @@ const getOrderBranchContextMock = vi.fn();
 const setOrderBranchContextMock = vi.fn();
 const createOrderLifecycleNotificationsMock = vi.fn();
 const getEffectiveDishMenuStateMock = vi.fn();
+const publishOrderRealtimeEventMock = vi.fn();
 
 vi.mock("../prisma.js", () => ({
   prisma: prismaMock,
@@ -81,6 +82,10 @@ vi.mock("../services/menu-control.service.js", () => ({
   getEffectiveDishMenuState: getEffectiveDishMenuStateMock,
 }));
 
+vi.mock("../services/order-events.service.js", () => ({
+  publishOrderRealtimeEvent: publishOrderRealtimeEventMock,
+}));
+
 describe("order.service storefront audit", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -128,6 +133,7 @@ describe("order.service storefront audit", () => {
     createOrderLifecycleNotificationsMock.mockImplementation(async () => {
       sideEffectContextChecks.push({ name: "createOrderLifecycleNotifications", active: publicStorefrontContextActive });
     });
+    publishOrderRealtimeEventMock.mockResolvedValue(undefined);
   });
 
   it("uses an explicit system actor for storefront-created orders", async () => {
@@ -154,6 +160,15 @@ describe("order.service storefront audit", () => {
     );
     expect(recordActivityEventMock).not.toHaveBeenCalledWith(
       expect.objectContaining({ actorUserId: expect.anything() })
+    );
+    expect(publishOrderRealtimeEventMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "order.created",
+        restaurantId: "rest-1",
+        orderId: "order-1",
+        status: "pending",
+        source: "storefront",
+      })
     );
   });
 

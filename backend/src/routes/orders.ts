@@ -15,6 +15,7 @@ import { authAwareRateLimitKey, createRateLimiter } from "../middleware/rate-lim
 import { isOrderLifecycleStatus, ORDER_STATUS_VALUES } from "../services/order-status.service.js";
 import { setOrderBranchContext } from "../services/order-context.service.js";
 import { createOrderLifecycleNotifications } from "../services/notification.service.js";
+import { publishOrderRealtimeEvent, subscribeOrderRealtimeEvents } from "../services/order-events.service.js";
 
 export const ordersRouter = Router();
 const publicOrderCreateLimiter = createRateLimiter({
@@ -217,9 +218,55 @@ ordersRouter.post("/admin", requireAuth, authedOrderMutationLimiter, async (req:
       tableNumber: null,
       customerName: null,
     });
+    await publishOrderRealtimeEvent({
+      type: "order.created",
+      restaurantId: tenantContext.restaurantId,
+      orderId: order.id,
+      status: order.status,
+      source: "admin",
+      createdAt: new Date().toISOString(),
+    });
     res.json({ ...order, trackingToken });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Failed to create order.";
+    res.status(message === "Create restaurant profile first." ? 400 : 500).json({ error: message });
+  }
+});
+
+ordersRouter.get("/events", requireAuth, async (req: AuthRequest, res) => {
+  try {
+    const tenantContext = requireTenantUser(req);
+    req.socket.setTimeout(0);
+    res.setHeader("Content-Type", "text/event-stream");
+    res.setHeader("Cache-Control", "no-cache, no-transform");
+    res.setHeader("Connection", "keep-alive");
+    res.flushHeaders?.();
+
+    const writeEvent = (event: string, data: unknown) => {
+      res.write(`event: ${event}\n`);
+      res.write(`data: ${JSON.stringify(data)}\n\n`);
+    };
+
+    writeEvent("ready", {
+      ok: true,
+      restaurantId: tenantContext.restaurantId,
+      timestamp: new Date().toISOString(),
+    });
+
+    const unsubscribe = await subscribeOrderRealtimeEvents(tenantContext.restaurantId, (event) => {
+      writeEvent("order", event);
+    });
+    const heartbeat = setInterval(() => {
+      writeEvent("ping", { timestamp: new Date().toISOString() });
+    }, 25_000);
+
+    req.on("close", () => {
+      clearInterval(heartbeat);
+      unsubscribe();
+      res.end();
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Failed to open order event stream.";
     res.status(message === "Create restaurant profile first." ? 400 : 500).json({ error: message });
   }
 });
